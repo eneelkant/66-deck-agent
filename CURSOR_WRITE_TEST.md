@@ -1,0 +1,1 @@
+Cursor GitHub write access verified.
