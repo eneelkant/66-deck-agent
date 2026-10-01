@@ -81,7 +81,7 @@ These public repos were inspected for architecture ideas. No source was copied v
 - Centralized 66degrees brand palette + typography helpers
 - Brand enforcement / QA pass before completion
 - GitHub Actions deploy workflow via `@google/clasp`
-- Deterministic planner fallback when `GEMINI_API_KEY` is not configured
+- Deterministic planner fallback when Vertex AI is not configured
 
 ## Brand system
 
@@ -203,22 +203,35 @@ clasp push
 
 `rootDir` is `src/`.
 
-### Google Cloud / Gemini configuration
+### Google Cloud / Vertex AI (Agent Platform) configuration
 
-1. In Apps Script → **Project Settings** → **Script properties**, set:
+The planner calls Vertex AI / Agent Platform Gemini over OAuth using the Apps Script user's identity (`ScriptApp.getOAuthToken()`). **No Gemini API key and no service-account private keys are used or stored in the repository.**
 
-   - `GEMINI_API_KEY` = your Gemini API key
+1. Link the Apps Script project to your Google Cloud project (Project Settings → Google Cloud Platform project).
 
-2. Enable required Google services / APIs for the Apps Script project as prompted (Slides, Drive readonly, UrlFetch).
+2. Enable the **Vertex AI API** (`aiplatform.googleapis.com`) on that Cloud project.
 
-3. If the key is missing, the agent uses a deterministic on-brand planner so local structural testing still works. Live AI quality requires the key.
+3. Grant users who run the add-on (or a Google Group) IAM role **`roles/aiplatform.user`** (Vertex AI User) on the project. This includes `aiplatform.endpoints.predict`.
 
-OAuth scopes (minimum evaluated set in `src/appsscript.json`):
+4. In Apps Script → **Project Settings** → **Script properties**, set:
+
+   | Property | Required | Default | Purpose |
+   |---|---|---|---|
+   | `VERTEX_PROJECT_ID` | Yes | — | Google Cloud project id |
+   | `VERTEX_LOCATION` | No | `us-central1` | Region, or `global` |
+   | `VERTEX_MODEL` | No | `gemini-2.5-flash` | Publisher model id |
+
+5. After deploying a version that adds the `cloud-platform` OAuth scope, users must **re-authorize** the add-on.
+
+6. If `VERTEX_PROJECT_ID` is missing, the agent uses a deterministic on-brand planner so structural flows still work. Live AI planning requires Vertex configuration + IAM.
+
+OAuth scopes (in `src/appsscript.json`):
 
 - `https://www.googleapis.com/auth/presentations`
 - `https://www.googleapis.com/auth/drive.readonly`
 - `https://www.googleapis.com/auth/script.external_request`
 - `https://www.googleapis.com/auth/script.container.ui`
+- `https://www.googleapis.com/auth/cloud-platform` (Vertex AI via user OAuth)
 
 ## Using the add-on
 
@@ -260,7 +273,8 @@ If secrets are absent, the workflow validates successfully and skips deploy step
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Sidebar bootstrap says “Fallback planner” | `GEMINI_API_KEY` missing | Set Script Property |
+| Sidebar bootstrap says “Fallback planner” | `VERTEX_PROJECT_ID` missing | Set Script Property |
+| Vertex AI authentication failed (401/403) | Missing IAM / scope re-auth | Grant `roles/aiplatform.user`; re-authorize add-on |
 | Source document ignored | URL not Drive/Docs or no access | Use HTTPS Drive URL; authorize Drive readonly |
 | Rebrand fails | Invalid Slides URL / permissions | Paste a full Slides URL you can open |
 | Deploy skipped in Actions | Secrets not configured | Add `CLASPRC_JSON` + `SCRIPT_ID` |
@@ -268,7 +282,7 @@ If secrets are absent, the workflow validates successfully and skips deploy step
 
 ## Known limitations
 
-- Gemini planning quality depends on API availability/quota; fallback planner is deterministic, not research-grade.
+- Vertex AI planning quality depends on API availability/quota and per-user IAM; fallback planner is deterministic, not research-grade.
 - Source document ingestion is best-effort text extraction for Drive files; complex PDFs/binaries are summarized by filename/metadata when text cannot be read.
 - Chart rendering currently focuses on KPI/metric/table primitives; advanced chart types can be extended in `EngineRenderer.gs`.
 - Cancel in the sidebar signals intent; Apps Script cannot preempt an in-flight server function mid-stage.

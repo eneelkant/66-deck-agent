@@ -338,8 +338,8 @@
             <strong id="slideProgress">0 / 0</strong>
           </div>
           <div>
-            Gemini
-            <strong id="geminiStatus">Checking…</strong>
+            AI planner
+            <strong id="aiStatus">Checking…</strong>
           </div>
         </div>
       </div>
@@ -435,7 +435,9 @@
               types.appendChild(opt);
             });
 
-            $("geminiStatus").textContent = data.hasGeminiKey ? "Configured" : "Fallback planner";
+            $("aiStatus").textContent = data.hasVertexConfig
+              ? "Vertex AI configured"
+              : "Fallback planner";
           })
           .withFailureHandler(function (err) {
             setStatus("error", "Bootstrap failed: " + err.message);

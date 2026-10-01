@@ -76,7 +76,7 @@ function getGeneratorBootstrap() {
     departments: Spec.DEPARTMENTS.slice(),
     presentationTypes: Spec.PRESENTATION_TYPES.slice(),
     stages: PIPELINE_STAGES.slice(),
-    hasGeminiKey: !!Engine.getGeminiApiKey_()
+    hasVertexConfig: !!Engine.isVertexConfigured_()
   };
 }
 

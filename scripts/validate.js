@@ -135,7 +135,8 @@ function assertManifest() {
   const needed = [
     "https://www.googleapis.com/auth/presentations",
     "https://www.googleapis.com/auth/drive.readonly",
-    "https://www.googleapis.com/auth/script.external_request"
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/cloud-platform"
   ];
   for (const scope of needed) {
     if (scopes.indexOf(scope) === -1) fail(`Missing OAuth scope: ${scope}`);
@@ -187,6 +188,7 @@ function assertGasSyntaxAndSymbols() {
     var HtmlService = {createHtmlOutputFromFile:function(){return {setTitle:function(){return this;},setWidth:function(){return this;}};}};
     var CardService = {newCardBuilder:function(){return {setHeader:function(){return this;},addSection:function(){return this;},build:function(){return {};}};},newCardHeader:function(){return {setTitle:function(){return this;},setSubtitle:function(){return this;}};},newCardSection:function(){return {addWidget:function(){return this;}};},newTextParagraph:function(){return {setText:function(){return this;}};}};
     var PropertiesService = {getScriptProperties:function(){return {getProperty:function(){return '';}};}};
+    var ScriptApp = {getOAuthToken:function(){return 'test-token';}};
     var UrlFetchApp = {fetch:function(){throw new Error('network disabled in validate');}};
     var DriveApp = {getFileById:function(){throw new Error('drive disabled in validate');}};
     var console = {error:function(){},log:function(){}};

@@ -6,14 +6,19 @@ const vm = require("vm");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-function loadEngineStack() {
+function loadEngineStack(scriptProperties) {
+  const props = scriptProperties || {};
   const root = path.resolve(__dirname, "..");
   const sandbox = {
     console,
     PropertiesService: {
       getScriptProperties: () => ({
-        getProperty: () => ""
+        getProperty: (key) =>
+          Object.prototype.hasOwnProperty.call(props, key) ? props[key] : ""
       })
+    },
+    ScriptApp: {
+      getOAuthToken: () => "test-oauth-token"
     },
     UrlFetchApp: {
       fetch: () => {
@@ -48,10 +53,6 @@ function loadEngineStack() {
     "src/Engine.gs",
     "src/Code.gs"
   ]) {
-    // EngineRenderer / Rebrand need heavy Slides mocks; skipped here.
-    if (rel === "src/Code.gs") {
-      // Provide minimal stubs used at load-time only.
-    }
     vm.runInContext(fs.readFileSync(path.join(root, rel), "utf8"), sandbox, {
       filename: rel
     });
@@ -94,8 +95,8 @@ test("Deterministic planner builds a valid diverse PresentationSpec", () => {
   assert.ok(categories.size >= 4);
 });
 
-test("generatePresentationSpec falls back when Gemini key missing", () => {
-  const { Engine } = loadEngineStack();
+test("generatePresentationSpec falls back when VERTEX_PROJECT_ID missing", () => {
+  const { Engine } = loadEngineStack({});
   const request = Engine.validateInput({
     prompt: "Delivery operating model workshop",
     department: "Delivery",
@@ -105,7 +106,47 @@ test("generatePresentationSpec falls back when Gemini key missing", () => {
   const research = Engine.researchTopic(request.prompt, "");
   const result = Engine.generatePresentationSpec(request, "", research);
   assert.equal(result.ok, true);
-  assert.ok((result.warnings || []).join(" ").includes("GEMINI_API_KEY"));
+  assert.ok((result.warnings || []).join(" ").includes("Vertex AI not configured"));
+  assert.equal(Engine.isVertexConfigured_(), false);
+});
+
+test("Vertex defaults location and model when unset", () => {
+  const { Engine } = loadEngineStack({
+    VERTEX_PROJECT_ID: "demo-project"
+  });
+  const config = Engine.getVertexConfig_();
+  assert.equal(config.projectId, "demo-project");
+  assert.equal(config.location, "us-central1");
+  assert.equal(config.model, "gemini-2.5-flash");
+  assert.equal(Engine.isVertexConfigured_(), true);
+});
+
+test("regional Vertex endpoint construction", () => {
+  const { Engine } = loadEngineStack({
+    VERTEX_PROJECT_ID: "demo-project",
+    VERTEX_LOCATION: "us-central1",
+    VERTEX_MODEL: "gemini-2.5-flash"
+  });
+  const config = Engine.getVertexConfig_();
+  const url = Engine.buildVertexEndpoint_(config);
+  assert.equal(
+    url,
+    "https://us-central1-aiplatform.googleapis.com/v1/projects/demo-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent"
+  );
+});
+
+test("global Vertex endpoint construction", () => {
+  const { Engine } = loadEngineStack({
+    VERTEX_PROJECT_ID: "demo-project",
+    VERTEX_LOCATION: "global",
+    VERTEX_MODEL: "gemini-2.5-flash"
+  });
+  const config = Engine.getVertexConfig_();
+  const url = Engine.buildVertexEndpoint_(config);
+  assert.equal(
+    url,
+    "https://aiplatform.googleapis.com/v1/projects/demo-project/locations/global/publishers/google/models/gemini-2.5-flash:generateContent"
+  );
 });
 
 test("planDiagrams synthesizes flowchart DSL when missing", () => {

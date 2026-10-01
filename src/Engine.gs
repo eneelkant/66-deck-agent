@@ -1,18 +1,53 @@
 /**
- * AI / planning engine: Gemini calls, source analysis, IR generation,
- * diagram planning, and deterministic fallback planning.
+ * AI / planning engine: Vertex AI (Agent Platform) Gemini calls, source analysis,
+ * IR generation, diagram planning, and deterministic fallback planning.
  */
 
 var Engine = (function () {
-  var GEMINI_ENDPOINT =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+  var DEFAULT_VERTEX_LOCATION = 'us-central1';
+  var DEFAULT_VERTEX_MODEL = 'gemini-2.5-flash';
 
-  function getGeminiApiKey_() {
+  function getScriptProperty_(key) {
     try {
-      return PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || '';
+      return PropertiesService.getScriptProperties().getProperty(key) || '';
     } catch (e) {
       return '';
     }
+  }
+
+  function getVertexConfig_() {
+    var projectId = String(getScriptProperty_('VERTEX_PROJECT_ID') || '').trim();
+    var location = String(getScriptProperty_('VERTEX_LOCATION') || '').trim() || DEFAULT_VERTEX_LOCATION;
+    var model = String(getScriptProperty_('VERTEX_MODEL') || '').trim() || DEFAULT_VERTEX_MODEL;
+    return {
+      projectId: projectId,
+      location: location,
+      model: model
+    };
+  }
+
+  function isVertexConfigured_() {
+    return !!getVertexConfig_().projectId;
+  }
+
+  function buildVertexEndpoint_(config) {
+    var projectId = encodeURIComponent(config.projectId);
+    var location = String(config.location || DEFAULT_VERTEX_LOCATION);
+    var model = encodeURIComponent(config.model || DEFAULT_VERTEX_MODEL);
+    var locationPath = encodeURIComponent(location);
+    var resource =
+      '/v1/projects/' +
+      projectId +
+      '/locations/' +
+      locationPath +
+      '/publishers/google/models/' +
+      model +
+      ':generateContent';
+
+    if (location.toLowerCase() === 'global') {
+      return 'https://aiplatform.googleapis.com' + resource;
+    }
+    return 'https://' + location + '-aiplatform.googleapis.com' + resource;
   }
 
   function stageError(stage, message, details) {
@@ -23,11 +58,16 @@ var Engine = (function () {
   }
 
   function callGemini_(prompt, stage) {
-    var apiKey = getGeminiApiKey_();
-    if (!apiKey) {
-      return { ok: false, missingKey: true, error: 'GEMINI_API_KEY is not configured.' };
+    var config = getVertexConfig_();
+    if (!config.projectId) {
+      return {
+        ok: false,
+        missingConfig: true,
+        error: 'VERTEX_PROJECT_ID is not configured.'
+      };
     }
 
+    var endpoint = buildVertexEndpoint_(config);
     var payload = {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
@@ -38,26 +78,29 @@ var Engine = (function () {
 
     var response;
     try {
-      response = UrlFetchApp.fetch(GEMINI_ENDPOINT + '?key=' + encodeURIComponent(apiKey), {
+      response = UrlFetchApp.fetch(endpoint, {
         method: 'post',
         contentType: 'application/json',
+        headers: {
+          Authorization: 'Bearer ' + ScriptApp.getOAuthToken()
+        },
         payload: JSON.stringify(payload),
         muteHttpExceptions: true
       });
     } catch (e) {
-      throw stageError(stage, 'Gemini request failed: ' + e.message);
+      throw stageError(stage, 'Vertex AI request failed: ' + e.message);
     }
 
     var code = response.getResponseCode();
     var body = response.getContentText();
     if (code === 401 || code === 403) {
-      throw stageError(stage, 'Gemini authentication failed (HTTP ' + code + ').');
+      throw stageError(stage, 'Vertex AI authentication failed (HTTP ' + code + ').');
     }
     if (code === 429) {
-      throw stageError(stage, 'Gemini quota exceeded (HTTP 429).');
+      throw stageError(stage, 'Vertex AI quota exceeded (HTTP 429).');
     }
     if (code < 200 || code >= 300) {
-      throw stageError(stage, 'Gemini HTTP ' + code + ': ' + body.slice(0, 300));
+      throw stageError(stage, 'Vertex AI HTTP ' + code + ': ' + body.slice(0, 300));
     }
 
     var parsed = JSON.parse(body);
@@ -71,7 +114,7 @@ var Engine = (function () {
       parsed.candidates[0].content.parts[0].text;
 
     if (!text) {
-      throw stageError(stage, 'Gemini returned an empty response.');
+      throw stageError(stage, 'Vertex AI returned an empty response.');
     }
     return { ok: true, text: text };
   }
@@ -341,7 +384,7 @@ var Engine = (function () {
 
     var result = callGemini_(prompt, 'content_planning');
     if (!result.ok) {
-      return { ok: false, missingKey: result.missingKey, error: result.error };
+      return { ok: false, missingConfig: result.missingConfig, error: result.error };
     }
     return { ok: true, raw: result.text };
   }
@@ -362,9 +405,9 @@ var Engine = (function () {
       throw stageError('ir_generation', fallbackValidated.error || 'Failed to build PresentationSpec.');
     }
     fallbackValidated.warnings = (fallbackValidated.warnings || []).concat([
-      planned.missingKey
-        ? 'GEMINI_API_KEY missing; used deterministic planner.'
-        : 'Gemini IR invalid or unavailable; used deterministic planner.'
+      planned.missingConfig
+        ? 'Vertex AI not configured; used deterministic planner.'
+        : 'Vertex AI IR invalid or unavailable; used deterministic planner.'
     ]);
     return fallbackValidated;
   }
@@ -415,6 +458,8 @@ var Engine = (function () {
     planDiagrams: planDiagrams,
     buildFallbackSpec: buildFallbackSpec,
     stageError: stageError,
-    getGeminiApiKey_: getGeminiApiKey_
+    getVertexConfig_: getVertexConfig_,
+    isVertexConfigured_: isVertexConfigured_,
+    buildVertexEndpoint_: buildVertexEndpoint_
   };
 })();
