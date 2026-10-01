@@ -1,0 +1,19 @@
+{
+  "scriptId": "REPLACE_WITH_APPS_SCRIPT_ID",
+  "rootDir": "src",
+  "scriptExtensions": [".js", ".gs"],
+  "htmlExtensions": [".html"],
+  "jsonExtensions": [".json"],
+  "filePushOrder": [
+    "Brand.gs",
+    "Spec.gs",
+    "Reference.gs",
+    "Qa.gs",
+    "EngineRenderer.gs",
+    "Engine.gs",
+    "Rebrand.gs",
+    "Code.gs",
+    "Generator.html",
+    "appsscript.json"
+  ]
+}
