@@ -1,0 +1,18 @@
+{
+  "name": "66-deck-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "66degrees Deck Agent — Google Apps Script presentation generation system",
+  "scripts": {
+    "test": "node scripts/validate.js && node --test tests/*.test.js",
+    "validate": "node scripts/validate.js",
+    "clasp:push": "clasp push",
+    "clasp:deploy": "clasp deploy"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "yaml": "^2.7.0"
+  }
+}

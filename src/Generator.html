@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --blue: #0052ff;
+        --ink: #040a1b;
+        --panel: #f2f7fb;
+        --panel-alt: #d1dbdf;
+        --title: #000000;
+        --body: #333333;
+        --white: #ffffff;
+        --danger: #b42318;
+        --success: #0b7a45;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 540px;
+        max-width: 100%;
+        min-height: 720px;
+        font-family: "Plus Jakarta Sans", "Google Sans", Arial, sans-serif;
+        color: var(--body);
+        background: linear-gradient(180deg, #eef4f8 0%, #ffffff 42%, #f7fafc 100%);
+      }
+
+      .shell {
+        padding: 16px 16px 24px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+
+      .brand-mark {
+        width: 10px;
+        height: 28px;
+        background: var(--blue);
+        border-radius: 2px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        color: var(--title);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .tagline {
+        margin: 0 0 16px;
+        font-size: 12px;
+        color: var(--ink);
+        opacity: 0.75;
+      }
+
+      label {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--ink);
+        margin: 12px 0 6px;
+      }
+
+      input[type="text"],
+      input[type="url"],
+      input[type="number"],
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--panel-alt);
+        background: var(--white);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font: inherit;
+        color: var(--title);
+        outline: none;
+      }
+
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(0, 82, 255, 0.12);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .segmented {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .segmented button {
+        border: 1px solid var(--panel-alt);
+        background: var(--white);
+        color: var(--ink);
+        border-radius: 8px;
+        padding: 10px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .segmented button.active {
+        background: var(--blue);
+        border-color: var(--blue);
+        color: var(--white);
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      button.primary,
+      button.secondary {
+        border: 0;
+        border-radius: 8px;
+        padding: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: var(--blue);
+        color: var(--white);
+      }
+
+      button.secondary {
+        background: var(--panel);
+        color: var(--ink);
+        border: 1px solid var(--panel-alt);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .panel {
+        margin-top: 16px;
+        background: rgba(242, 247, 251, 0.9);
+        border: 1px solid var(--panel-alt);
+        border-radius: 12px;
+        padding: 12px;
+      }
+
+      .panel h2 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        color: var(--title);
+      }
+
+      .stages {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 180px;
+        overflow: auto;
+      }
+
+      .stages li {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 12px;
+        padding: 4px 0;
+        color: #667085;
+      }
+
+      .stages li.done {
+        color: var(--success);
+      }
+
+      .stages li.current {
+        color: var(--blue);
+        font-weight: 700;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--panel-alt);
+        flex: 0 0 auto;
+      }
+
+      .stages li.done .dot {
+        background: var(--success);
+      }
+
+      .stages li.current .dot {
+        background: var(--blue);
+      }
+
+      .meta {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+        font-size: 12px;
+      }
+
+      .meta div {
+        background: var(--white);
+        border-radius: 8px;
+        padding: 8px;
+      }
+
+      .meta strong {
+        display: block;
+        color: var(--title);
+        font-size: 14px;
+      }
+
+      .status {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        display: none;
+      }
+
+      .status.error {
+        display: block;
+        background: #fff1f0;
+        color: var(--danger);
+        border: 1px solid #ffcdc9;
+      }
+
+      .status.success {
+        display: block;
+        background: #ecfdf3;
+        color: var(--success);
+        border: 1px solid #abeec4;
+      }
+
+      .status a {
+        color: inherit;
+        font-weight: 700;
+      }
+
+      .hint {
+        font-size: 11px;
+        color: #667085;
+        margin-top: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <h1>66° Deck Agent</h1>
+      </div>
+      <p class="tagline">Prompt + docs → structured, on-brand Google Slides.</p>
+
+      <label>Mode</label>
+      <div class="segmented" id="modeGroup">
+        <button type="button" class="active" data-mode="Create">Create</button>
+        <button type="button" data-mode="Rebrand">Rebrand</button>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="presentationType">Presentation Type</label>
+          <select id="presentationType"></select>
+        </div>
+        <div>
+          <label for="department">Department</label>
+          <select id="department"></select>
+        </div>
+      </div>
+
+      <label for="slideCount">Slide Count (3–20)</label>
+      <input id="slideCount" type="number" min="3" max="20" value="8" />
+
+      <label for="prompt">Prompt</label>
+      <textarea
+        id="prompt"
+        placeholder="Describe the deck: audience, outcome, key messages..."
+      ></textarea>
+
+      <label for="sourceUrl">Source Document URL (optional)</label>
+      <input
+        id="sourceUrl"
+        type="url"
+        placeholder="https://docs.google.com/..."
+      />
+      <div class="hint" id="sourceHint">
+        For Rebrand mode, paste a Google Slides URL.
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="generateBtn" type="button">Generate</button>
+        <button class="secondary" id="cancelBtn" type="button" disabled>Cancel</button>
+      </div>
+
+      <div class="panel">
+        <h2>Generation progress</h2>
+        <ul class="stages" id="stageList"></ul>
+        <div class="meta">
+          <div>
+            Current stage
+            <strong id="currentStage">Idle</strong>
+          </div>
+          <div>
+            Elapsed
+            <strong id="elapsed">0s</strong>
+          </div>
+          <div>
+            Slides
+            <strong id="slideProgress">0 / 0</strong>
+          </div>
+          <div>
+            Gemini
+            <strong id="geminiStatus">Checking…</strong>
+          </div>
+        </div>
+      </div>
+
+      <div id="status" class="status"></div>
+    </div>
+
+    <script>
+      var state = {
+        mode: "Create",
+        stages: [],
+        running: false,
+        cancelRequested: false,
+        timer: null,
+        startedAt: 0
+      };
+
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      function setStatus(type, html) {
+        var el = $("status");
+        el.className = "status " + type;
+        el.innerHTML = html;
+      }
+
+      function clearStatus() {
+        var el = $("status");
+        el.className = "status";
+        el.innerHTML = "";
+      }
+
+      function renderStages(current) {
+        var list = $("stageList");
+        list.innerHTML = "";
+        state.stages.forEach(function (stage) {
+          var li = document.createElement("li");
+          if (state.completed && state.completed.indexOf(stage) !== -1) {
+            li.className = "done";
+          }
+          if (stage === current) {
+            li.className = "current";
+          }
+          li.innerHTML = '<span class="dot"></span>' + stage.replace(/_/g, " ");
+          list.appendChild(li);
+        });
+        $("currentStage").textContent = current ? current.replace(/_/g, " ") : "Idle";
+      }
+
+      function startTimer() {
+        state.startedAt = Date.now();
+        if (state.timer) clearInterval(state.timer);
+        state.timer = setInterval(function () {
+          var secs = Math.floor((Date.now() - state.startedAt) / 1000);
+          $("elapsed").textContent = secs + "s";
+        }, 500);
+      }
+
+      function stopTimer() {
+        if (state.timer) {
+          clearInterval(state.timer);
+          state.timer = null;
+        }
+      }
+
+      function setRunning(running) {
+        state.running = running;
+        $("generateBtn").disabled = running;
+        $("cancelBtn").disabled = !running;
+      }
+
+      function bootstrap() {
+        google.script.run
+          .withSuccessHandler(function (data) {
+            state.stages = data.stages || [];
+            state.completed = [];
+            renderStages("");
+
+            var dept = $("department");
+            (data.departments || []).forEach(function (d) {
+              var opt = document.createElement("option");
+              opt.value = d;
+              opt.textContent = d;
+              dept.appendChild(opt);
+            });
+
+            var types = $("presentationType");
+            (data.presentationTypes || []).forEach(function (t) {
+              var opt = document.createElement("option");
+              opt.value = t;
+              opt.textContent = t;
+              types.appendChild(opt);
+            });
+
+            $("geminiStatus").textContent = data.hasGeminiKey ? "Configured" : "Fallback planner";
+          })
+          .withFailureHandler(function (err) {
+            setStatus("error", "Bootstrap failed: " + err.message);
+          })
+          .getGeneratorBootstrap();
+      }
+
+      document.querySelectorAll("#modeGroup button").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          document.querySelectorAll("#modeGroup button").forEach(function (b) {
+            b.classList.remove("active");
+          });
+          btn.classList.add("active");
+          state.mode = btn.getAttribute("data-mode");
+        });
+      });
+
+      $("cancelBtn").addEventListener("click", function () {
+        state.cancelRequested = true;
+        setStatus("error", "Cancel requested. The current server stage will finish, then stop if supported.");
+      });
+
+      $("generateBtn").addEventListener("click", function () {
+        clearStatus();
+        state.cancelRequested = false;
+        state.completed = [];
+        setRunning(true);
+        startTimer();
+        renderStages(state.stages[0] || "input_validation");
+
+        var payload = {
+          mode: state.mode,
+          department: $("department").value,
+          presentationType: $("presentationType").value,
+          slideCount: Number($("slideCount").value || 8),
+          prompt: $("prompt").value,
+          sourceUrl: $("sourceUrl").value
+        };
+
+        // Optimistic stage animation while the server runs the full pipeline.
+        var idx = 0;
+        var stageAnim = setInterval(function () {
+          if (!state.running) {
+            clearInterval(stageAnim);
+            return;
+          }
+          if (idx < state.stages.length) {
+            var stage = state.stages[idx];
+            if (state.completed.indexOf(stage) === -1) {
+              state.completed.push(stage);
+            }
+            renderStages(state.stages[Math.min(idx + 1, state.stages.length - 1)]);
+            idx += 1;
+          }
+        }, 900);
+
+        google.script.run
+          .withSuccessHandler(function (result) {
+            clearInterval(stageAnim);
+            stopTimer();
+            setRunning(false);
+            if (!result || !result.ok) {
+              var stage =
+                result && result.error && result.error.stage
+                  ? result.error.stage
+                  : "unknown";
+              var message =
+                result && result.error && result.error.message
+                  ? result.error.message
+                  : "Generation failed.";
+              setStatus("error", "Failed at <strong>" + stage + "</strong>: " + message);
+              renderStages(stage);
+              return;
+            }
+
+            state.completed = state.stages.slice();
+            renderStages("final_presentation");
+            $("slideProgress").textContent =
+              (result.slideCount || 0) + " / " + (result.slideCount || 0);
+            $("elapsed").textContent = Math.round((result.elapsedMs || 0) / 1000) + "s";
+            setStatus(
+              "success",
+              "Deck ready — <a href=\"" +
+                result.url +
+                "\" target=\"_blank\" rel=\"noopener\">Open presentation</a>"
+            );
+          })
+          .withFailureHandler(function (err) {
+            clearInterval(stageAnim);
+            stopTimer();
+            setRunning(false);
+            setStatus("error", err.message || String(err));
+          })
+          .runDeckGeneration(payload);
+      });
+
+      bootstrap();
+    </script>
+  </body>
+</html>
