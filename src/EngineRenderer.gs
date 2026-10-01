@@ -383,7 +383,7 @@ var EngineRenderer = (function () {
     for (var c = 0; c < colCount; c++) {
       var cell = table.getCell(0, c);
       cell.getText().setText(String(columns[c] || ''));
-      Brand.applyTextStyle(cell.getText().getTextStyle(), {
+      Brand.applyTextStyle(cell.getText(), {
         fontFamily: Brand.FONTS.TITLE,
         fontSize: 11,
         color: Brand.COLORS.WHITE,
@@ -396,7 +396,7 @@ var EngineRenderer = (function () {
       for (var c2 = 0; c2 < colCount; c2++) {
         var bodyCell = table.getCell(r + 1, c2);
         bodyCell.getText().setText(String(row[c2] != null ? row[c2] : ''));
-        Brand.applyTextStyle(bodyCell.getText().getTextStyle(), {
+        Brand.applyTextStyle(bodyCell.getText(), {
           fontFamily: Brand.FONTS.BODY,
           fontSize: 10,
           color: Brand.COLORS.BODY

@@ -143,7 +143,7 @@ var Brand = (function () {
   function setShapeText(shape, text, options) {
     var tr = shape.getText();
     tr.setText(text == null ? '' : String(text));
-    applyTextStyle(tr.getTextStyle(), options);
+    applyTextStyle(tr, options);
     if (options && options.align) {
       tr.getParagraphStyle().setParagraphAlignment(options.align);
     }
