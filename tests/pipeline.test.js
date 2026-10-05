@@ -11,46 +11,62 @@ function loadEngineStack(scriptProperties) {
   const root = path.resolve(__dirname, "..");
   const sandbox = {
     console,
+    Logger: { log() {} },
+    Session: { getScriptTimeZone() { return "America/Los_Angeles"; } },
+    Utilities: {
+      formatDate() { return "Oct 5, 2026"; },
+      sleep() {},
+      getUuid() { return "uuid"; }
+    },
+    CacheService: {
+      getUserCache() {
+        return { put() {}, get() { return null; } };
+      }
+    },
     PropertiesService: {
       getScriptProperties: () => ({
         getProperty: (key) =>
-          Object.prototype.hasOwnProperty.call(props, key) ? props[key] : ""
+          Object.prototype.hasOwnProperty.call(props, key) ? props[key] : "",
+        setProperty() {},
+        deleteProperty() {}
       })
     },
-    ScriptApp: {
-      getOAuthToken: () => "test-oauth-token"
-    },
+    ScriptApp: { getOAuthToken: () => "test-oauth-token" },
     UrlFetchApp: {
-      fetch: () => {
-        throw new Error("network disabled");
-      }
+      fetch: () => { throw new Error("network disabled"); }
     },
     DriveApp: {
-      getFileById: () => {
-        throw new Error("drive disabled");
-      }
+      getFileById: () => { throw new Error("drive disabled"); }
     },
     SlidesApp: {
       ShapeType: {
         RECTANGLE: "RECTANGLE",
         ROUND_RECTANGLE: "ROUND_RECTANGLE",
         DIAMOND: "DIAMOND",
-        ELLIPSE: "ELLIPSE"
+        ELLIPSE: "ELLIPSE",
+        CHEVRON: "CHEVRON",
+        HOME_PLATE: "HOME_PLATE"
       },
       LineCategory: { STRAIGHT: "STRAIGHT" },
-      ArrowStyle: { FILL_ARROW: "FILL_ARROW" },
-      ParagraphAlignment: { CENTER: "CENTER" },
       PredefinedLayout: { BLANK: "BLANK" },
-      PageElementType: { SHAPE: "SHAPE" }
+      getActivePresentation() {
+        return {
+          getId() { return "active-id"; },
+          getUrl() { return "https://docs.google.com/presentation/d/active-id/edit"; },
+          getName() { return "Current deck"; },
+          getPageWidth() { return 720; },
+          getPageHeight() { return 405; },
+          getSlides() { return [{ getPageElements() { return []; } }]; }
+        };
+      },
+      create() { throw new Error("SlidesApp.create must not be used for default generation"); }
     }
   };
   vm.createContext(sandbox);
   for (const rel of [
     "src/Brand.gs",
-    "src/Spec.gs",
-    "src/Reference.gs",
-    "src/Qa.gs",
     "src/Engine.gs",
+    "src/EngineRenderer.gs",
     "src/Code.gs"
   ]) {
     vm.runInContext(fs.readFileSync(path.join(root, rel), "utf8"), sandbox, {
@@ -60,75 +76,29 @@ function loadEngineStack(scriptProperties) {
   return sandbox;
 }
 
-test("Engine.validateInput enforces slide bounds and HTTPS source URLs", () => {
-  const { Engine } = loadEngineStack();
-  assert.throws(() => Engine.validateInput({ prompt: "x", slideCount: 2 }), /3 and 20/);
-  assert.throws(
-    () => Engine.validateInput({ prompt: "x", sourceUrl: "http://example.com" }),
-    /HTTPS/
-  );
-  const ok = Engine.validateInput({
-    prompt: "Build a sales pitch",
-    department: "Sales",
-    presentationType: "Pitch",
-    slideCount: 8
-  });
-  assert.equal(ok.department, "Sales");
-});
-
-test("Deterministic planner builds a valid diverse PresentationSpec", () => {
-  const { Engine, Spec } = loadEngineStack();
-  const request = Engine.validateInput({
-    prompt: "Cloud migration value story for executives",
-    department: "Executive",
-    presentationType: "Executive Brief",
-    slideCount: 10
-  });
-  const research = Engine.researchTopic(request.prompt, "");
-  const fallback = Engine.buildFallbackSpec(request, research);
-  const validated = Spec.validate(fallback);
-  assert.equal(validated.ok, true);
-  assert.equal(validated.value.slides.length, 10);
-  assert.equal(validated.value.slides[0].category, "cover");
-  assert.equal(validated.value.slides[9].category, "closing");
-  const categories = new Set(validated.value.slides.map((s) => s.category));
-  assert.ok(categories.size >= 4);
-});
-
-test("generatePresentationSpec falls back when VERTEX_PROJECT_ID missing", () => {
-  const { Engine } = loadEngineStack({});
-  const request = Engine.validateInput({
-    prompt: "Delivery operating model workshop",
-    department: "Delivery",
-    presentationType: "Workshop",
-    slideCount: 6
-  });
-  const research = Engine.researchTopic(request.prompt, "");
-  const result = Engine.generatePresentationSpec(request, "", research);
-  assert.equal(result.ok, true);
-  assert.ok((result.warnings || []).join(" ").includes("Vertex AI not configured"));
-  assert.equal(Engine.isVertexConfigured_(), false);
+test("CONFIG defaults keep Beautiful.ai off so slides draw in-place", () => {
+  const { CONFIG } = loadEngineStack();
+  assert.equal(CONFIG.useBeautifulAi, false);
+  assert.equal(CONFIG.useReferenceLibrary, true);
+  assert.equal(CONFIG.roundedBoxes, true);
 });
 
 test("Vertex defaults location and model when unset", () => {
-  const { Engine } = loadEngineStack({
-    VERTEX_PROJECT_ID: "demo-project"
-  });
-  const config = Engine.getVertexConfig_();
+  const sandbox = loadEngineStack({ VERTEX_PROJECT_ID: "demo-project" });
+  const config = sandbox.getVertexConfig_();
   assert.equal(config.projectId, "demo-project");
   assert.equal(config.location, "us-central1");
   assert.equal(config.model, "gemini-2.5-flash");
-  assert.equal(Engine.isVertexConfigured_(), true);
+  assert.equal(sandbox.isVertexConfigured_(), true);
 });
 
 test("regional Vertex endpoint construction", () => {
-  const { Engine } = loadEngineStack({
+  const sandbox = loadEngineStack({
     VERTEX_PROJECT_ID: "demo-project",
     VERTEX_LOCATION: "us-central1",
     VERTEX_MODEL: "gemini-2.5-flash"
   });
-  const config = Engine.getVertexConfig_();
-  const url = Engine.buildVertexEndpoint_(config);
+  const url = sandbox.buildVertexEndpoint_(sandbox.getVertexConfig_());
   assert.equal(
     url,
     "https://us-central1-aiplatform.googleapis.com/v1/projects/demo-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent"
@@ -136,46 +106,54 @@ test("regional Vertex endpoint construction", () => {
 });
 
 test("global Vertex endpoint construction", () => {
-  const { Engine } = loadEngineStack({
+  const sandbox = loadEngineStack({
     VERTEX_PROJECT_ID: "demo-project",
     VERTEX_LOCATION: "global",
     VERTEX_MODEL: "gemini-2.5-flash"
   });
-  const config = Engine.getVertexConfig_();
-  const url = Engine.buildVertexEndpoint_(config);
+  const url = sandbox.buildVertexEndpoint_(sandbox.getVertexConfig_());
   assert.equal(
     url,
     "https://aiplatform.googleapis.com/v1/projects/demo-project/locations/global/publishers/google/models/gemini-2.5-flash:generateContent"
   );
 });
 
-test("planDiagrams synthesizes flowchart DSL when missing", () => {
-  const { Engine, Spec } = loadEngineStack();
-  const spec = Spec.validate({
-    department: "Solutions",
-    slides: [
-      {
-        category: "flowchart",
-        title: "Flow",
-        elements: [
-          { title: "Lead" },
-          { title: "Qualify?" },
-          { title: "Propose" },
-          { title: "Win" }
-        ]
-      }
-    ]
-  }).value;
-  const planned = Engine.planDiagrams(spec);
-  assert.ok(planned.slides[0].diagram);
-  assert.equal(planned.slides[0].diagram.nodes.length, 4);
-  assert.equal(planned.slides[0].diagram.edges.length, 3);
+test("getApiKey uses Vertex sentinel when VERTEX_PROJECT_ID is set", () => {
+  const sandbox = loadEngineStack({ VERTEX_PROJECT_ID: "demo-project" });
+  assert.equal(sandbox.getApiKey(), "vertex");
 });
 
-test("pipeline stage list is complete and ordered", () => {
+test("bootstrap reports the active presentation URL", () => {
+  const { getGeneratorBootstrap } = loadEngineStack();
+  const boot = getGeneratorBootstrap();
+  assert.equal(boot.presentationId, "active-id");
+  assert.match(boot.url, /active-id/);
+  assert.ok(boot.stages.includes("research"));
+});
+
+test("pipeline stages follow the spec create flow", () => {
   const { getPipelineStages } = loadEngineStack();
-  const stages = getPipelineStages();
-  assert.deepEqual(stages[0], "input_validation");
-  assert.deepEqual(stages[stages.length - 1], "final_presentation");
-  assert.equal(stages.length, 12);
+  const stages = Array.from(getPipelineStages());
+  assert.equal(stages.join(","), "research,write,match,fit,brand,insert");
+});
+
+test("ENGINE.cleanSpec strips stray color codes", () => {
+  const { ENGINE } = loadEngineStack();
+  const cleaned = ENGINE.cleanSpec({
+    type: "cards",
+    title: "Hello #0052FF world",
+    items: [{ title: "One", text: "Body" }]
+  });
+  assert.equal(cleaned.title.includes("#0052FF"), false);
+});
+
+test("same-presentation targeting uses getActivePresentation", () => {
+  const root = path.resolve(__dirname, "..");
+  const code = fs.readFileSync(path.join(root, "src/Code.gs"), "utf8");
+  assert.match(code, /const target = SlidesApp\.getActivePresentation\(\)/);
+  assert.match(code, /drawSlidesIntoActive_\(target, plan\.slides, ctx, blankDeck\)/);
+  assert.doesNotMatch(
+    code.slice(code.indexOf("if (!CONFIG.useBeautifulAi)"), code.indexOf("} else {")),
+    /createWorkingDeck_/
+  );
 });
