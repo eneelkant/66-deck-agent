@@ -145,7 +145,7 @@ function assertManifest() {
   if (!manifest.addOns || !manifest.addOns.slides) fail("appsscript.json missing slides add-on config");
   else ok("Slides add-on config present");
 
-  const advanced = manifest.enabledAdvancedServices || [];
+  const advanced = (manifest.dependencies && manifest.dependencies.enabledAdvancedServices) || [];
   if (!advanced.some((s) => s.userSymbol === "Slides" && s.version === "v1")) {
     fail("appsscript.json must enable the Slides advanced service");
   } else {
