@@ -28,15 +28,119 @@ var EngineRenderer = (function () {
     slide.getBackground().setSolidFill(Brand.snapToPalette(hex || Brand.COLORS.WHITE));
   }
 
+  /**
+   * Official SlidesApp.ShapeType names we are willing to pass to insertShape.
+   * ROUNDED_RECTANGLE is intentionally absent — that identifier is not a valid
+   * Apps Script enum value (the real name is ROUND_RECTANGLE).
+   */
+  var VALID_SHAPE_TYPE_KEYS = {
+    RECTANGLE: true,
+    ROUND_RECTANGLE: true,
+    ELLIPSE: true,
+    DIAMOND: true,
+    TRIANGLE: true,
+    RIGHT_TRIANGLE: true,
+    CHEVRON: true,
+    HOME_PLATE: true,
+    LEFT_ARROW: true,
+    RIGHT_ARROW: true,
+    UP_ARROW: true,
+    DOWN_ARROW: true,
+    LEFT_RIGHT_ARROW: true,
+    UP_DOWN_ARROW: true,
+    PARALLELOGRAM: true,
+    TRAPEZOID: true,
+    PENTAGON: true,
+    HEXAGON: true,
+    FLOW_CHART_PROCESS: true,
+    FLOW_CHART_DECISION: true,
+    FLOW_CHART_TERMINATOR: true
+  };
+
+  var SHAPE_TYPE_ALIASES = {
+    rect: 'RECTANGLE',
+    rectangle: 'RECTANGLE',
+    square: 'RECTANGLE',
+    box: 'RECTANGLE',
+    ellipse: 'ELLIPSE',
+    oval: 'ELLIPSE',
+    circle: 'ELLIPSE',
+    roundrect: 'ROUND_RECTANGLE',
+    round_rect: 'ROUND_RECTANGLE',
+    round_rectangle: 'ROUND_RECTANGLE',
+    roundedrect: 'ROUND_RECTANGLE',
+    rounded_rect: 'ROUND_RECTANGLE',
+    rounded_rectangle: 'ROUND_RECTANGLE',
+    roundedrectangle: 'ROUND_RECTANGLE',
+    diamond: 'DIAMOND',
+    rhombus: 'DIAMOND',
+    decision: 'DIAMOND',
+    triangle: 'TRIANGLE',
+    chevron: 'CHEVRON',
+    home_plate: 'HOME_PLATE',
+    homeplate: 'HOME_PLATE',
+    arrow: 'RIGHT_ARROW',
+    right_arrow: 'RIGHT_ARROW',
+    left_arrow: 'LEFT_ARROW',
+    up_arrow: 'UP_ARROW',
+    down_arrow: 'DOWN_ARROW',
+    process: 'ROUND_RECTANGLE',
+    start: 'ELLIPSE',
+    end: 'ELLIPSE'
+  };
+
+  function shapeTypeKeyFromValue_(value) {
+    if (value == null) {
+      return '';
+    }
+    return String(value)
+      .trim()
+      .replace(/[\s-]+/g, '_')
+      .replace(/_+/g, '_');
+  }
+
+  function resolveShapeTypeKey_(value) {
+    var raw = shapeTypeKeyFromValue_(value);
+    if (!raw) {
+      return 'RECTANGLE';
+    }
+    var alias = SHAPE_TYPE_ALIASES[raw.toLowerCase()];
+    if (alias) {
+      return alias;
+    }
+    var compact = raw.toUpperCase();
+    if (VALID_SHAPE_TYPE_KEYS[compact]) {
+      return compact;
+    }
+    return 'RECTANGLE';
+  }
+
+  function normalizeShapeType_(value) {
+    var key = resolveShapeTypeKey_(value);
+    var enumObj = SlidesApp && SlidesApp.ShapeType ? SlidesApp.ShapeType : {};
+    var resolved = enumObj[key];
+    if (resolved == null) {
+      resolved = enumObj.RECTANGLE;
+    }
+    if (resolved == null) {
+      return 'RECTANGLE';
+    }
+    return resolved;
+  }
+
+  function insertShapeSafe_(slide, typeValue, x, y, w, h) {
+    return slide.insertShape(normalizeShapeType_(typeValue), x, y, w, h);
+  }
+
   function addRect(slide, x, y, w, h, fillHex) {
-    var shape = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, x, y, w, h);
+    var shape = insertShapeSafe_(slide, 'rect', x, y, w, h);
     shape.getBorder().setTransparent();
     Brand.applyFill(shape, fillHex || Brand.COLORS.PANEL);
     return shape;
   }
 
   function addRoundRect(slide, x, y, w, h, fillHex) {
-    var shape = slide.insertShape(SlidesApp.ShapeType.ROUNDED_RECTANGLE, x, y, w, h);
+    var shape = insertShapeSafe_(slide, 'roundrect', x, y, w, h);
     shape.getBorder().setTransparent();
     Brand.applyFill(shape, fillHex || Brand.COLORS.PANEL);
     return shape;
@@ -192,12 +296,12 @@ var EngineRenderer = (function () {
   function nodeShapeType(nodeType) {
     switch (String(nodeType || 'process').toLowerCase()) {
       case 'decision':
-        return SlidesApp.ShapeType.DIAMOND;
+        return 'diamond';
       case 'start':
       case 'end':
-        return SlidesApp.ShapeType.ELLIPSE;
+        return 'ellipse';
       default:
-        return SlidesApp.ShapeType.ROUNDED_RECTANGLE;
+        return 'roundrect';
     }
   }
 
@@ -256,7 +360,7 @@ var EngineRenderer = (function () {
     for (var i = 0; i < diagram.nodes.length; i++) {
       var node = diagram.nodes[i];
       var pos = positions[node.id];
-      var shape = slide.insertShape(nodeShapeType(node.type), pos.x, pos.y, pos.w, pos.h);
+      var shape = insertShapeSafe_(slide, nodeShapeType(node.type), pos.x, pos.y, pos.w, pos.h);
       shape.getBorder().setTransparent();
       var fill =
         node.type === 'decision'
@@ -338,7 +442,7 @@ var EngineRenderer = (function () {
     var step = usable / Math.max(items.length - 1, 1);
     for (var i = 0; i < items.length; i++) {
       var x = margin + i * step;
-      var dot = slide.insertShape(SlidesApp.ShapeType.ELLIPSE, x - 6, y + 14, 12, 12);
+      var dot = insertShapeSafe_(slide, 'ellipse', x - 6, y + 14, 12, 12);
       Brand.applyFill(dot, Brand.COLORS.PRIMARY_BLUE);
       dot.getBorder().setTransparent();
       addTextBox(slide, items[i], x - 50, y + 36, 100, 48, {
@@ -746,6 +850,7 @@ var EngineRenderer = (function () {
     renderTable: renderTable,
     addTitle: addTitle,
     addFooter: addFooter,
-    addAccentBar: addAccentBar
+    addAccentBar: addAccentBar,
+    normalizeShapeType: normalizeShapeType_
   };
 })();
