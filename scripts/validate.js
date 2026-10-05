@@ -117,7 +117,8 @@ function assertRequiredFiles() {
     "src/Engine.gs",
     "src/EngineRenderer.gs",
     "src/ShapeKit.gs",
-    "src/Generator.html"
+    "src/Generator.html",
+    "assets/icons/manifest.json"
   ];
   for (const rel of required) {
     if (!exists(rel)) fail(`Missing required file: ${rel}`);
@@ -144,6 +145,9 @@ function assertManifest() {
   }
   if (!manifest.addOns || !manifest.addOns.slides) fail("appsscript.json missing slides add-on config");
   else ok("Slides add-on config present");
+  const grantedFn = manifest.addOns && manifest.addOns.slides && manifest.addOns.slides.onFileScopeGrantedTrigger && manifest.addOns.slides.onFileScopeGrantedTrigger.runFunction;
+  if (grantedFn !== "onFileScopeGranted") fail("onFileScopeGrantedTrigger must run onFileScopeGranted");
+  else ok("First-time file-scope grant runs onFileScopeGranted");
 
   if (manifest.enabledAdvancedServices) {
     fail("enabledAdvancedServices must live under dependencies, not at the top level");
@@ -256,7 +260,11 @@ function assertGasSyntaxAndSymbols() {
     "callVertexGemini_",
     "getVertexConfig_",
     "isVertexConfigured_",
-    "buildVertexEndpoint_"
+    "buildVertexEndpoint_",
+    "buildProductionMenu_",
+    "ensureInitialSetup_",
+    "runInitialSetup_",
+    "validateBrandIconManifest_"
   ];
   for (const fn of requiredFns) {
     if (typeof sandbox[fn] !== "function") fail(`Missing global function: ${fn}`);
@@ -555,12 +563,88 @@ function assertShapeKitIntact() {
   else ok("ShapeKit uses ROUND_RECTANGLE");
 }
 
+function assertProductionMenu() {
+  const code = read("src/Code.gs");
+  const onOpen = code.slice(code.indexOf("function onOpen()"), code.indexOf("function onInstall()"));
+  const menu = code.slice(code.indexOf("function buildProductionMenu_()"), code.indexOf("function showGenerator()"));
+  const userVisible = onOpen + "\n" + menu;
+  const banned = [
+    "Reference library status",
+    "Harvest reference deck (admin)",
+    "Icon check (admin)"
+  ];
+  banned.forEach(function (label) {
+    if (userVisible.indexOf(label) !== -1) fail("User menu must not contain: " + label);
+    else ok("User menu hides: " + label);
+  });
+  ["Open 66° Deck Agent", "Refresh brand kit", "Refresh brand assets"].forEach(function (label) {
+    if (userVisible.indexOf(label) === -1) fail("User menu missing: " + label);
+    else ok("User menu includes: " + label);
+  });
+  if (!/function harvestReferenceDeck/.test(read("src/Reference.gs")) || !/function iconCheck/.test(read("src/Reference.gs")) || !/function referenceStatus/.test(read("src/Reference.gs"))) {
+    fail("Admin/reference helpers must remain as internal functions");
+  } else {
+    ok("Admin/reference helpers remain internal");
+  }
+  if (!/function ensureInitialSetup_/.test(code) || !/function onInstall\(\)/.test(code) || !/ensureInitialSetup_\(\)/.test(code.slice(code.indexOf("function onInstall()"), code.indexOf("function buildProductionMenu_")))) {
+    fail("onInstall must run ensureInitialSetup_");
+  } else {
+    ok("onInstall runs first-time setup");
+  }
+}
+
+function assertBrandIconAssets() {
+  const rel = "assets/icons/manifest.json";
+  let manifest;
+  try {
+    manifest = JSON.parse(read(rel));
+    ok("Icon manifest JSON valid");
+  } catch (e) {
+    fail("Icon manifest JSON invalid: " + e.message);
+    return;
+  }
+  const colors = { night_blue: "#040A1B", white: "#FFFDF9", accent_blue: "#0052FF" };
+  const styles = { night_blue: "night-blue", white: "white", accent_blue: "accent-blue" };
+  if (manifest.brand !== "66degrees") fail("Icon manifest brand must be 66degrees");
+  else ok("Icon manifest brand is 66degrees");
+  if (!Array.isArray(manifest.icons) || !manifest.icons.length) {
+    fail("Icon manifest has no icons");
+    return;
+  }
+  let broken = 0;
+  for (const ic of manifest.icons) {
+    for (const key of Object.keys(colors)) {
+      const fileRel = ic.files && ic.files[key];
+      if (!fileRel || !exists(fileRel)) {
+        fail("Missing icon file for " + ic.id + " " + key);
+        broken += 1;
+        continue;
+      }
+      const svg = read(fileRel);
+      if (!/<svg[\s>]/i.test(svg) || !/viewBox=/i.test(svg) || !/<\/svg>/i.test(svg)) {
+        fail(fileRel + " is not a usable SVG");
+        broken += 1;
+      }
+      if (svg.toUpperCase().indexOf(colors[key].toUpperCase()) === -1) {
+        fail(fileRel + " missing brand color " + colors[key]);
+        broken += 1;
+      }
+      if (fileRel.indexOf("assets/icons/" + styles[key] + "/") !== 0) {
+        fail(fileRel + " is not in the " + styles[key] + " folder");
+        broken += 1;
+      }
+    }
+  }
+  if (!broken) ok("Icon manifest files exist with brand colors");
+}
+
 function main() {
   console.log("Validating 66-deck-agent...\n");
   assertRequiredFiles();
   assertJson("package.json");
   assertJson(".clasp.json");
   assertJson("src/appsscript.json");
+  assertJson("assets/icons/manifest.json");
   assertYaml(".github/workflows/deploy.yml");
   assertHtml("src/Generator.html");
   assertManifest();
@@ -571,6 +655,8 @@ function main() {
   assertNoDriveRestApi();
   assertVertexOauthOnly();
   assertSamePresentation();
+  assertProductionMenu();
+  assertBrandIconAssets();
   assertGasSyntaxAndSymbols();
 
   if (failures > 0) {

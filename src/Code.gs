@@ -17,7 +17,7 @@
  *   1. Upload 66d_reference_library.json to Drive and paste its file ID into CONFIG.refLibraryFileId.
  *   2. Upload the 2026 template .pptx to Drive, open it with Google Slides (File → Save as Google Slides)
  *      and paste the Google Slides file ID into CONFIG.referenceDeckId.
- *   3. Run Extensions → 66degrees AI Presentation Generator → Harvest reference deck (repeat until it says done).
+ *   3. First install/authorization runs ensureInitialSetup_() (loads the library if present; harvest stays internal).
  */
 
 var CONFIG = {
@@ -59,24 +59,26 @@ var CONFIG = {
 ========================= */
 
 function onOpen() {
+  buildProductionMenu_();
+}
+
+function onInstall() {
+  buildProductionMenu_();
+  try { ensureInitialSetup_(); } catch (e) { Logger.log('Initial setup: ' + e.message); }
+}
+
+function buildProductionMenu_() {
   SlidesApp.getUi()
     .createAddonMenu()
     .addItem('Open 66° Deck Agent', 'showGenerator')
     .addSeparator()
     .addItem('Refresh brand kit', 'refreshBrandKit')
     .addItem('Refresh brand assets', 'refreshBrandAssets')
-    .addSeparator()
-    .addItem('Reference library status', 'referenceStatus')
-    .addItem('Harvest reference deck (admin)', 'harvestReferenceDeck')
-    .addItem('Icon check (admin)', 'iconCheck')
     .addToUi();
 }
 
-function onInstall() {
-  onOpen();
-}
-
 function showGenerator() {
+  try { ensureInitialSetup_(); } catch (e) { Logger.log('Initial setup: ' + e.message); }
   const html = HtmlService.createHtmlOutputFromFile('Generator')
     .setTitle(' ')
     .setWidth(540);
@@ -101,7 +103,53 @@ function onHomepage() {
 }
 
 function onFileScopeGranted(e) {
+  try { ensureInitialSetup_(); } catch (err) { Logger.log('Initial setup: ' + err.message); }
   return onHomepage();
+}
+
+var INITIAL_SETUP_PROP = 'INITIAL_SETUP_AT';
+
+function ensureInitialSetup_(force) {
+  const props = PropertiesService.getScriptProperties();
+  const already = String(props.getProperty(INITIAL_SETUP_PROP) || '').trim();
+  if (already && !force) {
+    return { ok: true, skipped: true, initializedAt: already };
+  }
+  return runInitialSetup_(props);
+}
+
+function runInitialSetup_(props) {
+  props = props || PropertiesService.getScriptProperties();
+  const result = {
+    ok: true,
+    skipped: false,
+    initializedAt: new Date().toISOString(),
+    hasLibrary: false,
+    hasHarvest: false,
+    log: []
+  };
+  try {
+    const lib = loadReferenceLibrary(false);
+    result.hasLibrary = !!(lib && lib.slides && lib.slides.length);
+    result.log.push(result.hasLibrary ? 'reference-library' : 'reference-library-missing');
+  } catch (e) {
+    result.log.push('reference-library-skipped');
+  }
+  try {
+    const rt = loadReferenceRuntime(false);
+    result.hasHarvest = !!(rt && ((rt.icons && Object.keys(rt.icons).length) || (rt.slides && Object.keys(rt.slides).length)));
+    result.log.push(result.hasHarvest ? 'reference-runtime' : 'reference-runtime-missing');
+  } catch (e) {
+    result.log.push('reference-runtime-skipped');
+  }
+  try {
+    getBrandProfile('', false);
+    result.log.push('brand-profile');
+  } catch (e) {
+    result.log.push('brand-profile-skipped');
+  }
+  try { props.setProperty(INITIAL_SETUP_PROP, result.initializedAt); } catch (e) {}
+  return result;
 }
 
 // Refreshes brand profile + reference library. The Drive asset scan is a separate menu item
@@ -204,6 +252,7 @@ function generatePresentationRun_(data, run) {
   const ctx = { runId: run.runId, progress: null, blobCache: {}, generatedIcons: 0, log: [] };
   run.ctx = ctx;
   progressInit_(ctx, mode);
+  try { ensureInitialSetup_(); } catch (e) { ctx.log.push('Initial setup: ' + (e && e.message ? e.message : String(e))); }
 
   ctx.apiKey = getApiKey();
   try { ctx.brand = getBrandProfile(ctx.apiKey, false); }
@@ -215,7 +264,7 @@ function generatePresentationRun_(data, run) {
   ctx.tokens = libraryTokens(ctx.lib);                    // template design tokens (template values even without the library)
   try { ctx.refRuntime = ctx.lib ? loadReferenceRuntime(false) : null; }
   catch (e) { ctx.refRuntime = null; ctx.log.push('Reference harvest skipped: ' + sanitizeDriveError_(e)); }
-  if (ctx.lib && !ctx.refRuntime) ctx.iconIssue = 'harvest data not loaded: ' + (REF_RUNTIME_ERROR || 'unknown reason') + '. Run Harvest reference deck again';
+  if (ctx.lib && !ctx.refRuntime) ctx.iconIssue = 'harvest data not loaded: ' + (REF_RUNTIME_ERROR || 'unknown reason');
   const target = SlidesApp.getActivePresentation();
   if (!ctx.lib && CONFIG.useReferenceLibrary) ctx.log.push('Reference library not loaded — using built-in 66degrees template values.');
 
