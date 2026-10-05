@@ -128,8 +128,30 @@ var EngineRenderer = (function () {
     return resolved;
   }
 
+  var MIN_SIZE_ = 1;
+
+  function finiteNumber_(value, fallback) {
+    var n = Number(value);
+    return isFinite(n) ? n : fallback;
+  }
+
+  function safeSize_(value, fallback) {
+    var n = finiteNumber_(value, fallback == null ? MIN_SIZE_ : fallback);
+    return n < MIN_SIZE_ ? MIN_SIZE_ : n;
+  }
+
+  function safeBox_(x, y, w, h) {
+    return {
+      x: finiteNumber_(x, 0),
+      y: finiteNumber_(y, 0),
+      w: safeSize_(w, MIN_SIZE_),
+      h: safeSize_(h, MIN_SIZE_)
+    };
+  }
+
   function insertShapeSafe_(slide, typeValue, x, y, w, h) {
-    return slide.insertShape(normalizeShapeType_(typeValue), x, y, w, h);
+    var box = safeBox_(x, y, w, h);
+    return slide.insertShape(normalizeShapeType_(typeValue), box.x, box.y, box.w, box.h);
   }
 
   function addRect(slide, x, y, w, h, fillHex) {
@@ -147,7 +169,8 @@ var EngineRenderer = (function () {
   }
 
   function addTextBox(slide, text, x, y, w, h, options) {
-    var shape = slide.insertTextBox(String(text || ''), x, y, w, h);
+    var box = safeBox_(x, y, w, h);
+    var shape = slide.insertTextBox(String(text || ''), box.x, box.y, box.w, box.h);
     Brand.setShapeText(shape, text, options || {});
     Brand.fitTextSize(shape, (options && options.fontSize) || Brand.TYPE.BODY_PT, 8);
     return shape;
@@ -215,19 +238,42 @@ var EngineRenderer = (function () {
   }
 
   function renderCard(slide, x, y, w, h, title, body) {
-    var card = addRoundRect(slide, x, y, w, h, Brand.COLORS.PANEL);
-    addRect(slide, x, y, 4, h, Brand.COLORS.PRIMARY_BLUE);
-    addTextBox(slide, title, x + 14, y + 10, w - 24, 22, {
+    var box = safeBox_(x, y, w, h);
+    var card = addRoundRect(slide, box.x, box.y, box.w, box.h, Brand.COLORS.PANEL);
+    addRect(slide, box.x, box.y, Math.min(4, box.w), box.h, Brand.COLORS.PRIMARY_BLUE);
+    var innerX = box.x + 14;
+    var innerW = box.w - 24;
+    var innerY = box.y + 8;
+    var innerH = box.h - 16;
+    var titleOpts = {
       fontFamily: Brand.FONTS.TITLE,
       fontSize: Brand.TYPE.CARD_TITLE_PT,
       color: Brand.COLORS.TITLE,
       bold: true
-    });
-    addTextBox(slide, body, x + 14, y + 36, w - 24, h - 48, {
+    };
+    var bodyOpts = {
       fontFamily: Brand.FONTS.BODY,
       fontSize: Brand.TYPE.BODY_PT,
       color: Brand.COLORS.BODY
-    });
+    };
+    if (innerH >= 40 && body) {
+      var titleH = 22;
+      addTextBox(slide, title, innerX, innerY, innerW, titleH, titleOpts);
+      addTextBox(
+        slide,
+        body,
+        innerX,
+        innerY + titleH + 6,
+        innerW,
+        innerH - titleH - 6,
+        bodyOpts
+      );
+    } else {
+      var label = body
+        ? String(title || '') + (title ? '  ' : '') + String(body)
+        : title;
+      addTextBox(slide, label, innerX, innerY, innerW, innerH, titleOpts);
+    }
     return card;
   }
 
@@ -245,7 +291,7 @@ var EngineRenderer = (function () {
       color: Brand.COLORS.BODY
     });
     if (trend) {
-      var pillW = Math.min(90, w - 24);
+      var pillW = Math.max(18, Math.min(90, w - 24));
       addRoundRect(slide, x + 12, y + h - 32, pillW, 18, Brand.COLORS.PANEL_ALT);
       addTextBox(slide, trend, x + 12, y + h - 32, pillW, 18, {
         fontFamily: Brand.FONTS.KPI,
@@ -266,7 +312,7 @@ var EngineRenderer = (function () {
     var margin = Brand.SPACE.MARGIN_LEFT;
     var usable = Brand.SPACE.SLIDE_WIDTH - margin - Brand.SPACE.MARGIN_RIGHT;
     var gap = 16;
-    var nodeW = Math.min(140, (usable - gap * (steps.length - 1)) / steps.length);
+    var nodeW = Math.max(24, Math.min(140, (usable - gap * (steps.length - 1)) / steps.length));
     var nodeH = 64;
     var totalW = steps.length * nodeW + (steps.length - 1) * gap;
     var startX = margin + Math.max(0, (usable - totalW) / 2);
@@ -308,19 +354,31 @@ var EngineRenderer = (function () {
   }
 
   function layoutDiagramPositions(diagram, area) {
+    diagram = diagram || {};
+    area = area || {};
     var nodes = diagram.nodes || [];
     var direction = diagram.direction === 'TB' ? 'TB' : 'LR';
     var positions = {};
     var count = Math.max(nodes.length, 1);
     var gapX = 24;
     var gapY = 28;
-    var nodeW = direction === 'LR' ? Math.min(130, (area.w - gapX * (count - 1)) / count) : 150;
-    var nodeH = 48;
+    var areaX = finiteNumber_(area.x, 0);
+    var areaY = finiteNumber_(area.y, 0);
+    var areaW = safeSize_(area.w, MIN_SIZE_);
+    var areaH = safeSize_(area.h, MIN_SIZE_);
+    var nodeW =
+      direction === 'LR'
+        ? Math.max(24, Math.min(130, (areaW - gapX * (count - 1)) / count))
+        : Math.max(24, Math.min(150, areaW));
+    var nodeH =
+      direction === 'TB'
+        ? Math.max(24, Math.min(48, (areaH - gapY * (count - 1)) / count))
+        : Math.max(24, Math.min(48, areaH));
 
     if (direction === 'LR') {
       var totalW = count * nodeW + (count - 1) * gapX;
-      var startX = area.x + Math.max(0, (area.w - totalW) / 2);
-      var y = area.y + Math.max(0, (area.h - nodeH) / 2);
+      var startX = areaX + Math.max(0, (areaW - totalW) / 2);
+      var y = areaY + Math.max(0, (areaH - nodeH) / 2);
       for (var i = 0; i < nodes.length; i++) {
         positions[nodes[i].id] = {
           x: startX + i * (nodeW + gapX),
@@ -331,8 +389,8 @@ var EngineRenderer = (function () {
       }
     } else {
       var totalH = count * nodeH + (count - 1) * gapY;
-      var startY = area.y + Math.max(0, (area.h - totalH) / 2);
-      var x = area.x + Math.max(0, (area.w - nodeW) / 2);
+      var startY = areaY + Math.max(0, (areaH - totalH) / 2);
+      var x = areaX + Math.max(0, (areaW - nodeW) / 2);
       for (var j = 0; j < nodes.length; j++) {
         positions[nodes[j].id] = {
           x: x,
@@ -504,7 +562,8 @@ var EngineRenderer = (function () {
     rows = rows || [];
     var colCount = Math.max(columns.length, 1);
     var rowCount = Math.max(rows.length + 1, 2);
-    var table = slide.insertTable(rowCount, colCount, x, y, w, h);
+    var box = safeBox_(x, y, w, h);
+    var table = slide.insertTable(rowCount, colCount, box.x, box.y, box.w, box.h);
     for (var c = 0; c < colCount; c++) {
       var cell = table.getCell(0, c);
       writeCellText_(cell, columns[c], {
@@ -789,7 +848,11 @@ var EngineRenderer = (function () {
       );
       addTextBox(
         slide,
-        '“' + (slideSpec.body || (slideSpec.elements[0] && slideSpec.elements[0].body) || '') + '”',
+        '“' +
+          (slideSpec.body ||
+            ((slideSpec.elements || [])[0] && (slideSpec.elements || [])[0].body) ||
+            '') +
+          '”',
         Brand.SPACE.MARGIN_LEFT + 24,
         contentY + 30,
         usableW - 48,
@@ -888,6 +951,8 @@ var EngineRenderer = (function () {
     addTitle: addTitle,
     addFooter: addFooter,
     addAccentBar: addAccentBar,
-    normalizeShapeType: normalizeShapeType_
+    normalizeShapeType: normalizeShapeType_,
+    layoutDiagramPositions: layoutDiagramPositions,
+    safeBox: safeBox_
   };
 })();
