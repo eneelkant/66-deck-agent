@@ -526,7 +526,11 @@ function alignSpecsToSlides(presId, specs, ctx) {
         try {
           const t = el.getPageElementType();
           if (t === SlidesApp.PageElementType.GROUP) walk(el.asGroup().getChildren());
-          else if (t === SlidesApp.PageElementType.SHAPE) out.push(el.asShape().getText().asString());
+          else if (t === SlidesApp.PageElementType.SHAPE) {
+            const sh = el.asShape();
+            if (typeof hasTextFrame_ === 'function' && !hasTextFrame_(sh)) return;
+            out.push(sh.getText().asString());
+          }
         } catch (e) {}
       });
     };

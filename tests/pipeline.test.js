@@ -157,3 +157,27 @@ test("same-presentation targeting uses getActivePresentation", () => {
     /createWorkingDeck_/
   );
 });
+
+test("Create completion returns the same active presentation id as bootstrap", () => {
+  const sandbox = loadEngineStack();
+  const boot = sandbox.getGeneratorBootstrap();
+  const result = sandbox.generationResult_(
+    "SUCCESS: 8 branded slides added to this presentation",
+    sandbox.SlidesApp.getActivePresentation(),
+    8
+  );
+  assert.equal(result.presentationId, "active-id");
+  assert.equal(result.presentationId, boot.presentationId);
+  assert.equal(result.url, boot.url);
+  assert.equal(result.ok, true);
+});
+
+test("default generate path source does not create a second deck", () => {
+  const root = path.resolve(__dirname, "..");
+  const code = fs.readFileSync(path.join(root, "src/Code.gs"), "utf8");
+  const createCalls = code.match(/SlidesApp\.create\(/g) || [];
+  assert.equal(createCalls.length, 1, "SlidesApp.create must remain only as the optional Beautiful.ai working copy helper");
+  assert.match(code, /function createWorkingDeck_/);
+  const helper = code.slice(code.indexOf("function createWorkingDeck_"), code.indexOf("function drawSlidesIntoActive_"));
+  assert.match(helper, /SlidesApp\.create\(/);
+});

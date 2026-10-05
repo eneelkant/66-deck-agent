@@ -70,6 +70,28 @@ test("insertTextBoxSafe always uses positive dimensions", () => {
   assert.ok(calls[0].h > 0);
 });
 
+test("overlayTextIfNeeded skips overlay when the shape already has a text frame", () => {
+  const { EngineRenderer } = loadRenderer();
+  let stored = "";
+  const calls = [];
+  const slide = {
+    insertTextBox(text, x, y, w, h) {
+      calls.push({ text, x, y, w, h });
+      return { getText() { return { setText() { return this; } }; } };
+    }
+  };
+  const box = {
+    getText() {
+      return {
+        setText(v) { stored = String(v); return this; }
+      };
+    }
+  };
+  EngineRenderer.overlayTextIfNeeded(slide, box, { text: "Keep on shape" }, { x: 0, y: 0, w: 40, h: 20 });
+  assert.equal(stored, "Keep on shape");
+  assert.equal(calls.length, 0);
+});
+
 test("setSpeakerNotesSafe does not throw when notes shape has no text", () => {
   const { EngineRenderer } = loadRenderer();
   const slide = {

@@ -158,6 +158,15 @@ function applyTextStyleSafe_(textRange, fn) {
   } catch (e) {}
 }
 
+function overlayTextIfNeeded_(slide, shape, e, box) {
+  if (!e || e.text == null || e.text === '') return;
+  if (hasTextFrame_(shape)) {
+    writeTextSafe_(shape, e.text);
+    return;
+  }
+  insertTextBoxSafe_(slide, e.text, box.x, box.y, box.w, box.h);
+}
+
 function layoutDiagramPositions(diagram, area) {
   diagram = diagram || {};
   area = area || {};
@@ -234,6 +243,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
         } else {
           sh.getBorder().setTransparent();
         }
+        overlayTextIfNeeded_(slide, sh, e, box);
       } else if (e.t === 'shape') {
         const box = safeBox_(e.x * s, e.y * s, e.w * s, e.h * s);
         const sh = insertShapeSafe_(slide, e.shape, box.x, box.y, box.w, box.h);
@@ -244,6 +254,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
         } else {
           sh.getBorder().setTransparent();
         }
+        overlayTextIfNeeded_(slide, sh, e, box);
       } else if (e.t === 'line') {
         const x1 = finiteNumber_(e.x1 * s, 0);
         const y1 = finiteNumber_(e.y1 * s, 0);
@@ -365,6 +376,7 @@ var EngineRenderer = {
   safeBox: safeBox_,
   hasTextFrame: hasTextFrame_,
   writeTextSafe: writeTextSafe_,
+  overlayTextIfNeeded: overlayTextIfNeeded_,
   layoutDiagramPositions: layoutDiagramPositions,
   renderEngineSlide: renderEngineSlide,
   getActivePresentation: getActivePresentationSafe_,
