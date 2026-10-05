@@ -32,7 +32,7 @@
         "runFunction": "onHomepage"
       },
       "onFileScopeGrantedTrigger": {
-        "runFunction": "onHomepage"
+        "runFunction": "onFileScopeGranted"
       }
     }
   }

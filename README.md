@@ -47,6 +47,12 @@ Rebrand applies the brand pass to the open deck in place.
 ```
 66-deck-agent/
 ├── .github/workflows/deploy.yml
+├── assets/
+│   └── icons/
+│       ├── manifest.json
+│       ├── night-blue/
+│       ├── white/
+│       └── accent-blue/
 ├── src/
 │   ├── appsscript.json
 │   ├── Brand.gs
@@ -97,10 +103,13 @@ Rebrand applies the brand pass to the open deck in place.
    - Add-on users granted **Vertex AI User** (`roles/aiplatform.user`)
    - Re-authorize the add-on after the `cloud-platform` scope is added
 
-5. One-time reference library (from the spec):
-   - Upload `66d_reference_library.json` and set `CONFIG.refLibraryFileId`
-   - Import the 2026 template as Google Slides and set `CONFIG.referenceDeckId`
-   - Run **Harvest reference deck** until it says done
+5. First install/authorization runs `ensureInitialSetup_()`: it loads the 2026 reference library and any existing harvest runtime if they are already in Drive. Harvest/icon-check remain internal functions and are **not** shown on the Extensions menu.
+
+The user-facing Extensions menu is:
+
+- Open 66° Deck Agent
+- Refresh brand kit
+- Refresh brand assets
 
 ## Local validation
 

@@ -506,14 +506,14 @@ function openReferenceDeck_(ctx) {
 function insertLibraryIcon(slide, iconTag, left, top, size, onDark, ctx, color) {
   const rt = ctx.refRuntime;
   ctx.iconAttempts = (ctx.iconAttempts || 0) + 1;
-  if (!rt || !rt.icons || !rt.iconSlideId) { ctx.iconIssue = ctx.iconIssue || 'harvest data not loaded (run Harvest reference deck again)'; return false; }
+  if (!rt || !rt.icons || !rt.iconSlideId) { ctx.iconIssue = ctx.iconIssue || 'harvest data not loaded'; return false; }
   if (!iconTag || !rt.icons[iconTag]) return false;
   const deck = openReferenceDeck_(ctx);
   if (!deck) return false;
   const inserted = [];   // PageElements on the target slide (for cleanup)
   try {
     const src = deck.getSlideById(rt.iconSlideId);
-    if (!src) { ctx.iconIssue = ctx.iconIssue || 'icon slide not found in the reference deck (run Harvest reference deck again)'; return false; }
+    if (!src) { ctx.iconIssue = ctx.iconIssue || 'icon slide not found in the reference deck'; return false; }
     rt.icons[iconTag].forEach(function (objectId) {
       const el = src.getPageElementById(objectId);
       if (!el) return;
@@ -655,7 +655,7 @@ function harvestReferenceDeck() {
 
   const msg = done
     ? 'Reference deck harvested: ' + Object.keys(rt.slides).length + ' slides, ' + rt.iconCount + ' icons, ' + Object.keys(rt.thumbs).length + ' thumbnails.'
-    : 'Harvest paused at thumbnail ' + state.nextThumb + ' of ' + targets.length + ' (time limit). Run "Harvest reference deck" again to continue.';
+    : 'Harvest paused at thumbnail ' + state.nextThumb + ' of ' + targets.length + ' (time limit). Run harvestReferenceDeck again to continue.';
   try { SlidesApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
   return msg;
 }
@@ -739,7 +739,7 @@ function referenceStatus() {
   const rt = loadReferenceRuntime(true);
   const msg = 'Reference library: ' + (lib ? lib.slides.length + ' slides, ' + lib.icons.length + ' icons, ' + lib.companyFacts.length + ' facts' : 'NOT LOADED (check CONFIG.refLibraryFileId)') + '\n' +
     'Reference deck: ' + (CONFIG.referenceDeckId ? 'set' : 'NOT SET (CONFIG.referenceDeckId)') + '\n' +
-    'Harvest: ' + (rt ? Object.keys(rt.slides || {}).length + ' slides, ' + Object.keys(rt.icons || {}).length + ' icons, ' + Object.keys(rt.thumbs || {}).length + ' thumbnails (' + rt.harvestedAt + ')' : 'not run yet — use "Harvest reference deck"');
+    'Harvest: ' + (rt ? Object.keys(rt.slides || {}).length + ' slides, ' + Object.keys(rt.icons || {}).length + ' icons, ' + Object.keys(rt.thumbs || {}).length + ' thumbnails (' + rt.harvestedAt + ')' : 'not run yet');
   try { SlidesApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
   return msg;
 }

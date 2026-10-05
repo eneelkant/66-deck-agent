@@ -1,0 +1,176 @@
+{
+  "brand": "66degrees",
+  "styles": [
+    "night-blue",
+    "white",
+    "accent-blue"
+  ],
+  "icons": [
+    {
+      "id": "cloud-upload",
+      "tags": [
+        "cloud",
+        "storage",
+        "data",
+        "infrastructure",
+        "upload"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/cloud-upload.svg",
+        "white": "assets/icons/white/cloud-upload.svg",
+        "accent_blue": "assets/icons/accent-blue/cloud-upload.svg"
+      }
+    },
+    {
+      "id": "cloud",
+      "tags": [
+        "cloud",
+        "infrastructure",
+        "platform"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/cloud.svg",
+        "white": "assets/icons/white/cloud.svg",
+        "accent_blue": "assets/icons/accent-blue/cloud.svg"
+      }
+    },
+    {
+      "id": "shield",
+      "tags": [
+        "security",
+        "secure",
+        "compliance",
+        "risk"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/shield.svg",
+        "white": "assets/icons/white/shield.svg",
+        "accent_blue": "assets/icons/accent-blue/shield.svg"
+      }
+    },
+    {
+      "id": "lock",
+      "tags": [
+        "security",
+        "secure",
+        "lock"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/lock.svg",
+        "white": "assets/icons/white/lock.svg",
+        "accent_blue": "assets/icons/accent-blue/lock.svg"
+      }
+    },
+    {
+      "id": "chart",
+      "tags": [
+        "analytics",
+        "data",
+        "insight",
+        "metrics"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/chart.svg",
+        "white": "assets/icons/white/chart.svg",
+        "accent_blue": "assets/icons/accent-blue/chart.svg"
+      }
+    },
+    {
+      "id": "brain",
+      "tags": [
+        "ai",
+        "model",
+        "ml",
+        "innovation"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/brain.svg",
+        "white": "assets/icons/white/brain.svg",
+        "accent_blue": "assets/icons/accent-blue/brain.svg"
+      }
+    },
+    {
+      "id": "gear",
+      "tags": [
+        "automation",
+        "process",
+        "workflow",
+        "settings"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/gear.svg",
+        "white": "assets/icons/white/gear.svg",
+        "accent_blue": "assets/icons/accent-blue/gear.svg"
+      }
+    },
+    {
+      "id": "dollar",
+      "tags": [
+        "cost",
+        "savings",
+        "budget",
+        "finance",
+        "revenue"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/dollar.svg",
+        "white": "assets/icons/white/dollar.svg",
+        "accent_blue": "assets/icons/accent-blue/dollar.svg"
+      }
+    },
+    {
+      "id": "growth",
+      "tags": [
+        "growth",
+        "scale",
+        "roi",
+        "trend"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/growth.svg",
+        "white": "assets/icons/white/growth.svg",
+        "accent_blue": "assets/icons/accent-blue/growth.svg"
+      }
+    },
+    {
+      "id": "team",
+      "tags": [
+        "team",
+        "people",
+        "collaboration",
+        "users"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/team.svg",
+        "white": "assets/icons/white/team.svg",
+        "accent_blue": "assets/icons/accent-blue/team.svg"
+      }
+    },
+    {
+      "id": "clock",
+      "tags": [
+        "time",
+        "plan",
+        "roadmap"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/clock.svg",
+        "white": "assets/icons/white/clock.svg",
+        "accent_blue": "assets/icons/accent-blue/clock.svg"
+      }
+    },
+    {
+      "id": "lightbulb",
+      "tags": [
+        "idea",
+        "innovation",
+        "insight"
+      ],
+      "files": {
+        "night_blue": "assets/icons/night-blue/lightbulb.svg",
+        "white": "assets/icons/white/lightbulb.svg",
+        "accent_blue": "assets/icons/accent-blue/lightbulb.svg"
+      }
+    }
+  ]
+}

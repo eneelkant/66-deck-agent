@@ -17,6 +17,54 @@ var BRAND_COLORS = {
   neutral4: '#DBDDE1'    // Cool Gray 4XGC - lines and outlines
 };
 
+var BRAND_ICON_STYLES = ['night-blue', 'white', 'accent-blue'];
+var BRAND_ICON_COLOR_BY_STYLE = {
+  'night-blue': '#040A1B',
+  night_blue: '#040A1B',
+  white: '#FFFDF9',
+  'accent-blue': '#0052FF',
+  accent_blue: '#0052FF'
+};
+
+function validateBrandIconManifest_(manifest) {
+  const errors = [];
+  if (!manifest || typeof manifest !== 'object') return { ok: false, errors: ['manifest missing'] };
+  if (manifest.brand !== '66degrees') errors.push('brand must be 66degrees');
+  const styles = manifest.styles || [];
+  BRAND_ICON_STYLES.forEach(function (s) {
+    if (styles.indexOf(s) === -1) errors.push('missing style ' + s);
+  });
+  const icons = manifest.icons || [];
+  if (!icons.length) errors.push('no icons listed');
+  icons.forEach(function (ic) {
+    if (!ic.id) errors.push('icon missing id');
+    if (!Array.isArray(ic.tags) || !ic.tags.length) errors.push((ic.id || '?') + ' missing tags');
+    if (!ic.files || typeof ic.files !== 'object') {
+      errors.push((ic.id || '?') + ' missing files');
+      return;
+    }
+    ['night_blue', 'white', 'accent_blue'].forEach(function (k) {
+      const p = ic.files[k];
+      if (!p) errors.push(ic.id + ' missing ' + k);
+      else if (String(p).indexOf('assets/icons/') !== 0) errors.push(ic.id + ' ' + k + ' path must be under assets/icons/');
+    });
+  });
+  return { ok: errors.length === 0, errors: errors };
+}
+
+function brandIconColorForStyle_(style) {
+  return BRAND_ICON_COLOR_BY_STYLE[style] || '';
+}
+
+function svgUsesBrandColor_(svg, hex) {
+  return String(svg || '').toUpperCase().indexOf(String(hex || '').toUpperCase()) !== -1;
+}
+
+function isUsableIconSvg_(svg) {
+  const s = String(svg || '');
+  return /<svg[\s>]/i.test(s) && /viewBox=/i.test(s) && /stroke=/i.test(s) && /<\/svg>/i.test(s);
+}
+
 var DEFAULT_BRAND = {
   name: '66degrees',
   palette: ['#FFFDF9', '#040A1B', '#B3C5D0', '#0052FF', '#F3F2F0', '#ECECEC', '#E2E4E7', '#DBDDE1'],
