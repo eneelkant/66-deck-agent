@@ -245,12 +245,14 @@ var EngineRenderer = (function () {
       color: Brand.COLORS.BODY
     });
     if (trend) {
-      var pill = addRoundRect(slide, x + 12, y + h - 32, Math.min(90, w - 24), 18, Brand.COLORS.PANEL_ALT);
-      Brand.setShapeText(pill, trend, {
+      var pillW = Math.min(90, w - 24);
+      addRoundRect(slide, x + 12, y + h - 32, pillW, 18, Brand.COLORS.PANEL_ALT);
+      addTextBox(slide, trend, x + 12, y + h - 32, pillW, 18, {
         fontFamily: Brand.FONTS.KPI,
         fontSize: 9,
         color: Brand.COLORS.INK,
-        bold: true
+        bold: true,
+        align: SlidesApp.ParagraphAlignment.CENTER
       });
     }
     return card;
@@ -271,8 +273,8 @@ var EngineRenderer = (function () {
 
     for (var i = 0; i < steps.length; i++) {
       var x = startX + i * (nodeW + gap);
-      var node = addRoundRect(slide, x, y, nodeW, nodeH, Brand.COLORS.PANEL);
-      Brand.setShapeText(node, steps[i], {
+      addRoundRect(slide, x, y, nodeW, nodeH, Brand.COLORS.PANEL);
+      addTextBox(slide, steps[i], x, y, nodeW, nodeH, {
         fontFamily: Brand.FONTS.BODY,
         fontSize: 11,
         color: Brand.COLORS.TITLE,
@@ -369,7 +371,7 @@ var EngineRenderer = (function () {
             ? Brand.COLORS.PRIMARY_BLUE
             : Brand.COLORS.PANEL;
       Brand.applyFill(shape, fill);
-      Brand.setShapeText(shape, node.label, {
+      addTextBox(slide, node.label, pos.x, pos.y, pos.w, pos.h, {
         fontFamily: Brand.FONTS.BODY,
         fontSize: 11,
         color:
@@ -478,6 +480,25 @@ var EngineRenderer = (function () {
     );
   }
 
+  function writeCellText_(cell, value, options) {
+    if (!cell || typeof cell.getText !== 'function') {
+      return;
+    }
+    var content = value == null || value === '' ? ' ' : String(value);
+    var tr;
+    try {
+      tr = cell.getText();
+      tr.setText(content);
+    } catch (e) {
+      var message = e && e.message != null ? String(e.message) : String(e || '');
+      if (!/has no text/i.test(message)) {
+        throw e;
+      }
+      return;
+    }
+    Brand.applyTextStyle(tr, options);
+  }
+
   function renderTable(slide, columns, rows, x, y, w, h) {
     columns = columns || [];
     rows = rows || [];
@@ -486,8 +507,7 @@ var EngineRenderer = (function () {
     var table = slide.insertTable(rowCount, colCount, x, y, w, h);
     for (var c = 0; c < colCount; c++) {
       var cell = table.getCell(0, c);
-      cell.getText().setText(String(columns[c] || ''));
-      Brand.applyTextStyle(cell.getText(), {
+      writeCellText_(cell, columns[c], {
         fontFamily: Brand.FONTS.TITLE,
         fontSize: 11,
         color: Brand.COLORS.WHITE,
@@ -499,8 +519,7 @@ var EngineRenderer = (function () {
       var row = rows[r] || [];
       for (var c2 = 0; c2 < colCount; c2++) {
         var bodyCell = table.getCell(r + 1, c2);
-        bodyCell.getText().setText(String(row[c2] != null ? row[c2] : ''));
-        Brand.applyTextStyle(bodyCell.getText(), {
+        writeCellText_(bodyCell, row[c2], {
           fontFamily: Brand.FONTS.BODY,
           fontSize: 10,
           color: Brand.COLORS.BODY
@@ -814,6 +833,26 @@ var EngineRenderer = (function () {
     addFooter(slide);
   }
 
+  function setSpeakerNotesSafe_(slide, notes) {
+    if (!notes || !slide || typeof slide.getNotesPage !== 'function') {
+      return;
+    }
+    try {
+      var notesPage = slide.getNotesPage();
+      var notesShape = notesPage && notesPage.getSpeakerNotesShape ? notesPage.getSpeakerNotesShape() : null;
+      if (!notesShape) {
+        return;
+      }
+      Brand.setShapeText(notesShape, notes, {
+        fontFamily: Brand.FONTS.BODY,
+        fontSize: 10,
+        color: Brand.COLORS.BODY
+      });
+    } catch (e) {
+      // Blank layouts can expose a notes placeholder with no text frame.
+    }
+  }
+
   function renderPresentation(spec) {
     var title = (spec.metadata && spec.metadata.title) || '66degrees Presentation';
     var presentation = createBlankPresentation(title);
@@ -826,9 +865,7 @@ var EngineRenderer = (function () {
         el.remove();
       });
       renderSlide(slide, spec.slides[i], { title: title });
-      if (spec.slides[i].speakerNotes) {
-        slide.getNotesPage().getSpeakerNotesShape().getText().setText(spec.slides[i].speakerNotes);
-      }
+      setSpeakerNotesSafe_(slide, spec.slides[i].speakerNotes);
     }
 
     return {
