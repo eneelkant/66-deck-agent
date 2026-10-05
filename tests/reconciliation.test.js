@@ -382,10 +382,15 @@ test("manifest keeps advanced services under dependencies", () => {
   assert.ok(manifest.oauthScopes.includes("https://www.googleapis.com/auth/script.container.ui"));
 });
 
-test("Vertex OAuth endpoint stays preferred over GEMINI_API_KEY", () => {
+test("Vertex OAuth is the only model-generation path", () => {
   const brand = read("src/Brand.gs");
+  const code = read("src/Code.gs");
+  const src = brand + "\n" + code;
   assert.match(brand, /VERTEX_PROJECT_ID/);
   assert.match(brand, /ScriptApp\.getOAuthToken\(\)/);
   assert.match(brand, /aiplatform\.googleapis\.com/);
-  assert.match(brand, /generateContent/);
+  assert.match(brand, /function callVertexGemini_/);
+  assert.doesNotMatch(src, /\bGEMINI_API_KEY\b/);
+  assert.doesNotMatch(src, /generativelanguage\.googleapis\.com/);
+  assert.doesNotMatch(src, /x-goog-api-key/);
 });

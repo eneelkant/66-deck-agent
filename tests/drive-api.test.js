@@ -54,7 +54,6 @@ function loadCreateStack(options) {
         return {
           getProperty(key) {
             if (key === "VERTEX_PROJECT_ID") return options.vertex ? "demo-project" : "";
-            if (key === "GEMINI_API_KEY") return options.geminiKey || "";
             if (key === "SCITE_API_KEY") return options.sciteKey || "";
             return "";
           },
