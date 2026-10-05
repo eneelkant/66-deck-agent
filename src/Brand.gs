@@ -120,9 +120,43 @@ var Brand = (function () {
     shape.getFill().setSolidFill(snapToPalette(hex));
   }
 
+  function isMissingTextError_(err) {
+    var message = err && err.message != null ? String(err.message) : String(err || '');
+    return /has no text/i.test(message);
+  }
+
+  function getTextRange_(source) {
+    if (!source || typeof source.getText !== 'function') {
+      return null;
+    }
+    try {
+      var tr = source.getText();
+      if (!tr || typeof tr.setText !== 'function') {
+        return null;
+      }
+      return tr;
+    } catch (e) {
+      if (isMissingTextError_(e)) {
+        return null;
+      }
+      throw e;
+    }
+  }
+
   function applyTextStyle(textRange, options) {
+    if (!textRange || typeof textRange.getTextStyle !== 'function') {
+      return;
+    }
     options = options || {};
-    var style = textRange.getTextStyle();
+    var style;
+    try {
+      style = textRange.getTextStyle();
+    } catch (e) {
+      if (isMissingTextError_(e)) {
+        return;
+      }
+      throw e;
+    }
     var fontFamily = options.fontFamily || FONTS.BODY;
     var fontSize = options.fontSize || TYPE.BODY_PT;
     var color = snapToPalette(options.color || COLORS.BODY);
@@ -141,11 +175,22 @@ var Brand = (function () {
   }
 
   function setShapeText(shape, text, options) {
-    var tr = shape.getText();
-    tr.setText(text == null ? '' : String(text));
-    applyTextStyle(tr, options);
-    if (options && options.align) {
-      tr.getParagraphStyle().setParagraphAlignment(options.align);
+    var tr = getTextRange_(shape);
+    if (!tr) {
+      return null;
+    }
+    var value = text == null ? '' : String(text);
+    try {
+      tr.setText(value);
+      applyTextStyle(tr, options);
+      if (options && options.align && tr.getParagraphStyle) {
+        tr.getParagraphStyle().setParagraphAlignment(options.align);
+      }
+    } catch (e) {
+      if (isMissingTextError_(e)) {
+        return null;
+      }
+      throw e;
     }
     return tr;
   }
@@ -153,8 +198,19 @@ var Brand = (function () {
   function fitTextSize(shape, preferredPt, minPt) {
     preferredPt = preferredPt || TYPE.BODY_PT;
     minPt = minPt || 8;
-    var text = shape.getText();
-    var style = text.getTextStyle();
+    var text = getTextRange_(shape);
+    if (!text || typeof text.getTextStyle !== 'function') {
+      return preferredPt;
+    }
+    var style;
+    try {
+      style = text.getTextStyle();
+    } catch (e) {
+      if (isMissingTextError_(e)) {
+        return preferredPt;
+      }
+      throw e;
+    }
     var size = preferredPt;
     style.setFontSize(size);
 
