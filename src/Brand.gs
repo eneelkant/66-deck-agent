@@ -77,22 +77,52 @@ const APPROVED_FACTS = [
   'Proof point (AI managed services): 90% reduction in contract review time; 30% productivity improvement in service desk operations.'
 ];
 
-const PRESENTATION_TYPES = [
-  'Business Presentation',
-  'Marketing Presentation',
-  'Strategy Presentation',
-  'Sales Presentation',
-  'Executive Presentation',
+var PRESENTATION_TYPES = [
+  'Pitch',
+  'Strategy',
+  'Proposal',
+  'Sales',
+  'Case Study',
+  'Report',
   'Custom'
 ];
 
-const TYPE_GUIDANCE = {
+var TYPE_GUIDANCE = {
+  Pitch: 'Investor or client pitch: problem, solution, proof, offer and a clear next step.',
+  Strategy: 'Current state, strategic options, recommended path, roadmap, priorities and KPIs.',
+  Proposal: 'Client need, proposed approach, deliverables, commercial shape and why 66degrees.',
+  Sales: 'Customer problem, the 66degrees solution, how we deliver, proof points, value, and a clear next step.',
+  'Case Study': 'Challenge, approach, outcomes, proof points and what the result means for the audience.',
+  Report: 'Findings, evidence, implications and recommended actions.',
+  Custom: 'Follow the structure implied by the request.',
+  // Legacy V.1_17 labels still accepted by normalizePresentationType_.
   'Business Presentation': 'Balanced business narrative: context, approach, outcomes and next steps.',
   'Marketing Presentation': 'Market insight, positioning, campaigns and channels, and measurable results.',
   'Strategy Presentation': 'Current state, strategic options, recommended path, roadmap, priorities and KPIs.',
   'Sales Presentation': 'Customer problem, the 66degrees solution, how we deliver, proof points, value, and a clear next step.',
-  'Executive Presentation': 'Outcome-first and concise: headline numbers, decisions needed, short supporting points.',
-  'Custom': 'Follow the structure implied by the request.'
+  'Executive Presentation': 'Outcome-first and concise: headline numbers, decisions needed, short supporting points.'
+};
+
+var DEPARTMENTS = [
+  'Sales',
+  'Marketing',
+  'Technology',
+  'Finance',
+  'Operations',
+  'HR',
+  'Leadership',
+  'Other'
+];
+
+var DEPARTMENT_GUIDANCE = {
+  Sales: 'Write for a sales audience: customer problem, qualification, offer, proof and a commercial next step.',
+  Marketing: 'Write for marketing: audience, message, channels, campaigns and measurement.',
+  Technology: 'Write for technical readers: architecture, delivery, risk, operations and outcomes.',
+  Finance: 'Write for finance: cost, ROI, risk, controls and measurable impact.',
+  Operations: 'Write for operations: process, capacity, delivery, reliability and improvement.',
+  HR: 'Write for people/HR: talent, change, enablement, adoption and culture.',
+  Leadership: 'Write for executives: the decision needed, headline outcomes and short supporting proof.',
+  Other: 'Write for a mixed internal audience; keep language clear without assuming a function.'
 };
 
 var DEFAULT_VERTEX_LOCATION = 'us-central1';

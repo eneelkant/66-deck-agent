@@ -304,9 +304,14 @@ function selectReferenceForSpec(lib, spec, usage) {
     const special = SPECIAL_PURPOSE[s.subtype];                                      // pricing, OKRs… only on request
     if (special && !special.test(specText_(spec))) score -= 40;
     let kw = 0;
-    const useful = tokenize_((s.usefulFor || []).join(' '));
+    const useful = tokenize_((s.usefulFor || []).join(' ') + ' ' + (s.category || ''));
     words.forEach(function (w) { if (useful.indexOf(w) !== -1) kw += 2; });
     score += Math.min(kw, 15);                                                       // 66D_MATCH_004
+    if (usage.department) {
+      tokenize_(usage.department).forEach(function (w) {
+        if (useful.indexOf(w) !== -1) score += 8;
+      });
+    }
     score += s.priority === 'PRIMARY' ? 10 : (s.priority === 'SECONDARY' ? 5 : 0);   // 66D_MATCH_005
     if (usage.lastTag === tag) score -= 15;                                          // 66D_MATCH_006
     score -= 5 * (usage.counts[tag] || 0);
@@ -359,7 +364,7 @@ function saveRotation_(usage) {
 function selectReferences(plan, ctx) {
   const res = { matched: 0, fallback: 0 };
   if (!ctx.lib || !plan || !plan.slides) return res;
-  const usage = { lastTag: null, counts: {}, darkCount: 0 };
+  const usage = { lastTag: null, counts: {}, darkCount: 0, department: ctx.department || '' };
   plan.slides.forEach(function (spec) {
     const ref = selectReferenceForSpec(ctx.lib, spec, usage);
     spec.reference = ref;

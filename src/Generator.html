@@ -20,44 +20,42 @@
         --red: #D93025;
       }
       * { box-sizing: border-box; }
-      body { font-family: 'Plus Jakarta Sans', -apple-system, Arial, sans-serif; padding: 20px 22px; margin: 0;
+      body { font-family: 'Plus Jakarta Sans', -apple-system, Arial, sans-serif; padding: 18px 20px 22px; margin: 0;
         color: var(--ink); background: var(--bg); }
-      h2 { margin: 0 0 4px; font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
-      .sub { margin: 0 0 16px; font-size: 12px; color: var(--muted); line-height: 1.5; }
 
-      /* Section labels: small mono all-caps, per brand guidelines */
+      .hero { display: flex; gap: 12px; align-items: stretch; margin-bottom: 18px; }
+      .accent { width: 4px; flex: 0 0 4px; background: var(--blue); border-radius: 2px; }
+      .hero h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.45px; line-height: 1.15; color: var(--ink); }
+      .sub { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
       label.field { display: block; margin: 14px 0 6px; font-family: 'IBM Plex Mono', monospace;
         font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.6px; color: var(--body); }
 
-      /* Inputs */
       textarea, select, input[type="number"], input[type="text"] {
-        width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 6px;
+        width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px;
         font-size: 13px; font-family: inherit; background: var(--card); color: var(--ink);
       }
-      textarea { height: 78px; resize: vertical; line-height: 1.4; }
+      textarea { height: 86px; resize: vertical; line-height: 1.4; }
       textarea:focus, select:focus, input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,82,255,0.08); }
       textarea:disabled, select:disabled, input:disabled { background: #F7F8F9; color: var(--muted); }
 
-      /* Mode toggle - segmented pill */
-      .mode-toggle { display: flex; background: var(--tile); padding: 3px; border-radius: 8px; gap: 2px; margin-bottom: 4px; }
-      .mode-toggle label { flex: 1; margin: 0; padding: 9px 12px; text-align: center; cursor: pointer;
-        border-radius: 6px; font-size: 13px; font-weight: 600; color: var(--muted); transition: all 0.15s; }
-      .mode-toggle input { display: none; }
-      .mode-toggle label:has(input:checked) { background: white; color: var(--blue); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-      .mode-toggle.locked { pointer-events: none; opacity: 0.6; }
+      .mode-row { display: flex; gap: 8px; }
+      .mode-btn { flex: 1; margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+      .mode-btn.off { background: #FFFFFF; color: var(--ink); border: 1px solid var(--line); }
+      .mode-btn.on { background: var(--blue); color: #FFFFFF; border: 1px solid var(--blue); }
+      .mode-btn.off:hover { border-color: var(--blue); color: var(--blue); }
+      .mode-row.locked { pointer-events: none; opacity: 0.6; }
 
-      /* Rebrand info card */
       .rebrand-info { padding: 14px 16px; background: var(--panel); border-left: 3px solid var(--blue);
         border-radius: 6px; font-size: 13px; color: var(--body); margin-top: 14px; line-height: 1.5; }
 
-      /* Two-column row */
       .row { display: flex; gap: 10px; }
-      .row > div { flex: 1; }
+      .row > div { flex: 1; min-width: 0; }
       .hint { margin-top: 5px; font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
 
-      /* Buttons */
       .actions { display: flex; gap: 8px; margin-top: 20px; }
-      button { padding: 13px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; font-family: inherit;
+      button { padding: 13px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; font-family: inherit;
         cursor: pointer; transition: background 0.2s; letter-spacing: 0.2px; }
       #goButton { flex: 1; background: var(--blue); color: white; }
       #goButton:hover:not(:disabled) { background: var(--blue-hover); }
@@ -68,7 +66,6 @@
       #cancelButton:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
       #cancelButton:disabled { color: var(--muted); cursor: default; }
 
-      /* Progress panel */
       #progress { margin-top: 16px; padding: 14px 16px; background: var(--panel); border-radius: 8px; }
       .p-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
       .p-title { font-size: 13px; font-weight: 600; }
@@ -101,14 +98,12 @@
         border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -1px; }
       @keyframes spin { to { transform: rotate(360deg); } }
 
-      /* Final status */
       #status { margin-top: 12px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; color: var(--body); }
       #status.error { color: var(--red); }
       #status.success { color: var(--green); }
 
       .hidden { display: none; }
 
-      /* Upload field */
       .upload { display: flex; align-items: center; gap: 10px; border: 1px dashed var(--line); border-radius: 8px;
         padding: 9px 12px; cursor: pointer; background: white; }
       .upload:hover { border-color: var(--blue); }
@@ -122,22 +117,61 @@
       #openLink { margin-top: 10px; font-size: 13px; }
       #openLink a { color: var(--blue); font-weight: 600; text-decoration: none; }
       #openLink a:hover { text-decoration: underline; }
+
+      .powered { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line);
+        text-align: center; font-size: 12px; font-weight: 600; color: #000000; letter-spacing: 0.2px; }
     </style>
   </head>
   <body>
-    <h2>66degrees AI Presentation Generator</h2>
-    <p class="sub">Type a topic. We handle research, design and branding.</p>
-
-    <!-- Compact segmented toggle -->
-    <div class="mode-toggle" id="modeToggle" role="tablist">
-      <label><input type="radio" name="mode" value="create" checked onchange="updateMode()">Create new</label>
-      <label><input type="radio" name="mode" value="rebrand" onchange="updateMode()">Rebrand this deck</label>
+    <div class="hero">
+      <div class="accent" aria-hidden="true"></div>
+      <div>
+        <h2>66° Deck Agent</h2>
+        <p class="sub">Prompt + docs → structured, on-brand Google Slides.</p>
+      </div>
     </div>
 
-    <!-- Create mode inputs -->
+    <label class="field">Mode</label>
+    <div class="mode-row" id="modeToggle" role="tablist">
+      <button type="button" id="modeCreate" class="mode-btn on" onclick="setMode('create')">Create</button>
+      <button type="button" id="modeRebrand" class="mode-btn off" onclick="setMode('rebrand')">Rebrand</button>
+    </div>
+
     <div id="createBlock">
-      <label class="field" for="prompt">Topic</label>
+      <label class="field" for="prompt">Prompt</label>
       <textarea id="prompt" placeholder="Example: Create a presentation on AI adoption for our leadership team"></textarea>
+
+      <div class="row">
+        <div>
+          <label class="field" for="presentationType">Presentation type</label>
+          <select id="presentationType">
+            <option value="Pitch" selected>Pitch</option>
+            <option value="Strategy">Strategy</option>
+            <option value="Proposal">Proposal</option>
+            <option value="Sales">Sales</option>
+            <option value="Case Study">Case Study</option>
+            <option value="Report">Report</option>
+            <option value="Custom">Custom</option>
+          </select>
+        </div>
+        <div>
+          <label class="field" for="department">Department</label>
+          <select id="department">
+            <option value="Sales" selected>Sales</option>
+            <option value="Marketing">Marketing</option>
+            <option value="Technology">Technology</option>
+            <option value="Finance">Finance</option>
+            <option value="Operations">Operations</option>
+            <option value="HR">HR</option>
+            <option value="Leadership">Leadership</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="field" for="slides">Slide count (3–20)</label>
+      <input id="slides" type="number" min="3" max="20" value="8">
+      <div class="hint">3–20 slides, includes cover and Thank You</div>
 
       <label class="field" for="source">Source link · optional</label>
       <input id="source" type="text" placeholder="Google Doc, Slides, Sheet or PDF link">
@@ -150,13 +184,8 @@
         <span class="upload-name" id="fileName">PDF, Word, Excel, CSV, PowerPoint, text or image · max 20 MB</span>
         <span class="upload-clear hidden" id="fileClear" onclick="clearFile(event)">✕</span>
       </label>
-
-      <label class="field" for="slides">Slides</label>
-      <input id="slides" type="number" min="3" max="20" value="8">
-      <div class="hint">3–20 slides, includes cover and Thank You</div>
     </div>
 
-    <!-- Rebrand mode inputs -->
     <div id="rebrandBlock" class="rebrand-info hidden">
       The slides currently in this file will be rebranded to the 66degrees 2026 template — colors, fonts, cards, logo and footer applied automatically. Nothing is added or removed.
     </div>
@@ -166,7 +195,6 @@
       <button id="cancelButton" class="hidden" onclick="cancelRunClick()">Cancel</button>
     </div>
 
-    <!-- Live progress -->
     <div id="progress" class="hidden">
       <div class="p-head">
         <span class="p-title" id="pTitle">Starting…</span>
@@ -179,8 +207,9 @@
     <div id="status"></div>
     <div id="openLink" class="hidden"></div>
 
+    <div class="powered">Powered by Marketing Team 66°</div>
+
     <script>
-      // Stage weights (share of the total time each stage usually takes) — drives the progress bar
       const WEIGHTS = {
         create: { research: 12, write: 30, match: 2, fit: 12, design: 30, import: 8, review: 15, brand: 40, insert: 10 },
         rebrand: { review: 40, brand: 60 }
@@ -191,22 +220,26 @@
                  'Adding slides to your deck'],
         rebrand: ['Reviewing every slide', 'Applying the 66degrees brand']
       };
+      const MIN_SLIDES = 3, MAX_SLIDES = 20;
 
       let timer = null, poller = null, polling = false;
       let runId = null, runMode = 'create', started = 0, finished = false;
+      let currentMode = 'create';
       let currentPresentation = { id: '', url: '', title: '' };
-      const stageSeenAt = {};   // client time when each stage was first seen active
+      const stageSeenAt = {};
 
-      function mode() { return document.querySelector('input[name="mode"]:checked').value; }
+      function mode() { return currentMode; }
 
-      function updateMode() {
-        const m = mode();
-        document.getElementById('createBlock').classList.toggle('hidden', m !== 'create');
-        document.getElementById('rebrandBlock').classList.toggle('hidden', m !== 'rebrand');
+      function setMode(next) {
+        currentMode = next === 'rebrand' ? 'rebrand' : 'create';
+        document.getElementById('modeCreate').className = 'mode-btn ' + (currentMode === 'create' ? 'on' : 'off');
+        document.getElementById('modeRebrand').className = 'mode-btn ' + (currentMode === 'rebrand' ? 'on' : 'off');
+        document.getElementById('createBlock').classList.toggle('hidden', currentMode !== 'create');
+        document.getElementById('rebrandBlock').classList.toggle('hidden', currentMode !== 'rebrand');
         const btn = document.getElementById('goButton');
         btn.className = '';
         btn.disabled = false;
-        btn.innerText = m === 'create' ? 'Create Presentation' : 'Rebrand This Deck';
+        btn.innerText = currentMode === 'create' ? 'Create Presentation' : 'Rebrand This Deck';
         document.getElementById('progress').classList.add('hidden');
         setStatus('', '');
       }
@@ -228,10 +261,22 @@
       function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
       function lockInputs(locked) {
-        ['prompt', 'source', 'slides'].forEach(function (id) { document.getElementById(id).disabled = locked; });
+        ['prompt', 'source', 'slides', 'presentationType', 'department'].forEach(function (id) {
+          document.getElementById(id).disabled = locked;
+        });
         document.getElementById('uploadBox').classList.toggle('locked', locked);
         document.getElementById('modeToggle').classList.toggle('locked', locked);
       }
+
+      function clampSlides(v) {
+        v = parseInt(v, 10);
+        if (isNaN(v)) v = 8;
+        return Math.max(MIN_SLIDES, Math.min(MAX_SLIDES, v));
+      }
+
+      document.getElementById('slides').addEventListener('blur', function () {
+        this.value = clampSlides(this.value);
+      });
 
       const MAX_UPLOAD = 20 * 1024 * 1024;
       function fileChosen() {
@@ -275,16 +320,16 @@
         const m = mode();
         const prompt = document.getElementById('prompt').value.trim();
         const source = document.getElementById('source').value.trim();
-        let slides = parseInt(document.getElementById('slides').value, 10);
+        const presentationType = document.getElementById('presentationType').value;
+        const department = document.getElementById('department').value;
+        let slides = clampSlides(document.getElementById('slides').value);
+        document.getElementById('slides').value = slides;
 
         if (m === 'create' && !prompt && !source && !upload) {
           document.getElementById('goButton').disabled = false;
           setStatus('Type a topic, paste a source link or upload a file.', 'error');
           return;
         }
-        if (isNaN(slides)) slides = 8;
-        slides = Math.max(3, Math.min(20, slides));
-        document.getElementById('slides').value = slides;
 
         runId = 'r' + Date.now() + Math.floor(Math.random() * 1e6);
         runMode = m;
@@ -323,6 +368,10 @@
             sourceUrl: source,
             upload: upload,
             slides: slides,
+            slideCount: slides,
+            presentationType: presentationType,
+            type: presentationType,
+            department: department,
             runId: runId
           });
       }
@@ -345,7 +394,7 @@
       function cancelRunClick() {
         if (!runId || finished) return;
         stoppedRuns[runId] = true;
-        google.script.run.cancelRun(runId);          // the server stops at its next checkpoint and removes its working copy
+        google.script.run.cancelRun(runId);
         finishUi();
         const btn = document.getElementById('goButton');
         btn.disabled = false;
@@ -371,7 +420,7 @@
       }
 
       function onDone(msg, id) {
-        if (id && (stoppedRuns[id] || id !== runId)) return;   // a run the user already stopped
+        if (id && (stoppedRuns[id] || id !== runId)) return;
         let text = '';
         let url = currentPresentation.url;
         if (msg && typeof msg === 'object') {
@@ -421,8 +470,6 @@
         setStatus(msg, 'error');
       }
 
-      // ---------- Rendering ----------
-
       function icon(status) {
         if (status === 'done') return '✓';
         if (status === 'error') return '✕';
@@ -438,7 +485,6 @@
         const html = stages.map(function (st) {
           let li = '<li class="' + st.status + '"><span class="ico">' + icon(st.status) + '</span><span class="lbl">' +
             esc(st.label) + (st.detail ? '<span class="detail">' + esc(st.detail) + '</span>' : '') + '</span></li>';
-          // The slide list sits under the branding stage (and under writing, before branding starts)
           const brandStarted = stages.some(function (x) { return x.id === 'brand' && x.status !== 'pending'; });
           const showUnder = slides.length && ((st.id === 'brand' && brandStarted) || (st.id === 'write' && !brandStarted));
           if (showUnder) li += '<li style="display:block;padding:0">' + slideList(slides, st.id === 'write') + '</li>';
@@ -449,7 +495,6 @@
       }
 
       function slideList(slides, planOnly) {
-        // Show all when short; otherwise a window around the slide being worked on
         let items = slides;
         let before = 0, after = 0;
         if (slides.length > 9) {
@@ -483,10 +528,10 @@
           let part;
           if (st.id === 'brand' && slides.length) {
             const finishedSlides = slides.filter(function (s) { return s.status === 'done'; }).length;
-            part = 0.25 + 0.75 * finishedSlides / slides.length;     // colors/fonts pass first, then slide by slide
+            part = 0.25 + 0.75 * finishedSlides / slides.length;
           } else {
             const secs = (Date.now() - stageSeenAt[st.id]) / 1000;
-            part = Math.min(0.9, secs / (EXPECTED_SECS[st.id] || 20));   // time-based estimate, never claims 100%
+            part = Math.min(0.9, secs / (EXPECTED_SECS[st.id] || 20));
           }
           done += weight * part;
         });
@@ -504,7 +549,8 @@
         })
         .getGeneratorBootstrap();
 
-      updateMode();
+      clearFile();
+      setMode('create');
     </script>
   </body>
 </html>
