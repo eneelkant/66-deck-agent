@@ -113,6 +113,23 @@ test("normalizeShapeType never returns undefined or ROUNDED_RECTANGLE", () => {
   }
 });
 
+test("insertShapeSafe never passes an invalid enum to insertShape", () => {
+  const { EngineRenderer, SlidesApp } = loadRenderer();
+  const seen = [];
+  const slide = {
+    insertShape(type, x, y, w, h) {
+      seen.push({ type, x, y, w, h });
+      return { type, x, y, w, h };
+    }
+  };
+  EngineRenderer.insertShapeSafe(slide, "ROUNDED_RECTANGLE", 0, 0, 40, 20);
+  EngineRenderer.insertShapeSafe(slide, "totally-fake", 1, 2, 0, -4);
+  assert.equal(seen[0].type, SlidesApp.ShapeType.ROUND_RECTANGLE);
+  assert.equal(seen[1].type, SlidesApp.ShapeType.RECTANGLE);
+  assert.ok(seen[1].w > 0);
+  assert.ok(seen[1].h > 0);
+});
+
 test("layoutDiagramPositions keeps node dimensions positive with many nodes", () => {
   const { EngineRenderer } = loadRenderer();
 

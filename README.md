@@ -1,50 +1,46 @@
 # 66° Deck Agent
 
-AI-powered Google Workspace / Google Slides add-on that turns short prompts and source documents into **structured, visually diverse, on-brand, editable** 66degrees presentations.
+Google Slides add-on that turns a prompt (and optional source documents) into **on-brand, editable** 66degrees slides **in the presentation that is already open**.
 
-The agent does **not** let Gemini emit arbitrary `SlidesApp` code. Gemini (or a deterministic fallback planner) emits a validated **PresentationSpec** intermediate representation (IR). A native rendering engine then creates editable Google Slides shapes, text, tables, and connectors.
+The uploaded V.1_17 specification is the source of truth. Gemini (or Vertex AI Gemini) writes the content plan; `ENGINE` lays out every slide on a 720×405 canvas; `EngineRenderer.gs` draws native Google Slides shapes into **the active presentation**.
+
+## User flow
+
+```
+CURRENT GOOGLE SLIDES PRESENTATION
+        ↓
+sidebar (Extensions → 66degrees AI Presentation Generator)
+        ↓
+Create pipeline
+        ↓
+research → plan → design → fit check → render
+        ↓
+slides inserted into THE SAME presentation
+```
+
+The sidebar “Open presentation” link is optional navigation. It is **not** how slides get into the deck. Generation never creates a second presentation on the default path (`CONFIG.useBeautifulAi` is `false`).
 
 ## Architecture
 
-```
-INPUT
-  → Source / Document Analysis
-  → Research
-  → Content Planning
-  → Presentation Intermediate Representation (PresentationSpec)
-  → Reference Layout Selection
-  → Visual / Diagram Planning
-  → Native Google Slides Rendering
-  → Brand Enforcement
-  → Quality Assurance
-  → Final Google Slides Presentation
-```
-
-Separated concerns:
-
-| Concern | Module |
+| File | Responsibility |
 |---|---|
-| Content / pipeline | `Code.gs`, `Engine.gs` |
-| IR schema + validation | `Spec.gs` |
-| Layout selection | `Reference.gs` |
-| Visuals / diagrams / rendering | `EngineRenderer.gs` |
-| Branding | `Brand.gs` |
-| Brand QA / rebrand | `Qa.gs`, `Rebrand.gs` |
-| Sidebar UI | `Generator.html` |
+| `Code.gs` | Menu, settings, Create pipeline (research, plan, design choice, fit check), uploads, Gemini/Scite, orchestration |
+| `Engine.gs` | Layout engine: every slide design, type scale, fit measurement |
+| `EngineRenderer.gs` | Draws the engine layout into Google Slides (safe ShapeType / dimensions / text frames) |
+| `Reference.gs` | 2026 template reference library, harvest, design rotation, icon check |
+| `Brand.gs` | Brand colours, default brand profile, approved facts, Gemini/Vertex client |
+| `Rebrand.gs` | Rebrand mode: restyles existing slides to the brand |
+| `ShapeKit.gs` | Embedded rounded-rectangle shape kit (~3pt corners). Copy this file whole. |
+| `Generator.html` | Sidebar: prompt, upload, progress, Stop, completion link |
 
-### Reference repositories inspected (patterns only)
+Pipeline (Create):
 
-These public repos were inspected for architecture ideas. No source was copied verbatim.
+```
+research (Scite, else Gemini Search) → write plan → match 2026 template designs
+  → fit check (ENGINE.measure) → draw into getActivePresentation()
+```
 
-| Repository | Useful pattern | Mapped to |
-|---|---|---|
-| [presenton/presenton](https://github.com/presenton/presenton) | Structured generation + layout-driven assembly | `Engine.gs`, `Reference.gs` |
-| [textboy/mk-present](https://github.com/textboy/mk-present) | Multi-stage research → storyline → render pipeline | `Code.gs` pipeline stages |
-| [alfonsograziano/pptx-gen](https://github.com/alfonsograziano/pptx-gen) | Native editable shape output contract | `EngineRenderer.gs` |
-| [sci-gen/diagram-pptx](https://github.com/sci-gen/diagram-pptx) | Node/edge diagram DSL → native shapes | diagram DSL in `Spec.gs` / renderer |
-| [OpenDCAI/Paper2Any](https://github.com/OpenDCAI/Paper2Any) | Document/content understanding before visuals | source analysis in `Engine.gs` |
-| [Whatsonyourmind/deckforge](https://github.com/Whatsonyourmind/deckforge) | Presentation IR + validation/QA | `Spec.gs`, `Qa.gs` |
-| [soumadip1/ai-marp-slidegen](https://github.com/soumadip1/ai-marp-slidegen) | AI slide planning + diagram planning | `Engine.gs` planning stages |
+Rebrand applies the brand pass to the open deck in place.
 
 ## Directory structure
 
@@ -53,241 +49,75 @@ These public repos were inspected for architecture ideas. No source was copied v
 ├── .github/workflows/deploy.yml
 ├── src/
 │   ├── appsscript.json
-│   ├── Code.gs
 │   ├── Brand.gs
-│   ├── Spec.gs
-│   ├── Reference.gs
-│   ├── Rebrand.gs
+│   ├── ShapeKit.gs
 │   ├── Engine.gs
 │   ├── EngineRenderer.gs
-│   ├── Qa.gs
+│   ├── Reference.gs
+│   ├── Rebrand.gs
+│   ├── Code.gs
 │   └── Generator.html
 ├── scripts/validate.js
 ├── tests/
 ├── .clasp.json
-├── .gitignore
-├── package.json
 └── README.md
 ```
 
-## Features
+## Renderer safety
 
-- **Create** and **Rebrand** modes in a Workspace-style sidebar (540×720 target)
-- Mandatory **Department** filter: Sales, Delivery, Solutions, Executive, General
-- Presentation IR (`PresentationSpec`) with repair + validation
-- Reference layout library with scoring, reuse penalties, and top-N random sampling
-- Native editable rendering: cards, KPI grids, process flows, timelines, tables, comparisons
-- Flowchart / architecture diagram DSL rendered with shapes + connectors (not flattened images)
-- Centralized 66degrees brand palette + typography helpers
-- Brand enforcement / QA pass before completion
-- GitHub Actions deploy workflow via `@google/clasp`
-- Deterministic planner fallback when Vertex AI is not configured
+- `SlidesApp.ShapeType` names are normalized. `ROUNDED_RECTANGLE` maps to `ROUND_RECTANGLE`.
+- Unknown AI-generated shape names fall back to `RECTANGLE`. All `insertShape` calls go through `insertShapeSafe_`.
+- Every box uses `safeBox_`: width and height are finite and > 0.
+- `getText()` / `getTextStyle()` run only on objects that have a text frame. Overlay text boxes hold labels.
 
-## Brand system
+## Setup
 
-Centralized in `Brand.gs`:
+1. `npm ci`
+2. `npm test`
+3. Apps Script project: enable **Google Drive API** and **Google Slides API**. Manifest already requests:
+   - `presentations`
+   - `drive` (write: uploads, shape kit, optional Beautiful.ai convert)
+   - `script.external_request`
+   - `script.container.ui`
+   - `cloud-platform` (Vertex)
+4. Script properties (Project Settings):
 
-| Token | Value |
-|---|---|
-| Primary Blue | `#0052FF` |
-| Ink | `#040A1B` |
-| Panel | `#F2F7FB` |
-| Panel Alt | `#D1DBDF` |
-| Title | `#000000` |
-| Body | `#333333` |
+   | Property | Required | Notes |
+   |---|---|---|
+   | `VERTEX_PROJECT_ID` | Preferred | Vertex AI Gemini via `ScriptApp.getOAuthToken()` |
+   | `VERTEX_LOCATION` | No | Default `us-central1` (or `global`) |
+   | `VERTEX_MODEL` | No | Default `gemini-2.5-flash` |
+   | `GEMINI_API_KEY` | If no Vertex | Gemini Developer API |
+   | `SCITE_API_KEY` | No | Academic research; Gemini Search is the fallback |
+   | `BEAUTIFUL_AI_KEY` | No | Unused unless `CONFIG.useBeautifulAi` is turned on |
 
-Typography:
+5. One-time reference library (from the spec):
+   - Upload `66d_reference_library.json` and set `CONFIG.refLibraryFileId`
+   - Import the 2026 template as Google Slides and set `CONFIG.referenceDeckId`
+   - Run **Harvest reference deck** until it says done
 
-- Titles / UI: **Plus Jakarta Sans** (~20pt semibold for titles)
-- KPI / numerical: **IBM Plex Mono**
-
-## Presentation IR (PresentationSpec)
-
-```json
-{
-  "metadata": {
-    "title": "Cloud value story",
-    "subtitle": "Executive Brief",
-    "audience": "Executive"
-  },
-  "department": "Executive",
-  "presentationType": "Executive Brief",
-  "theme": "66degrees",
-  "slides": [
-    {
-      "id": "slide_1",
-      "category": "cover",
-      "purpose": "opening",
-      "title": "Cloud value story",
-      "subtitle": "Executive Brief",
-      "body": "",
-      "layoutId": "ref_cover_hero",
-      "visualType": "cover",
-      "elements": [],
-      "diagram": null,
-      "speakerNotes": ""
-    }
-  ]
-}
-```
-
-Supported element types include: `text`, `richText`, `image`, `card`, `metric`, `KPI`, `chart`, `table`, `process`, `flowchart`, `decision`, `timeline`, `comparison`, `architecture`, `quote`, `icon`, `connector`.
-
-### Diagram DSL
-
-```json
-{
-  "type": "flowchart",
-  "direction": "LR",
-  "nodes": [
-    { "id": "lead", "type": "process", "label": "Lead" },
-    { "id": "qualify", "type": "decision", "label": "Qualified?" }
-  ],
-  "edges": [
-    { "from": "lead", "to": "qualify" }
-  ]
-}
-```
-
-Node types: `process`, `decision`, `start`, `end`. Directions: `LR`, `TB`.
-
-## Reference library format
-
-Each layout entry in `Reference.gs` includes:
-
-- `id`, `category`, `visualType`
-- `departments` (includes `general` for shared layouts)
-- `presentationTypes`
-- `purpose`, `contentTypes`
-
-Selection scoring considers content type, purpose, visual type, department, presentation type, prior category, and reuse.
-
-Penalties:
-
-- `-50` if layout id already used
-- `-25` if category matches the immediately previous slide
-
-The selector randomly samples among the top-scoring candidates to avoid repetitive decks.
-
-## Local development
-
-### Prerequisites
-
-- Node.js 18+
-- Git
-- Google account with access to Google Apps Script / Slides
-- Optional: [clasp](https://github.com/google/clasp) (`npm i -g @google/clasp`)
-
-### Install & validate
+## Local validation
 
 ```bash
-npm install
 npm test
+git diff --check
 ```
 
-This runs:
+`npm test` runs `scripts/validate.js` then `tests/*.test.js`.
 
-1. Static validation (`scripts/validate.js`) — JSON/YAML/HTML/manifest/secret scans + Apps Script module load checks
-2. Unit tests for IR validation, reference selection, planner fallback, diagram planning
+## Deploy
 
-### clasp setup
-
-1. Create a new Apps Script project (or use an existing one).
-2. `clasp login`
-3. Copy the Script ID into `.clasp.json` (`scriptId`).
-4. From repo root:
+Push to `main` or:
 
 ```bash
-clasp push
+gh workflow run deploy.yml --ref main
 ```
 
-`rootDir` is `src/`.
+The workflow validates, `clasp push -f`, then updates the Apps Script deployment. GitHub secrets: `CLASPRC_JSON`, `SCRIPT_ID`, `DEPLOYMENT_ID`.
 
-### Google Cloud / Vertex AI (Agent Platform) configuration
+## Same-presentation contract
 
-The planner calls Vertex AI / Agent Platform Gemini over OAuth using the Apps Script user's identity (`ScriptApp.getOAuthToken()`). **No Gemini API key and no service-account private keys are used or stored in the repository.**
-
-1. Link the Apps Script project to your Google Cloud project (Project Settings → Google Cloud Platform project).
-
-2. Enable the **Vertex AI API** (`aiplatform.googleapis.com`) on that Cloud project.
-
-3. Grant users who run the add-on (or a Google Group) IAM role **`roles/aiplatform.user`** (Vertex AI User) on the project. This includes `aiplatform.endpoints.predict`.
-
-4. In Apps Script → **Project Settings** → **Script properties**, set:
-
-   | Property | Required | Default | Purpose |
-   |---|---|---|---|
-   | `VERTEX_PROJECT_ID` | Yes | — | Google Cloud project id |
-   | `VERTEX_LOCATION` | No | `us-central1` | Region, or `global` |
-   | `VERTEX_MODEL` | No | `gemini-2.5-flash` | Publisher model id |
-
-5. After deploying a version that adds the `cloud-platform` OAuth scope, users must **re-authorize** the add-on.
-
-6. If `VERTEX_PROJECT_ID` is missing, the agent uses a deterministic on-brand planner so structural flows still work. Live AI planning requires Vertex configuration + IAM.
-
-OAuth scopes (in `src/appsscript.json`):
-
-- `https://www.googleapis.com/auth/presentations`
-- `https://www.googleapis.com/auth/drive.readonly`
-- `https://www.googleapis.com/auth/script.external_request`
-- `https://www.googleapis.com/auth/script.container.ui`
-- `https://www.googleapis.com/auth/cloud-platform` (Vertex AI via user OAuth)
-
-## Using the add-on
-
-1. Open Google Slides.
-2. Use menu **66° Deck Agent → Open Generator**.
-3. Choose **Create** or **Rebrand**.
-4. Select Presentation Type + Department.
-5. Set slide count (3–20).
-6. Enter prompt and optional source Doc/Slides URL.
-7. Generate and open the resulting presentation.
-
-## Deployment (GitHub Actions)
-
-Workflow: `.github/workflows/deploy.yml`
-
-Flow:
-
-1. Checkout
-2. Setup Node.js
-3. `npm ci` + `npm test`
-4. Install `@google/clasp`
-5. Write credentials from GitHub Secrets
-6. `clasp push`
-7. `clasp deploy` (uses `DEPLOYMENT_ID` when provided)
-
-### Required secrets
-
-| Secret | Purpose |
-|---|---|
-| `CLASPRC_JSON` | Contents of local `.clasprc.json` from `clasp login` |
-| `SCRIPT_ID` | Apps Script project id |
-| `DEPLOYMENT_ID` | Optional existing deployment id to update |
-
-Never commit `.clasprc.json`, OAuth client secrets, API keys, or service-account keys.
-
-If secrets are absent, the workflow validates successfully and skips deploy steps safely.
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| Sidebar bootstrap says “Fallback planner” | `VERTEX_PROJECT_ID` missing | Set Script Property |
-| Vertex AI authentication failed (401/403) | Missing IAM / scope re-auth | Grant `roles/aiplatform.user`; re-authorize add-on |
-| Source document ignored | URL not Drive/Docs or no access | Use HTTPS Drive URL; authorize Drive readonly |
-| Rebrand fails | Invalid Slides URL / permissions | Paste a full Slides URL you can open |
-| Deploy skipped in Actions | Secrets not configured | Add `CLASPRC_JSON` + `SCRIPT_ID` |
-| Fonts look different | Plus Jakarta / IBM Plex unavailable in account | Brand helpers fall back to Arial / Courier New |
-
-## Known limitations
-
-- Vertex AI planning quality depends on API availability/quota and per-user IAM; fallback planner is deterministic, not research-grade.
-- Source document ingestion is best-effort text extraction for Drive files; complex PDFs/binaries are summarized by filename/metadata when text cannot be read.
-- Chart rendering currently focuses on KPI/metric/table primitives; advanced chart types can be extended in `EngineRenderer.gs`.
-- Cancel in the sidebar signals intent; Apps Script cannot preempt an in-flight server function mid-stage.
-- Production Apps Script deployment requires configured GitHub secrets / clasp credentials and is not claimed successful unless those secrets are present and the workflow deploy job is verified.
-
-## License
-
-See [LICENSE](./LICENSE).
+- Default Create calls `SlidesApp.getActivePresentation()` and `drawSlidesIntoActive_`.
+- Blank decks are reused; decks with existing content get generated slides **appended**.
+- Rebrand restyles the current deck.
+- Completion payload includes that presentation’s `id` and `url`.

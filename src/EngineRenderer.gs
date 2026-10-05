@@ -1,958 +1,372 @@
 /**
- * Native Google Slides rendering primitives and slide composers.
- * Prefer editable shapes/connectors over flattened images.
+ * Draws one slide from the layout engine (Engine.gs, 66degrees 2026 template standard) into Google Slides.
+ * Engine coordinates are on a 720 x 405 pt canvas and are scaled to the page size.
+ * Design tokens come from the reference library (ctx.tokens); icons come from the template icon set first.
+ *
+ * Safety contract:
+ *   - every insertShape goes through insertShapeSafe_ / normalizeShapeType_
+ *   - every insertTextBox goes through insertTextBoxSafe_
+ *   - width/height are always finite and > 0
+ *   - getText() is only called on objects that actually have a text frame
+ *   - unknown / AI-generated shape names never reach insertShape without normalizeShapeType_
  */
 
-var EngineRenderer = (function () {
-  function createBlankPresentation(title) {
-    var presentation = SlidesApp.create(title || '66degrees Deck');
-    var slides = presentation.getSlides();
-    // Keep first slide; clear later during render.
-    return presentation;
-  }
+var MIN_SIZE_ = 1;
 
-  function clearPresentation(presentation) {
-    var slides = presentation.getSlides();
-    // Leave one slide; remove extras.
-    for (var i = slides.length - 1; i > 0; i--) {
-      slides[i].remove();
-    }
-    var first = presentation.getSlides()[0];
-    first.getPageElements().forEach(function (el) {
-      el.remove();
-    });
-    return first;
-  }
+/**
+ * Official SlidesApp.ShapeType names we are willing to pass to insertShape.
+ * ROUNDED_RECTANGLE is intentionally absent — that identifier is not a valid
+ * Apps Script enum value (the real name is ROUND_RECTANGLE).
+ */
+var VALID_SHAPE_TYPE_KEYS = {
+  RECTANGLE: true,
+  ROUND_RECTANGLE: true,
+  ELLIPSE: true,
+  DIAMOND: true,
+  TRIANGLE: true,
+  RIGHT_TRIANGLE: true,
+  CHEVRON: true,
+  HOME_PLATE: true,
+  LEFT_ARROW: true,
+  RIGHT_ARROW: true,
+  UP_ARROW: true,
+  DOWN_ARROW: true,
+  LEFT_RIGHT_ARROW: true,
+  UP_DOWN_ARROW: true,
+  PARALLELOGRAM: true,
+  TRAPEZOID: true,
+  PENTAGON: true,
+  HEXAGON: true,
+  FLOW_CHART_PROCESS: true,
+  FLOW_CHART_DECISION: true,
+  FLOW_CHART_TERMINATOR: true
+};
 
-  function addBackground(slide, hex) {
-    slide.getBackground().setSolidFill(Brand.snapToPalette(hex || Brand.COLORS.WHITE));
-  }
+var SHAPE_TYPE_ALIASES = {
+  rect: 'RECTANGLE',
+  rectangle: 'RECTANGLE',
+  square: 'RECTANGLE',
+  box: 'RECTANGLE',
+  ellipse: 'ELLIPSE',
+  oval: 'ELLIPSE',
+  circle: 'ELLIPSE',
+  roundrect: 'ROUND_RECTANGLE',
+  round_rect: 'ROUND_RECTANGLE',
+  round_rectangle: 'ROUND_RECTANGLE',
+  roundedrect: 'ROUND_RECTANGLE',
+  rounded_rect: 'ROUND_RECTANGLE',
+  rounded_rectangle: 'ROUND_RECTANGLE',
+  roundedrectangle: 'ROUND_RECTANGLE',
+  diamond: 'DIAMOND',
+  rhombus: 'DIAMOND',
+  decision: 'DIAMOND',
+  triangle: 'TRIANGLE',
+  chevron: 'CHEVRON',
+  home_plate: 'HOME_PLATE',
+  homeplate: 'HOME_PLATE',
+  arrow: 'RIGHT_ARROW',
+  right_arrow: 'RIGHT_ARROW',
+  left_arrow: 'LEFT_ARROW',
+  up_arrow: 'UP_ARROW',
+  down_arrow: 'DOWN_ARROW',
+  process: 'ROUND_RECTANGLE',
+  start: 'ELLIPSE',
+  end: 'ELLIPSE'
+};
 
-  /**
-   * Official SlidesApp.ShapeType names we are willing to pass to insertShape.
-   * ROUNDED_RECTANGLE is intentionally absent — that identifier is not a valid
-   * Apps Script enum value (the real name is ROUND_RECTANGLE).
-   */
-  var VALID_SHAPE_TYPE_KEYS = {
-    RECTANGLE: true,
-    ROUND_RECTANGLE: true,
-    ELLIPSE: true,
-    DIAMOND: true,
-    TRIANGLE: true,
-    RIGHT_TRIANGLE: true,
-    CHEVRON: true,
-    HOME_PLATE: true,
-    LEFT_ARROW: true,
-    RIGHT_ARROW: true,
-    UP_ARROW: true,
-    DOWN_ARROW: true,
-    LEFT_RIGHT_ARROW: true,
-    UP_DOWN_ARROW: true,
-    PARALLELOGRAM: true,
-    TRAPEZOID: true,
-    PENTAGON: true,
-    HEXAGON: true,
-    FLOW_CHART_PROCESS: true,
-    FLOW_CHART_DECISION: true,
-    FLOW_CHART_TERMINATOR: true
+function shapeTypeKeyFromValue_(value) {
+  if (value == null) return '';
+  return String(value)
+    .trim()
+    .replace(/^ShapeType\./i, '')
+    .replace(/[\s-]+/g, '_')
+    .replace(/_+/g, '_');
+}
+
+function resolveShapeTypeKey_(value) {
+  var raw = shapeTypeKeyFromValue_(value);
+  if (!raw) return 'RECTANGLE';
+  var alias = SHAPE_TYPE_ALIASES[raw.toLowerCase()];
+  if (alias) return alias;
+  var compact = raw.toUpperCase();
+  if (VALID_SHAPE_TYPE_KEYS[compact]) return compact;
+  return 'RECTANGLE';
+}
+
+function normalizeShapeType_(value) {
+  var key = resolveShapeTypeKey_(value);
+  var enumObj = (typeof SlidesApp !== 'undefined' && SlidesApp && SlidesApp.ShapeType) ? SlidesApp.ShapeType : {};
+  var resolved = enumObj[key];
+  if (resolved == null) resolved = enumObj.RECTANGLE;
+  if (resolved == null) return 'RECTANGLE';
+  return resolved;
+}
+
+function finiteNumber_(value, fallback) {
+  var n = Number(value);
+  return isFinite(n) ? n : fallback;
+}
+
+function safeSize_(value, fallback) {
+  var n = finiteNumber_(value, fallback == null ? MIN_SIZE_ : fallback);
+  return n < MIN_SIZE_ ? MIN_SIZE_ : n;
+}
+
+function safeBox_(x, y, w, h) {
+  return {
+    x: finiteNumber_(x, 0),
+    y: finiteNumber_(y, 0),
+    w: safeSize_(w, MIN_SIZE_),
+    h: safeSize_(h, MIN_SIZE_)
   };
+}
 
-  var SHAPE_TYPE_ALIASES = {
-    rect: 'RECTANGLE',
-    rectangle: 'RECTANGLE',
-    square: 'RECTANGLE',
-    box: 'RECTANGLE',
-    ellipse: 'ELLIPSE',
-    oval: 'ELLIPSE',
-    circle: 'ELLIPSE',
-    roundrect: 'ROUND_RECTANGLE',
-    round_rect: 'ROUND_RECTANGLE',
-    round_rectangle: 'ROUND_RECTANGLE',
-    roundedrect: 'ROUND_RECTANGLE',
-    rounded_rect: 'ROUND_RECTANGLE',
-    rounded_rectangle: 'ROUND_RECTANGLE',
-    roundedrectangle: 'ROUND_RECTANGLE',
-    diamond: 'DIAMOND',
-    rhombus: 'DIAMOND',
-    decision: 'DIAMOND',
-    triangle: 'TRIANGLE',
-    chevron: 'CHEVRON',
-    home_plate: 'HOME_PLATE',
-    homeplate: 'HOME_PLATE',
-    arrow: 'RIGHT_ARROW',
-    right_arrow: 'RIGHT_ARROW',
-    left_arrow: 'LEFT_ARROW',
-    up_arrow: 'UP_ARROW',
-    down_arrow: 'DOWN_ARROW',
-    process: 'ROUND_RECTANGLE',
-    start: 'ELLIPSE',
-    end: 'ELLIPSE'
+function insertShapeSafe_(slide, typeValue, x, y, w, h) {
+  var box = safeBox_(x, y, w, h);
+  return slide.insertShape(normalizeShapeType_(typeValue), box.x, box.y, box.w, box.h);
+}
+
+function insertTextBoxSafe_(slide, text, x, y, w, h) {
+  var box = safeBox_(x, y, w, h);
+  return slide.insertTextBox(text == null ? '' : String(text), box.x, box.y, box.w, box.h);
+}
+
+function hasTextFrame_(shape) {
+  if (!shape || typeof shape.getText !== 'function') return false;
+  try {
+    var tr = shape.getText();
+    return !!(tr && typeof tr.setText === 'function');
+  } catch (e) {
+    return false;
+  }
+}
+
+function writeTextSafe_(shape, text) {
+  if (!hasTextFrame_(shape)) return false;
+  try {
+    shape.getText().setText(text == null ? '' : String(text));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function applyTextStyleSafe_(textRange, fn) {
+  if (!textRange || typeof textRange.getTextStyle !== 'function') return;
+  try {
+    fn(textRange.getTextStyle());
+  } catch (e) {}
+}
+
+function layoutDiagramPositions(diagram, area) {
+  diagram = diagram || {};
+  area = area || {};
+  var nodes = diagram.nodes || [];
+  var box = safeBox_(area.x, area.y, area.w, area.h);
+  var n = Math.max(nodes.length, 1);
+  var dir = String(diagram.direction || 'LR').toUpperCase();
+  var gap = 12;
+  var positions = {};
+  var cols, rows, cellW, cellH;
+  if (dir === 'TB') {
+    cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+    rows = Math.max(1, Math.ceil(n / cols));
+  } else {
+    rows = Math.max(1, n > 8 ? 2 : 1);
+    cols = Math.max(1, Math.ceil(n / rows));
+  }
+  cellW = Math.max(MIN_SIZE_, (box.w - gap * (cols - 1)) / cols);
+  cellH = Math.max(MIN_SIZE_, (box.h - gap * (rows - 1)) / rows);
+  nodes.forEach(function (node, i) {
+    var id = node && node.id != null ? node.id : i;
+    var r = dir === 'TB' ? Math.floor(i / cols) : Math.floor(i / cols);
+    var c = i % cols;
+    positions[id] = {
+      x: box.x + c * (cellW + gap),
+      y: box.y + r * (cellH + gap),
+      w: cellW,
+      h: cellH
+    };
+  });
+  return positions;
+}
+
+function getActivePresentationSafe_() {
+  if (typeof SlidesApp === 'undefined' || !SlidesApp.getActivePresentation) {
+    throw new Error('No active Google Slides presentation.');
+  }
+  var pres = SlidesApp.getActivePresentation();
+  if (!pres) throw new Error('No active Google Slides presentation.');
+  return pres;
+}
+
+function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
+  const out = ENGINE.render({ slides: [spec] }, { dateLabel: dateLabel, sectionNo: spec.number || null, tokens: ctx.tokens || null })[0];
+  const s = safeSize_(pageW, ENGINE.W) / ENGINE.W;
+
+  slide.getPageElements().forEach(function (el) { try { el.remove(); } catch (e) {} });
+  const bgId = out.bgImage ? engineAssetId(out.bgImage, ctx) : null;
+  if (bgId) {
+    try { slide.getBackground().setPictureFill(getBlobCached(bgId, ctx)); } catch (e) { slide.getBackground().setSolidFill(out.bg); }
+  } else {
+    slide.getBackground().setSolidFill(out.bg);
+  }
+
+  const ALIGN = { left: SlidesApp.ParagraphAlignment.START, center: SlidesApp.ParagraphAlignment.CENTER, right: SlidesApp.ParagraphAlignment.END };
+  const VALIGN = { top: SlidesApp.ContentAlignment.TOP, middle: SlidesApp.ContentAlignment.MIDDLE, bottom: SlidesApp.ContentAlignment.BOTTOM };
+  const sans = ctx.brand.fonts.heading.slides, mono = ctx.brand.fonts.mono.slides;
+
+  out.els.forEach(function (e) {
+    try {
+      if (e.t === 'rect' || e.t === 'ellipse' || e.t === 'roundrect') {
+        // Brand rule: every box has small rounded corners (~3pt). Thin rules, bars and full-bleed bands stay square.
+        const box = safeBox_(e.x * s, e.y * s, e.w * s, e.h * s);
+        const isBox = e.t !== 'ellipse' && !e.square && Math.min(box.w, box.h) >= 14 && e.x > 1 && e.x + e.w < ENGINE.W - 1;
+        let sh = isBox ? insertRoundedBox_(slide, box.x, box.y, box.w, box.h, ctx, s) : null;
+        if (!sh) {
+          const type = e.t === 'ellipse' ? 'ELLIPSE' : 'RECTANGLE';
+          sh = insertShapeSafe_(slide, type, box.x, box.y, box.w, box.h);
+        }
+        sh.getFill().setSolidFill(e.fill);
+        if (e.line) {
+          sh.getBorder().setWeight(Math.max(0.5, finiteNumber_(e.line.width, 1) * s));
+          sh.getBorder().getLineFill().setSolidFill(e.line.color);
+        } else {
+          sh.getBorder().setTransparent();
+        }
+      } else if (e.t === 'shape') {
+        const box = safeBox_(e.x * s, e.y * s, e.w * s, e.h * s);
+        const sh = insertShapeSafe_(slide, e.shape, box.x, box.y, box.w, box.h);
+        sh.getFill().setSolidFill(e.fill);
+        if (e.line) {
+          sh.getBorder().setWeight(Math.max(0.5, finiteNumber_(e.line.width, 1) * s));
+          sh.getBorder().getLineFill().setSolidFill(e.line.color);
+        } else {
+          sh.getBorder().setTransparent();
+        }
+      } else if (e.t === 'line') {
+        const x1 = finiteNumber_(e.x1 * s, 0);
+        const y1 = finiteNumber_(e.y1 * s, 0);
+        const x2 = finiteNumber_(e.x2 * s, x1 + MIN_SIZE_);
+        const y2 = finiteNumber_(e.y2 * s, y1);
+        const ln = slide.insertLine(SlidesApp.LineCategory.STRAIGHT, x1, y1, x2 === x1 && y2 === y1 ? x2 + MIN_SIZE_ : x2, y2);
+        ln.setWeight(Math.max(0.5, finiteNumber_(e.width, 1) * s));
+        ln.getLineFill().setSolidFill(e.color);
+      } else if (e.t === 'image') {
+        const id = engineAssetId(e.asset, ctx);
+        if (id) {
+          const box = safeBox_(e.x * s, e.y * s, e.w * s, e.h * s);
+          slide.insertImage(getBlobCached(id, ctx), box.x, box.y, box.w, box.h);
+        }
+      } else if (e.t === 'icon') {
+        drawEngineIcon(slide, e, s, ctx);
+      } else if (e.t === 'text') {
+        // Autofit off BEFORE the text goes in: otherwise Slides shrinks the font (e.g. 11pt -> 10pt) and keeps it
+        const box = insertTextBoxSafe_(slide, '', e.x * s, e.y * s, e.w * s, e.h * s);
+        try { box.getAutofit().disableAutofit(); } catch (err) {}
+        if (!hasTextFrame_(box)) return;
+        const tr = box.getText();
+        tr.setText(e.text == null ? '' : String(e.text));
+        const family = e.font === 'mono' ? mono : sans;
+        applyTextStyleSafe_(tr, function (ts) {
+          ts.setFontFamily(family)
+            .setFontFamilyAndWeight(family, e.weight || 400)
+            .setFontSize(Math.round(finiteNumber_(e.size, 11) * s * 2) / 2)
+            .setForegroundColor(e.color);
+        });
+        (e.runs || []).forEach(function (r) {
+          try {
+            const rs = tr.getRange(r.start, Math.min(r.end, tr.asString().length - 1)).getTextStyle();
+            if (r.color) rs.setForegroundColor(r.color);
+            if (r.weight) rs.setFontFamilyAndWeight(family, r.weight);
+          } catch (err) {}
+        });
+        try {
+          const ps = tr.getParagraphStyle();
+          ps.setParagraphAlignment(ALIGN[e.align] || ALIGN.left);
+          ps.setLineSpacing(Math.round((e.spacing || 1.1) * 100));
+          ps.setSpaceAbove(0);
+          ps.setSpaceBelow(0);
+        } catch (err) {}
+        try { box.setContentAlignment(VALIGN[e.valign] || VALIGN.top); } catch (err) {}
+        try { box.getAutofit().disableAutofit(); } catch (err) {}
+      }
+    } catch (err) {
+      Logger.log('Engine element failed (' + e.t + '): ' + err.message);
+    }
+  });
+
+  if (spec.notes) setSpeakerNotesSafe_(slide, spec.notes);
+}
+
+function setSpeakerNotesSafe_(slide, notes) {
+  try {
+    const notesShape = slide.getNotesPage().getSpeakerNotesShape();
+    writeTextSafe_(notesShape, notes);
+  } catch (e) {}
+}
+
+// Engine asset key -> Drive file id (design images in 02_Brand_Assets/03_Images/Design)
+function engineAssetId(asset, ctx) {
+  const d = (ctx.assets && ctx.assets.design) || {};
+  const logos = (ctx.assets && ctx.assets.logos) || {};
+  const map = {
+    'logo-dark': d['ds-logo-dark'] || logos.dark,
+    'mark-dark': d['ds-mark-dark'],
+    'mark-white': d['ds-mark-white'],
+    'cube': d['ds-cube'],
+    'cover-pattern': d['ds-cover-pattern'],
+    'band-pattern': d['ds-band-pattern'],
+    'strip-pattern': d['ds-strip-pattern'],
+    'section-bg': d['ds-section-bg']
   };
+  return map[asset] || ((ctx.assets && ctx.assets.patterns) || {})[asset] || null;
+}
 
-  function shapeTypeKeyFromValue_(value) {
-    if (value == null) {
-      return '';
-    }
-    return String(value)
-      .trim()
-      .replace(/[\s-]+/g, '_')
-      .replace(/_+/g, '_');
-  }
-
-  function resolveShapeTypeKey_(value) {
-    var raw = shapeTypeKeyFromValue_(value);
-    if (!raw) {
-      return 'RECTANGLE';
-    }
-    var alias = SHAPE_TYPE_ALIASES[raw.toLowerCase()];
-    if (alias) {
-      return alias;
-    }
-    var compact = raw.toUpperCase();
-    if (VALID_SHAPE_TYPE_KEYS[compact]) {
-      return compact;
-    }
-    return 'RECTANGLE';
-  }
-
-  function normalizeShapeType_(value) {
-    var key = resolveShapeTypeKey_(value);
-    var enumObj = SlidesApp && SlidesApp.ShapeType ? SlidesApp.ShapeType : {};
-    var resolved = enumObj[key];
-    if (resolved == null) {
-      resolved = enumObj.RECTANGLE;
-    }
-    if (resolved == null) {
-      return 'RECTANGLE';
-    }
-    return resolved;
-  }
-
-  var MIN_SIZE_ = 1;
-
-  function finiteNumber_(value, fallback) {
-    var n = Number(value);
-    return isFinite(n) ? n : fallback;
-  }
-
-  function safeSize_(value, fallback) {
-    var n = finiteNumber_(value, fallback == null ? MIN_SIZE_ : fallback);
-    return n < MIN_SIZE_ ? MIN_SIZE_ : n;
-  }
-
-  function safeBox_(x, y, w, h) {
-    return {
-      x: finiteNumber_(x, 0),
-      y: finiteNumber_(y, 0),
-      w: safeSize_(w, MIN_SIZE_),
-      h: safeSize_(h, MIN_SIZE_)
-    };
-  }
-
-  function insertShapeSafe_(slide, typeValue, x, y, w, h) {
-    var box = safeBox_(x, y, w, h);
-    return slide.insertShape(normalizeShapeType_(typeValue), box.x, box.y, box.w, box.h);
-  }
-
-  function addRect(slide, x, y, w, h, fillHex) {
-    var shape = insertShapeSafe_(slide, 'rect', x, y, w, h);
-    shape.getBorder().setTransparent();
-    Brand.applyFill(shape, fillHex || Brand.COLORS.PANEL);
-    return shape;
-  }
-
-  function addRoundRect(slide, x, y, w, h, fillHex) {
-    var shape = insertShapeSafe_(slide, 'roundrect', x, y, w, h);
-    shape.getBorder().setTransparent();
-    Brand.applyFill(shape, fillHex || Brand.COLORS.PANEL);
-    return shape;
-  }
-
-  function addTextBox(slide, text, x, y, w, h, options) {
-    var box = safeBox_(x, y, w, h);
-    var shape = slide.insertTextBox(String(text || ''), box.x, box.y, box.w, box.h);
-    Brand.setShapeText(shape, text, options || {});
-    Brand.fitTextSize(shape, (options && options.fontSize) || Brand.TYPE.BODY_PT, 8);
-    return shape;
-  }
-
-  function addTitle(slide, text, y) {
-    return addTextBox(
-      slide,
-      text,
-      Brand.SPACE.MARGIN_LEFT,
-      y == null ? Brand.SPACE.MARGIN_TOP : y,
-      Brand.SPACE.SLIDE_WIDTH - Brand.SPACE.MARGIN_LEFT - Brand.SPACE.MARGIN_RIGHT,
-      36,
-      {
-        fontFamily: Brand.FONTS.TITLE,
-        fontSize: Brand.TYPE.TITLE_PT,
-        color: Brand.COLORS.TITLE,
-        bold: true
-      }
-    );
-  }
-
-  function addSubtitle(slide, text, y) {
-    return addTextBox(
-      slide,
-      text,
-      Brand.SPACE.MARGIN_LEFT,
-      y,
-      Brand.SPACE.SLIDE_WIDTH - Brand.SPACE.MARGIN_LEFT - Brand.SPACE.MARGIN_RIGHT,
-      24,
-      {
-        fontFamily: Brand.FONTS.BODY,
-        fontSize: Brand.TYPE.SUBTITLE_PT,
-        color: Brand.COLORS.BODY
-      }
-    );
-  }
-
-  function addFooter(slide, text) {
-    addRect(
-      slide,
-      0,
-      Brand.SPACE.SLIDE_HEIGHT - 22,
-      Brand.SPACE.SLIDE_WIDTH,
-      22,
-      Brand.COLORS.PANEL
-    );
-    return addTextBox(
-      slide,
-      text || '66degrees',
-      Brand.SPACE.MARGIN_LEFT,
-      Brand.SPACE.SLIDE_HEIGHT - 20,
-      300,
-      16,
-      {
-        fontFamily: Brand.FONTS.BODY,
-        fontSize: Brand.TYPE.FOOTER_PT,
-        color: Brand.COLORS.INK
-      }
-    );
-  }
-
-  function addAccentBar(slide) {
-    return addRect(slide, 0, 0, Brand.SPACE.SLIDE_WIDTH, 6, Brand.COLORS.PRIMARY_BLUE);
-  }
-
-  function renderCard(slide, x, y, w, h, title, body) {
-    var box = safeBox_(x, y, w, h);
-    var card = addRoundRect(slide, box.x, box.y, box.w, box.h, Brand.COLORS.PANEL);
-    addRect(slide, box.x, box.y, Math.min(4, box.w), box.h, Brand.COLORS.PRIMARY_BLUE);
-    var innerX = box.x + 14;
-    var innerW = box.w - 24;
-    var innerY = box.y + 8;
-    var innerH = box.h - 16;
-    var titleOpts = {
-      fontFamily: Brand.FONTS.TITLE,
-      fontSize: Brand.TYPE.CARD_TITLE_PT,
-      color: Brand.COLORS.TITLE,
-      bold: true
-    };
-    var bodyOpts = {
-      fontFamily: Brand.FONTS.BODY,
-      fontSize: Brand.TYPE.BODY_PT,
-      color: Brand.COLORS.BODY
-    };
-    if (innerH >= 40 && body) {
-      var titleH = 22;
-      addTextBox(slide, title, innerX, innerY, innerW, titleH, titleOpts);
-      addTextBox(
-        slide,
-        body,
-        innerX,
-        innerY + titleH + 6,
-        innerW,
-        innerH - titleH - 6,
-        bodyOpts
-      );
-    } else {
-      var label = body
-        ? String(title || '') + (title ? '  ' : '') + String(body)
-        : title;
-      addTextBox(slide, label, innerX, innerY, innerW, innerH, titleOpts);
-    }
-    return card;
-  }
-
-  function renderMetric(slide, x, y, w, h, value, label, trend) {
-    var card = addRoundRect(slide, x, y, w, h, Brand.COLORS.PANEL);
-    addTextBox(slide, value, x + 12, y + 16, w - 24, 40, {
-      fontFamily: Brand.FONTS.KPI,
-      fontSize: Brand.TYPE.KPI_PT,
-      color: Brand.COLORS.PRIMARY_BLUE,
-      bold: true
-    });
-    addTextBox(slide, label, x + 12, y + 60, w - 24, 20, {
-      fontFamily: Brand.FONTS.BODY,
-      fontSize: Brand.TYPE.METRIC_LABEL_PT,
-      color: Brand.COLORS.BODY
-    });
-    if (trend) {
-      var pillW = Math.max(18, Math.min(90, w - 24));
-      addRoundRect(slide, x + 12, y + h - 32, pillW, 18, Brand.COLORS.PANEL_ALT);
-      addTextBox(slide, trend, x + 12, y + h - 32, pillW, 18, {
-        fontFamily: Brand.FONTS.KPI,
-        fontSize: 9,
-        color: Brand.COLORS.INK,
-        bold: true,
-        align: SlidesApp.ParagraphAlignment.CENTER
-      });
-    }
-    return card;
-  }
-
-  function renderProcessNodes(slide, steps, y) {
-    steps = steps || [];
-    if (!steps.length) {
-      return;
-    }
-    var margin = Brand.SPACE.MARGIN_LEFT;
-    var usable = Brand.SPACE.SLIDE_WIDTH - margin - Brand.SPACE.MARGIN_RIGHT;
-    var gap = 16;
-    var nodeW = Math.max(24, Math.min(140, (usable - gap * (steps.length - 1)) / steps.length));
-    var nodeH = 64;
-    var totalW = steps.length * nodeW + (steps.length - 1) * gap;
-    var startX = margin + Math.max(0, (usable - totalW) / 2);
-
-    for (var i = 0; i < steps.length; i++) {
-      var x = startX + i * (nodeW + gap);
-      addRoundRect(slide, x, y, nodeW, nodeH, Brand.COLORS.PANEL);
-      addTextBox(slide, steps[i], x, y, nodeW, nodeH, {
-        fontFamily: Brand.FONTS.BODY,
-        fontSize: 11,
-        color: Brand.COLORS.TITLE,
-        bold: true,
-        align: SlidesApp.ParagraphAlignment.CENTER
-      });
-      if (i < steps.length - 1) {
-        var line = slide.insertLine(
-          SlidesApp.LineCategory.STRAIGHT,
-          x + nodeW,
-          y + nodeH / 2,
-          x + nodeW + gap,
-          y + nodeH / 2
-        );
-        line.getLineFill().setSolidFill(Brand.COLORS.PRIMARY_BLUE);
-        line.setWeight(1.5);
-      }
-    }
-  }
-
-  function nodeShapeType(nodeType) {
-    switch (String(nodeType || 'process').toLowerCase()) {
-      case 'decision':
-        return 'diamond';
-      case 'start':
-      case 'end':
-        return 'ellipse';
-      default:
-        return 'roundrect';
-    }
-  }
-
-  function layoutDiagramPositions(diagram, area) {
-    diagram = diagram || {};
-    area = area || {};
-    var nodes = diagram.nodes || [];
-    var direction = diagram.direction === 'TB' ? 'TB' : 'LR';
-    var positions = {};
-    var count = Math.max(nodes.length, 1);
-    var gapX = 24;
-    var gapY = 28;
-    var areaX = finiteNumber_(area.x, 0);
-    var areaY = finiteNumber_(area.y, 0);
-    var areaW = safeSize_(area.w, MIN_SIZE_);
-    var areaH = safeSize_(area.h, MIN_SIZE_);
-    var nodeW =
-      direction === 'LR'
-        ? Math.max(24, Math.min(130, (areaW - gapX * (count - 1)) / count))
-        : Math.max(24, Math.min(150, areaW));
-    var nodeH =
-      direction === 'TB'
-        ? Math.max(24, Math.min(48, (areaH - gapY * (count - 1)) / count))
-        : Math.max(24, Math.min(48, areaH));
-
-    if (direction === 'LR') {
-      var totalW = count * nodeW + (count - 1) * gapX;
-      var startX = areaX + Math.max(0, (areaW - totalW) / 2);
-      var y = areaY + Math.max(0, (areaH - nodeH) / 2);
-      for (var i = 0; i < nodes.length; i++) {
-        positions[nodes[i].id] = {
-          x: startX + i * (nodeW + gapX),
-          y: y,
-          w: nodeW,
-          h: nodeH
-        };
-      }
-    } else {
-      var totalH = count * nodeH + (count - 1) * gapY;
-      var startY = areaY + Math.max(0, (areaH - totalH) / 2);
-      var x = areaX + Math.max(0, (areaW - nodeW) / 2);
-      for (var j = 0; j < nodes.length; j++) {
-        positions[nodes[j].id] = {
-          x: x,
-          y: startY + j * (nodeH + gapY),
-          w: nodeW,
-          h: nodeH
-        };
-      }
-    }
-    return positions;
-  }
-
-  function renderDiagram(slide, diagram, area) {
-    if (!diagram || !diagram.nodes || !diagram.nodes.length) {
-      return;
-    }
-    area = area || {
-      x: Brand.SPACE.MARGIN_LEFT,
-      y: 80,
-      w: Brand.SPACE.SLIDE_WIDTH - Brand.SPACE.MARGIN_LEFT - Brand.SPACE.MARGIN_RIGHT,
-      h: 260
-    };
-
-    var positions = layoutDiagramPositions(diagram, area);
-    var shapeById = {};
-
-    for (var i = 0; i < diagram.nodes.length; i++) {
-      var node = diagram.nodes[i];
-      var pos = positions[node.id];
-      var shape = insertShapeSafe_(slide, nodeShapeType(node.type), pos.x, pos.y, pos.w, pos.h);
-      shape.getBorder().setTransparent();
-      var fill =
-        node.type === 'decision'
-          ? Brand.COLORS.PANEL_ALT
-          : node.type === 'start' || node.type === 'end'
-            ? Brand.COLORS.PRIMARY_BLUE
-            : Brand.COLORS.PANEL;
-      Brand.applyFill(shape, fill);
-      addTextBox(slide, node.label, pos.x, pos.y, pos.w, pos.h, {
-        fontFamily: Brand.FONTS.BODY,
-        fontSize: 11,
-        color:
-          node.type === 'start' || node.type === 'end'
-            ? Brand.COLORS.WHITE
-            : Brand.COLORS.TITLE,
-        bold: true,
-        align: SlidesApp.ParagraphAlignment.CENTER
-      });
-      shapeById[node.id] = { shape: shape, pos: pos };
-    }
-
-    var edges = diagram.edges || [];
-    for (var e = 0; e < edges.length; e++) {
-      var edge = edges[e];
-      var from = shapeById[edge.from];
-      var to = shapeById[edge.to];
-      if (!from || !to) {
-        continue;
-      }
-      var x1 = from.pos.x + from.pos.w;
-      var y1 = from.pos.y + from.pos.h / 2;
-      var x2 = to.pos.x;
-      var y2 = to.pos.y + to.pos.h / 2;
-      if (diagram.direction === 'TB') {
-        x1 = from.pos.x + from.pos.w / 2;
-        y1 = from.pos.y + from.pos.h;
-        x2 = to.pos.x + to.pos.w / 2;
-        y2 = to.pos.y;
-      }
-      var connector = slide.insertLine(SlidesApp.LineCategory.STRAIGHT, x1, y1, x2, y2);
-      connector.getLineFill().setSolidFill(Brand.COLORS.PRIMARY_BLUE);
-      connector.setWeight(1.5);
-      connector.setEndArrow(SlidesApp.ArrowStyle.FILL_ARROW);
-      if (edge.label) {
-        addTextBox(
-          slide,
-          edge.label,
-          (x1 + x2) / 2 - 30,
-          (y1 + y2) / 2 - 10,
-          60,
-          16,
-          {
-            fontFamily: Brand.FONTS.BODY,
-            fontSize: 9,
-            color: Brand.COLORS.INK
-          }
-        );
-      }
-    }
-  }
-
-  function renderTimeline(slide, items, y) {
-    items = items || [];
-    if (!items.length) {
-      return;
-    }
-    var margin = Brand.SPACE.MARGIN_LEFT;
-    var usable = Brand.SPACE.SLIDE_WIDTH - margin - Brand.SPACE.MARGIN_RIGHT;
-    var line = slide.insertLine(
-      SlidesApp.LineCategory.STRAIGHT,
-      margin,
-      y + 20,
-      margin + usable,
-      y + 20
-    );
-    line.getLineFill().setSolidFill(Brand.COLORS.PRIMARY_BLUE);
-    line.setWeight(2);
-
-    var step = usable / Math.max(items.length - 1, 1);
-    for (var i = 0; i < items.length; i++) {
-      var x = margin + i * step;
-      var dot = insertShapeSafe_(slide, 'ellipse', x - 6, y + 14, 12, 12);
-      Brand.applyFill(dot, Brand.COLORS.PRIMARY_BLUE);
-      dot.getBorder().setTransparent();
-      addTextBox(slide, items[i], x - 50, y + 36, 100, 48, {
-        fontFamily: Brand.FONTS.BODY,
-        fontSize: 10,
-        color: Brand.COLORS.BODY,
-        align: SlidesApp.ParagraphAlignment.CENTER
-      });
-    }
-  }
-
-  function renderComparison(slide, left, right, y) {
-    var gap = Brand.SPACE.GAP;
-    var usable = Brand.SPACE.SLIDE_WIDTH - Brand.SPACE.MARGIN_LEFT - Brand.SPACE.MARGIN_RIGHT;
-    var colW = (usable - gap) / 2;
-    renderCard(
-      slide,
-      Brand.SPACE.MARGIN_LEFT,
-      y,
-      colW,
-      220,
-      left.title || 'Option A',
-      left.body || ''
-    );
-    renderCard(
-      slide,
-      Brand.SPACE.MARGIN_LEFT + colW + gap,
-      y,
-      colW,
-      220,
-      right.title || 'Option B',
-      right.body || ''
-    );
-  }
-
-  function writeCellText_(cell, value, options) {
-    if (!cell || typeof cell.getText !== 'function') {
-      return;
-    }
-    var content = value == null || value === '' ? ' ' : String(value);
-    var tr;
-    try {
-      tr = cell.getText();
-      tr.setText(content);
-    } catch (e) {
-      var message = e && e.message != null ? String(e.message) : String(e || '');
-      if (!/has no text/i.test(message)) {
-        throw e;
-      }
-      return;
-    }
-    Brand.applyTextStyle(tr, options);
-  }
-
-  function renderTable(slide, columns, rows, x, y, w, h) {
-    columns = columns || [];
-    rows = rows || [];
-    var colCount = Math.max(columns.length, 1);
-    var rowCount = Math.max(rows.length + 1, 2);
-    var box = safeBox_(x, y, w, h);
-    var table = slide.insertTable(rowCount, colCount, box.x, box.y, box.w, box.h);
-    for (var c = 0; c < colCount; c++) {
-      var cell = table.getCell(0, c);
-      writeCellText_(cell, columns[c], {
-        fontFamily: Brand.FONTS.TITLE,
-        fontSize: 11,
-        color: Brand.COLORS.WHITE,
-        bold: true
-      });
-      cell.getFill().setSolidFill(Brand.COLORS.PRIMARY_BLUE);
-    }
-    for (var r = 0; r < rows.length; r++) {
-      var row = rows[r] || [];
-      for (var c2 = 0; c2 < colCount; c2++) {
-        var bodyCell = table.getCell(r + 1, c2);
-        writeCellText_(bodyCell, row[c2], {
-          fontFamily: Brand.FONTS.BODY,
-          fontSize: 10,
-          color: Brand.COLORS.BODY
-        });
-        bodyCell
-          .getFill()
-          .setSolidFill(r % 2 === 0 ? Brand.COLORS.PANEL : Brand.COLORS.WHITE);
-      }
-    }
-    return table;
-  }
-
-  function elementsToSteps(elements) {
-    return (elements || [])
-      .map(function (el) {
-        return el.title || el.label || el.body || el.value;
-      })
-      .filter(Boolean);
-  }
-
-  function renderCover(slide, slideSpec, presentationTitle) {
-    addBackground(slide, Brand.COLORS.INK);
-    addRect(slide, 0, 0, 12, Brand.SPACE.SLIDE_HEIGHT, Brand.COLORS.PRIMARY_BLUE);
-    addTextBox(slide, '66degrees', Brand.SPACE.MARGIN_LEFT, 48, 300, 24, {
-      fontFamily: Brand.FONTS.TITLE,
-      fontSize: 14,
-      color: Brand.COLORS.PRIMARY_BLUE,
-      bold: true
-    });
-    addTextBox(
-      slide,
-      slideSpec.title || presentationTitle,
-      Brand.SPACE.MARGIN_LEFT,
-      120,
-      560,
-      60,
-      {
-        fontFamily: Brand.FONTS.TITLE,
-        fontSize: 28,
-        color: Brand.COLORS.WHITE,
-        bold: true
-      }
-    );
-    if (slideSpec.subtitle) {
-      addTextBox(slide, slideSpec.subtitle, Brand.SPACE.MARGIN_LEFT, 190, 520, 40, {
-        fontFamily: Brand.FONTS.BODY,
-        fontSize: 14,
-        color: Brand.COLORS.PANEL_ALT
-      });
-    }
-  }
-
-  function renderClosing(slide, slideSpec) {
-    addBackground(slide, Brand.COLORS.WHITE);
-    addAccentBar(slide);
-    addTitle(slide, slideSpec.title || 'Next steps');
-    var items = elementsToSteps(slideSpec.elements);
-    if (!items.length && slideSpec.body) {
-      items = String(slideSpec.body).split(/\n|•/).map(function (s) {
-        return s.trim();
-      }).filter(Boolean);
-    }
-    for (var i = 0; i < Math.min(items.length, 5); i++) {
-      renderCard(
-        slide,
-        Brand.SPACE.MARGIN_LEFT,
-        70 + i * 54,
-        Brand.SPACE.SLIDE_WIDTH - Brand.SPACE.MARGIN_LEFT - Brand.SPACE.MARGIN_RIGHT,
-        48,
-        String(i + 1).padStart ? String(i + 1).padStart(2, '0') : String(i + 1),
-        items[i]
-      );
-    }
-    addFooter(slide, '66degrees · Let\'s build what\'s next');
-  }
-
-  function renderGenericContent(slide, slideSpec) {
-    addBackground(slide, Brand.COLORS.WHITE);
-    addAccentBar(slide);
-    addTitle(slide, slideSpec.title);
-    if (slideSpec.subtitle) {
-      addSubtitle(slide, slideSpec.subtitle, 58);
-    }
-    var bodyY = slideSpec.subtitle ? 90 : 70;
-    if (slideSpec.body) {
-      addTextBox(
-        slide,
-        slideSpec.body,
-        Brand.SPACE.MARGIN_LEFT,
-        bodyY,
-        Brand.SPACE.SLIDE_WIDTH - Brand.SPACE.MARGIN_LEFT - Brand.SPACE.MARGIN_RIGHT,
-        250,
-        {
-          fontFamily: Brand.FONTS.BODY,
-          fontSize: Brand.TYPE.BODY_PT,
-          color: Brand.COLORS.BODY
+// Icon order (CONFIG.iconOrder): template icon library (vector) -> Drive brand icon -> Material Icons
+function drawEngineIcon(slide, e, s, ctx) {
+  const size = safeSize_(finiteNumber_(e.size, 16) * s, MIN_SIZE_);
+  const order = (typeof CONFIG !== 'undefined' && CONFIG.iconOrder) ? CONFIG.iconOrder : ['library', 'drive', 'material'];
+  for (let k = 0; k < order.length; k++) {
+    const step = order[k];
+    if (step === 'library' && ctx.lib) {
+      const tags = [];
+      [e.name].concat(e.alt || []).forEach(function (n) { const t = libraryIconByName(ctx.lib, n); if (t && tags.indexOf(t) === -1) tags.push(t); });
+      const guess = pickLibraryIcon(ctx.lib, [e.name, e.material].filter(Boolean).join(' '));
+      if (guess && tags.indexOf(guess) === -1) tags.push(guess);
+      for (let j = 0; j < tags.length; j++) {
+        if (insertLibraryIcon(slide, tags[j], e.x * s, e.y * s, size, e.dark, ctx, e.color || null)) {
+          ctx.libraryIconsPlaced = (ctx.libraryIconsPlaced || 0) + 1;
+          return;
         }
-      );
-    }
-    addFooter(slide);
-  }
-
-  function renderSlide(slide, slideSpec, context) {
-    context = context || {};
-    var layoutId = slideSpec.layoutId || '';
-    var category = slideSpec.category || 'content';
-
-    if (category === 'cover' || layoutId === 'ref_cover_hero') {
-      renderCover(slide, slideSpec, context.title);
-      return;
-    }
-    if (category === 'closing' || layoutId === 'ref_closing') {
-      renderClosing(slide, slideSpec);
-      return;
-    }
-
-    addBackground(slide, Brand.COLORS.WHITE);
-    addAccentBar(slide);
-    addTitle(slide, slideSpec.title);
-    if (slideSpec.subtitle) {
-      addSubtitle(slide, slideSpec.subtitle, 58);
-    }
-
-    var contentY = slideSpec.subtitle ? 90 : 70;
-    var usableW =
-      Brand.SPACE.SLIDE_WIDTH - Brand.SPACE.MARGIN_LEFT - Brand.SPACE.MARGIN_RIGHT;
-
-    if (category === 'section' || layoutId === 'ref_section_band') {
-      addRect(slide, 0, 150, Brand.SPACE.SLIDE_WIDTH, 100, Brand.COLORS.PANEL);
-      addTextBox(slide, slideSpec.body || slideSpec.subtitle || '', 48, 175, 620, 50, {
-        fontFamily: Brand.FONTS.TITLE,
-        fontSize: 18,
-        color: Brand.COLORS.INK,
-        bold: true
-      });
-      addFooter(slide);
-      return;
-    }
-
-    if (category === 'kpi' || layoutId === 'ref_kpi_2x2') {
-      var metrics = (slideSpec.elements || []).filter(function (el) {
-        return el.type === 'KPI' || el.type === 'metric';
-      });
-      if (!metrics.length) {
-        metrics = (slideSpec.elements || []).slice(0, 4);
       }
-      while (metrics.length < 4) {
-        metrics.push({ value: '—', label: 'Metric', trend: '' });
-      }
-      var cellW = (usableW - Brand.SPACE.GAP) / 2;
-      var cellH = 110;
-      for (var m = 0; m < 4; m++) {
-        var col = m % 2;
-        var row = Math.floor(m / 2);
-        renderMetric(
-          slide,
-          Brand.SPACE.MARGIN_LEFT + col * (cellW + Brand.SPACE.GAP),
-          contentY + row * (cellH + Brand.SPACE.GAP),
-          cellW,
-          cellH,
-          metrics[m].value || metrics[m].title || '0',
-          metrics[m].label || metrics[m].body || 'KPI',
-          metrics[m].trend || ''
-        );
-      }
-      addFooter(slide);
-      return;
-    }
-
-    if (category === 'cards' || layoutId.indexOf('ref_cards') === 0) {
-      var cards = slideSpec.elements || [];
-      var n = Math.min(Math.max(cards.length, 3), 4);
-      var gap = Brand.SPACE.GAP;
-      var cardW = (usableW - gap * (n - 1)) / n;
-      for (var c = 0; c < n; c++) {
-        var card = cards[c] || { title: 'Point ' + (c + 1), body: '' };
-        renderCard(
-          slide,
-          Brand.SPACE.MARGIN_LEFT + c * (cardW + gap),
-          contentY,
-          cardW,
-          220,
-          card.title || card.label || 'Card',
-          card.body || ''
-        );
-      }
-      addFooter(slide);
-      return;
-    }
-
-    if (category === 'process' || layoutId === 'ref_process_h') {
-      renderProcessNodes(slide, elementsToSteps(slideSpec.elements), contentY + 40);
-      addFooter(slide);
-      return;
-    }
-
-    if (
-      category === 'flowchart' ||
-      category === 'architecture' ||
-      layoutId === 'ref_flowchart_lr' ||
-      layoutId === 'ref_architecture'
-    ) {
-      if (slideSpec.diagram) {
-        renderDiagram(slide, slideSpec.diagram, {
-          x: Brand.SPACE.MARGIN_LEFT,
-          y: contentY,
-          w: usableW,
-          h: 250
-        });
-      } else {
-        renderProcessNodes(slide, elementsToSteps(slideSpec.elements), contentY + 40);
-      }
-      addFooter(slide);
-      return;
-    }
-
-    if (category === 'comparison' || layoutId === 'ref_comparison_2') {
-      var left = (slideSpec.elements && slideSpec.elements[0]) || {
-        title: 'Current',
-        body: slideSpec.body
-      };
-      var right = (slideSpec.elements && slideSpec.elements[1]) || {
-        title: 'Proposed',
-        body: ''
-      };
-      renderComparison(slide, left, right, contentY);
-      addFooter(slide);
-      return;
-    }
-
-    if (category === 'timeline' || layoutId === 'ref_timeline_h') {
-      renderTimeline(slide, elementsToSteps(slideSpec.elements), contentY + 40);
-      addFooter(slide);
-      return;
-    }
-
-    if (category === 'table' || layoutId === 'ref_table') {
-      var tableEl =
-        (slideSpec.elements || []).filter(function (el) {
-          return el.type === 'table';
-        })[0] || {};
-      renderTable(
-        slide,
-        tableEl.columns && tableEl.columns.length ? tableEl.columns : ['Item', 'Detail'],
-        tableEl.rows && tableEl.rows.length
-          ? tableEl.rows
-          : (slideSpec.elements || []).slice(0, 5).map(function (el) {
-              return [el.title || el.label || '', el.body || el.value || ''];
-            }),
-        Brand.SPACE.MARGIN_LEFT,
-        contentY,
-        usableW,
-        220
-      );
-      addFooter(slide);
-      return;
-    }
-
-    if (category === 'quote' || layoutId === 'ref_quote') {
-      addRoundRect(
-        slide,
-        Brand.SPACE.MARGIN_LEFT,
-        contentY,
-        usableW,
-        180,
-        Brand.COLORS.PANEL
-      );
-      addTextBox(
-        slide,
-        '“' +
-          (slideSpec.body ||
-            ((slideSpec.elements || [])[0] && (slideSpec.elements || [])[0].body) ||
-            '') +
-          '”',
-        Brand.SPACE.MARGIN_LEFT + 24,
-        contentY + 30,
-        usableW - 48,
-        100,
-        {
-          fontFamily: Brand.FONTS.TITLE,
-          fontSize: 16,
-          color: Brand.COLORS.INK,
-          bold: true
-        }
-      );
-      addFooter(slide);
-      return;
-    }
-
-    // Agenda / default content
-    var bullets = elementsToSteps(slideSpec.elements);
-    if (!bullets.length && slideSpec.body) {
-      bullets = String(slideSpec.body)
-        .split(/\n|•|-/)
-        .map(function (s) {
-          return s.trim();
-        })
-        .filter(Boolean);
-    }
-    for (var b = 0; b < Math.min(bullets.length, 6); b++) {
-      addTextBox(
-        slide,
-        '•  ' + bullets[b],
-        Brand.SPACE.MARGIN_LEFT,
-        contentY + b * 28,
-        usableW,
-        24,
-        {
-          fontFamily: Brand.FONTS.BODY,
-          fontSize: Brand.TYPE.BODY_PT,
-          color: Brand.COLORS.BODY
-        }
-      );
-    }
-    addFooter(slide);
-  }
-
-  function setSpeakerNotesSafe_(slide, notes) {
-    if (!notes || !slide || typeof slide.getNotesPage !== 'function') {
-      return;
-    }
-    try {
-      var notesPage = slide.getNotesPage();
-      var notesShape = notesPage && notesPage.getSpeakerNotesShape ? notesPage.getSpeakerNotesShape() : null;
-      if (!notesShape) {
+    } else if (step === 'drive' && e.name && !/^lib:/i.test(e.name)) {
+      const match = findBrandIcon(e.name, ctx.assets.icons, {});
+      const id = match && (e.dark ? (match.entry.white || match.entry.blue) : (match.entry.blue || match.entry.white));
+      if (id) {
+        slide.insertImage(getBlobCached(id, ctx), e.x * s, e.y * s, size, size);
         return;
       }
-      Brand.setShapeText(notesShape, notes, {
-        fontFamily: Brand.FONTS.BODY,
-        fontSize: 10,
-        color: Brand.COLORS.BODY
-      });
-    } catch (e) {
-      // Blank layouts can expose a notes placeholder with no text frame.
+    } else if (step === 'material') {
+      const ringEl = insertShapeSafe_(slide, 'ELLIPSE', e.x * s + size * 0.2, e.y * s + size * 0.2, size * 0.6, size * 0.6);
+      ringEl.getFill().setTransparent();
+      ringEl.getBorder().setWeight(Math.max(1, size * 0.08));
+      ringEl.getBorder().getLineFill().setSolidFill(e.color || (e.dark ? ENGINE.TOKENS.white : ENGINE.TOKENS.blue));
+      Logger.log('No template or Drive icon for "' + e.name + '"; drew a ring.');
+      return;
     }
   }
+}
 
-  function renderPresentation(spec) {
-    var title = (spec.metadata && spec.metadata.title) || '66degrees Presentation';
-    var presentation = createBlankPresentation(title);
-    var first = clearPresentation(presentation);
-
-    for (var i = 0; i < spec.slides.length; i++) {
-      var slide = i === 0 ? first : presentation.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-      // Ensure blank canvas
-      slide.getPageElements().forEach(function (el) {
-        el.remove();
-      });
-      renderSlide(slide, spec.slides[i], { title: title });
-      setSpeakerNotesSafe_(slide, spec.slides[i].speakerNotes);
-    }
-
-    return {
-      presentationId: presentation.getId(),
-      url: presentation.getUrl(),
-      slideCount: spec.slides.length
-    };
-  }
-
-  return {
-    createBlankPresentation: createBlankPresentation,
-    renderPresentation: renderPresentation,
-    renderSlide: renderSlide,
-    renderDiagram: renderDiagram,
-    renderCard: renderCard,
-    renderMetric: renderMetric,
-    renderProcessNodes: renderProcessNodes,
-    renderTimeline: renderTimeline,
-    renderTable: renderTable,
-    addTitle: addTitle,
-    addFooter: addFooter,
-    addAccentBar: addAccentBar,
-    normalizeShapeType: normalizeShapeType_,
-    layoutDiagramPositions: layoutDiagramPositions,
-    safeBox: safeBox_
-  };
-})();
+var EngineRenderer = {
+  normalizeShapeType: normalizeShapeType_,
+  insertShapeSafe: insertShapeSafe_,
+  insertTextBoxSafe: insertTextBoxSafe_,
+  safeBox: safeBox_,
+  hasTextFrame: hasTextFrame_,
+  writeTextSafe: writeTextSafe_,
+  layoutDiagramPositions: layoutDiagramPositions,
+  renderEngineSlide: renderEngineSlide,
+  getActivePresentation: getActivePresentationSafe_,
+  setSpeakerNotesSafe: setSpeakerNotesSafe_
+};

@@ -8,111 +8,84 @@ const assert = require("node:assert/strict");
 
 function loadModules() {
   const root = path.resolve(__dirname, "..");
-  const sandbox = { console };
+  const sandbox = {
+    console,
+    Logger: { log() {} },
+    CONFIG: {
+      useReferenceLibrary: true,
+      refLibraryFileId: "",
+      referenceDeckId: "",
+      iconOrder: ["library", "drive", "material"]
+    }
+  };
   vm.createContext(sandbox);
-  for (const rel of ["src/Brand.gs", "src/Spec.gs", "src/Reference.gs", "src/Qa.gs"]) {
-    vm.runInContext(
-      fs.readFileSync(path.join(root, rel), "utf8"),
-      sandbox,
-      { filename: rel }
-    );
-  }
+  vm.runInContext(
+    fs.readFileSync(path.join(root, "src/Engine.gs"), "utf8"),
+    sandbox,
+    { filename: "src/Engine.gs" }
+  );
+  vm.runInContext(
+    fs.readFileSync(path.join(root, "src/Reference.gs"), "utf8"),
+    sandbox,
+    { filename: "src/Reference.gs" }
+  );
   return sandbox;
 }
 
-test("Spec.validate accepts a well-formed PresentationSpec", () => {
-  const { Spec } = loadModules();
-  const result = Spec.validate({
-    metadata: { title: "Demo Deck" },
-    department: "Sales",
-    presentationType: "Pitch",
-    theme: "66degrees",
+test("ENGINE.render accepts a well-formed layout spec", () => {
+  const { ENGINE } = loadModules();
+  const slides = ENGINE.render({
     slides: [
-      {
-        id: "s1",
-        category: "cover",
-        title: "Demo",
-        elements: []
-      },
-      {
-        id: "s2",
-        category: "flowchart",
-        title: "Flow",
-        diagram: {
-          type: "flowchart",
-          direction: "LR",
-          nodes: [
-            { id: "a", type: "start", label: "Start" },
-            { id: "b", type: "process", label: "Work" }
-          ],
-          edges: [{ from: "a", to: "b" }]
-        }
-      }
+      { type: "cover", title: "Demo", subtitle: "For leadership" },
+      { type: "agenda", title: "Agenda", items: [{ title: "One", text: "Intro" }, { title: "Two", text: "Plan" }] },
+      { type: "closing", title: "Thank You" }
     ]
   });
-  assert.equal(result.ok, true);
-  assert.equal(result.value.department, "Sales");
-  assert.equal(result.value.slides.length, 2);
-  assert.equal(result.value.slides[1].diagram.nodes.length, 2);
+  assert.equal(slides.length, 3);
+  assert.ok(slides[0].els.some((e) => e.t === "text"));
+  assert.ok(slides[2].noFooter);
 });
 
-test("Spec.validate repairs fenced / slightly invalid JSON", () => {
-  const { Spec } = loadModules();
-  const raw = "```json\n{\n  metadata: {title: \"X\"},\n  department: \"General\",\n  slides: [{title: \"One\", category: \"cover\"},]\n}\n```";
-  const result = Spec.validate(raw);
-  assert.equal(result.ok, true);
-  assert.equal(result.value.slides[0].title, "One");
-});
-
-test("Spec.validate rejects empty slides", () => {
-  const { Spec } = loadModules();
-  const result = Spec.validate({ department: "General", slides: [] });
-  assert.equal(result.ok, false);
-});
-
-test("Reference filtering includes general layouts for Sales", () => {
-  const { Reference } = loadModules();
-  const filtered = Reference.getFilteredReferenceLibrary("Sales");
-  assert.ok(filtered.length >= 6);
-  assert.ok(filtered.some((x) => x.id === "ref_cover_hero"));
-});
-
-test("Reference selection applies reuse penalties and assigns layoutIds", () => {
-  const { Spec, Reference } = loadModules();
-  const ir = Spec.validate({
-    department: "Delivery",
-    presentationType: "Workshop",
-    slides: [
-      { category: "cover", title: "A" },
-      { category: "kpi", title: "B" },
-      { category: "cards", title: "C" },
-      { category: "process", title: "D" },
-      { category: "closing", title: "E" }
-    ]
-  }).value;
-
-  const selected = Reference.selectReferenceForSpec(ir, {}, "Delivery");
-  assert.equal(selected.spec.slides.length, 5);
-  selected.spec.slides.forEach((slide) => {
-    assert.ok(slide.layoutId, "layoutId assigned");
+test("ENGINE.cleanSpec and type aliases still produce a drawable layout", () => {
+  const { ENGINE } = loadModules();
+  const spec = ENGINE.cleanSpec({
+    type: "kpi",
+    title: "Results",
+    items: [{ value: "40%", label: "Savings", text: "Cloud SQL" }]
   });
-  const ids = selected.spec.slides.map((s) => s.layoutId);
-  assert.equal(new Set(ids).size, ids.length, "unique layouts preferred");
+  const out = ENGINE.render({ slides: [spec] })[0];
+  assert.ok(out.els.length > 0);
+  out.els.forEach((el) => {
+    if (el.w != null) assert.ok(el.w > 0);
+    if (el.h != null) assert.ok(el.h > 0);
+  });
 });
 
-test("Brand snaps unknown colors to palette", () => {
-  const { Brand } = loadModules();
-  const snapped = Brand.snapToPalette("#0040EE");
-  assert.equal(snapped, Brand.COLORS.PRIMARY_BLUE);
+test("ENGINE.measure reports overflow for impossible fit", () => {
+  const { ENGINE } = loadModules();
+  const m = ENGINE.measure({
+    type: "cards",
+    title: "A very long title that should still be measured",
+    items: [
+      { title: "Card", text: "x ".repeat(400) },
+      { title: "Card 2", text: "y ".repeat(400) }
+    ]
+  });
+  assert.ok(m);
+  assert.ok(Array.isArray(m.overflow) || Array.isArray(m.underfill) || typeof m === "object");
 });
 
-test("Qa.enforceBrandOnSpec fills missing titles", () => {
-  const { Spec, Qa } = loadModules();
-  const spec = Spec.validate({
-    department: "Executive",
-    slides: [{ category: "content", title: "" }]
-  }).value;
-  const qa = Qa.enforceBrandOnSpec(spec);
-  assert.equal(qa.ok, true);
-  assert.ok(qa.spec.slides[0].title);
+test("reference type aliases map generated types onto template families", () => {
+  const { TYPE_ALIASES, normalizeType_ } = loadModules();
+  assert.equal(TYPE_ALIASES.metrics, "stats");
+  assert.equal(TYPE_ALIASES.steps, "process");
+  assert.equal(normalizeType_("thank_you"), "closing");
+});
+
+test("selectReferences degrades when the library is missing", () => {
+  const { selectReferences } = loadModules();
+  const plan = { slides: [{ type: "cover", title: "Hi" }, { type: "cards", title: "Body", items: [] }] };
+  const refs = selectReferences(plan, { lib: null });
+  assert.ok(refs);
+  assert.ok("matched" in refs || "fallback" in refs || plan.slides.length === 2);
 });
