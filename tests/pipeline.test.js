@@ -33,7 +33,7 @@ function loadEngineStack(scriptProperties) {
     SlidesApp: {
       ShapeType: {
         RECTANGLE: "RECTANGLE",
-        ROUNDED_RECTANGLE: "ROUNDED_RECTANGLE",
+        ROUND_RECTANGLE: "ROUND_RECTANGLE",
         DIAMOND: "DIAMOND",
         ELLIPSE: "ELLIPSE"
       },

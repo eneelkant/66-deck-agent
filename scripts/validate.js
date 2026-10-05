@@ -175,7 +175,7 @@ function assertGasSyntaxAndSymbols() {
   // Syntax check via Function constructor after mild GAS API stubs.
   const stubs = `
     var SlidesApp = {
-      ShapeType: {RECTANGLE:1,ROUNDED_RECTANGLE:2,DIAMOND:3,ELLIPSE:4},
+      ShapeType: {RECTANGLE:1,ROUND_RECTANGLE:2,DIAMOND:3,ELLIPSE:4,CHEVRON:5,HOME_PLATE:6,TRIANGLE:7,RIGHT_ARROW:8},
       LineCategory: {STRAIGHT:1},
       ArrowStyle: {FILL_ARROW:1},
       ParagraphAlignment: {CENTER:1},
@@ -246,6 +246,31 @@ function assertGasSyntaxAndSymbols() {
   ok("No conflicting top-level function duplicates detected");
 }
 
+function assertShapeTypeSafety() {
+  const src = read("src/EngineRenderer.gs");
+  if (/ShapeType\.ROUNDED_RECTANGLE/.test(src)) {
+    fail("EngineRenderer must not use invalid ShapeType.ROUNDED_RECTANGLE");
+  } else {
+    ok("EngineRenderer does not use ShapeType.ROUNDED_RECTANGLE");
+  }
+  if (/ShapeType\s*\[/.test(src)) {
+    fail("EngineRenderer must not dynamically index ShapeType with arbitrary strings");
+  } else {
+    ok("EngineRenderer does not dynamically index ShapeType");
+  }
+  const insertCalls = src.match(/\.insertShape\s*\(/g) || [];
+  if (insertCalls.length !== 1) {
+    fail(`Expected exactly one insertShape call (insertShapeSafe_), found ${insertCalls.length}`);
+  } else {
+    ok("All shape inserts go through insertShapeSafe_");
+  }
+  if (!/function normalizeShapeType_/.test(src) || !/function insertShapeSafe_/.test(src)) {
+    fail("EngineRenderer missing shape-type normalization helpers");
+  } else {
+    ok("EngineRenderer has shape-type normalization helpers");
+  }
+}
+
 function main() {
   console.log("Validating 66-deck-agent...\n");
   assertRequiredFiles();
@@ -257,6 +282,7 @@ function main() {
   assertManifest();
   assertClaspConfig();
   assertNoSecrets();
+  assertShapeTypeSafety();
   assertGasSyntaxAndSymbols();
 
   if (failures > 0) {
