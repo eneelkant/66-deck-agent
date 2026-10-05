@@ -7,7 +7,7 @@
  * REBRAND: the brand pass (with Gemini review) is applied to the open deck.
  *
  * Script properties required: GEMINI_API_KEY, BEAUTIFUL_AI_KEY, SCITE_API_KEY
- * Advanced service required: Slides API (v1). Cloud project must have Google Drive API + Google Slides API enabled.
+ * Advanced service required: Slides API (v1). Drive file access uses DriveApp (no runtime Drive API enablement).
  *
  * Files: Code.gs (this), Brand.gs (brand kit, Gemini, storage), Rebrand.gs (brand pass),
  *        Engine.gs (layout engine), EngineRenderer.gs (draws engine slides), Generator.html (dialog),
@@ -62,7 +62,7 @@ var CONFIG = {
 function onOpen() {
   SlidesApp.getUi()
     .createAddonMenu()
-    .addItem('Open 66degrees AI Presentation Generator', 'showGenerator')
+    .addItem('Open 66° Deck Agent', 'showGenerator')
     .addSeparator()
     .addItem('Refresh brand kit', 'refreshBrandKit')
     .addItem('Refresh brand assets', 'refreshBrandAssets')
@@ -90,11 +90,11 @@ function showGeneratorSidebar() {
 
 function onHomepage() {
   return CardService.newCardBuilder()
-    .setHeader(CardService.newCardHeader().setTitle('66degrees AI Presentation Generator'))
+    .setHeader(CardService.newCardHeader().setTitle('66° Deck Agent'))
     .addSection(
       CardService.newCardSection().addWidget(
         CardService.newTextParagraph().setText(
-          'Open a Google Slides presentation and launch 66degrees AI Presentation Generator from the add-on menu. Generated slides are added to this same presentation.'
+          'Open a Google Slides presentation and launch 66° Deck Agent from the add-on menu. Generated slides are added to this same presentation.'
         )
       )
     )
@@ -240,8 +240,12 @@ function generatePresentationRun_(data, run) {
   if (!userPrompt && !sources.text && !sources.pdfs.length && !sources.images.length) {
     throw new Error('Please describe the presentation you want, or add a source link or file.');
   }
-  const presentationType = PRESENTATION_TYPES.indexOf(data.type) !== -1 ? data.type : 'Custom';   // no type picker: the story follows the request
-  const totalSlides = Math.max(3, Math.min(20, Number(data.slides) || 8));
+  const presentationType = normalizePresentationType_(data.presentationType || data.type);
+  const department = normalizeDepartment_(data.department);
+  const totalSlides = clampSlideCount_(data.slideCount != null && data.slideCount !== '' ? data.slideCount : data.slides);
+  ctx.presentationType = presentationType;
+  ctx.department = department;
+  if (ctx.lib) ctx.lib = applyDepartmentFilter_(ctx.lib, department);
   const existing = target.getSlides();
   const blankDeck = isBlankDeck(existing);
 
@@ -588,7 +592,7 @@ function planContent(userPrompt, presentationType, n, sources, ctx) {
   const libIconNames = ctx.lib ? ctx.lib.icons.map(function (i) { return i.name; }) : [];
 
   // Approved facts: the 2026 template (reference library) first, the built-in list as fallback
-  const facts = libraryFacts(ctx.lib, [userPrompt, presentationType, String(sources.text || '').slice(0, 4000)].join(' '));
+  const facts = libraryFacts(ctx.lib, [userPrompt, presentationType, ctx.department, String(sources.text || '').slice(0, 4000)].join(' '));
   const approvedFacts = facts.usable.length ? facts.usable : APPROVED_FACTS;
 
   const prompt = `
@@ -596,10 +600,12 @@ You are the senior presentation strategist for ${ctx.brand.name}. Write the cont
 a clear story, one idea per slide, concrete and useful content.
 
 REQUEST: "${userPrompt || 'Build the presentation from the attached source material.'}"
-STRUCTURE: ${guidance} Shape the story around what the request is really asking for, the way a senior consultant would.
+PRESENTATION TYPE: ${presentationType}
+DEPARTMENT: ${ctx.department || 'Other'}
+STRUCTURE: ${guidance} ${DEPARTMENT_GUIDANCE[ctx.department] || DEPARTMENT_GUIDANCE.Other} Shape the story around what the request is really asking for, the way a senior consultant would.
 EXACT NUMBER OF SLIDES: ${n}
 
-AUDIENCE: do not assume or name an audience, job title or company unless the user states one. Never write "for the VP of ...".
+AUDIENCE: write for the selected ${ctx.department || 'Other'} department. Do not invent a job title or company unless the user states one. Never write "for the VP of ...".
 
 STORY (MANDATORY):
 - Slide 1 MUST be type "cover".
@@ -1708,6 +1714,10 @@ function getGeneratorBootstrap() {
     url: p ? p.getUrl() : '',
     title: p ? p.getName() : '',
     stages: getPipelineStages(),
+    presentationTypes: PRESENTATION_TYPES.slice(),
+    departments: DEPARTMENTS.slice(),
+    minSlides: 3,
+    maxSlides: 20,
     hasVertexConfig: isVertexConfigured_(),
     hasGeminiKey: !!String(getScriptProperty_('GEMINI_API_KEY') || '').trim()
   };
@@ -1721,13 +1731,85 @@ function getPipelineStages() {
   return PROGRESS_STAGES.create.map(function (s) { return s[0]; });
 }
 
-function getFilteredReferenceLibrary(department) {
-  const lib = loadReferenceLibrary(false);
-  if (!lib || !lib.slides) return [];
+function clampSlideCount_(n) {
+  if (n == null || n === '') n = 8;
+  n = Number(n);
+  if (!isFinite(n) || isNaN(n)) n = 8;
+  return Math.max(3, Math.min(20, Math.round(n)));
+}
+
+function normalizePresentationType_(raw) {
+  const key = String(raw || '').trim();
+  if (PRESENTATION_TYPES.indexOf(key) !== -1) return key;
+  const aliases = {
+    'business presentation': 'Pitch',
+    business: 'Pitch',
+    'marketing presentation': 'Custom',
+    marketing: 'Custom',
+    'strategy presentation': 'Strategy',
+    strategy: 'Strategy',
+    'sales presentation': 'Sales',
+    sales: 'Sales',
+    'executive presentation': 'Pitch',
+    executive: 'Pitch',
+    pitch: 'Pitch',
+    proposal: 'Proposal',
+    'case study': 'Case Study',
+    casestudy: 'Case Study',
+    report: 'Report',
+    custom: 'Custom'
+  };
+  const mapped = aliases[key.toLowerCase()];
+  if (mapped) return mapped;
+  for (var i = 0; i < PRESENTATION_TYPES.length; i++) {
+    if (PRESENTATION_TYPES[i].toLowerCase() === key.toLowerCase()) return PRESENTATION_TYPES[i];
+  }
+  return 'Custom';
+}
+
+function normalizeDepartment_(raw) {
+  const key = String(raw || '').trim();
+  if (DEPARTMENTS.indexOf(key) !== -1) return key;
+  const aliases = {
+    tech: 'Technology',
+    it: 'Technology',
+    engineering: 'Technology',
+    'human resources': 'HR',
+    people: 'HR',
+    exec: 'Leadership',
+    executive: 'Leadership',
+    general: 'Other'
+  };
+  const mapped = aliases[key.toLowerCase()];
+  if (mapped) return mapped;
+  for (var i = 0; i < DEPARTMENTS.length; i++) {
+    if (DEPARTMENTS[i].toLowerCase() === key.toLowerCase()) return DEPARTMENTS[i];
+  }
+  return 'Other';
+}
+
+function filterLibrarySlidesByDepartment_(slides, department) {
   const dep = String(department || '').toLowerCase();
-  return lib.slides.filter(function (s) {
-    if (!dep || dep === 'general') return true;
+  if (!dep || dep === 'other' || dep === 'general') return slides || [];
+  const matched = (slides || []).filter(function (s) {
     const useful = String(((s.usefulFor || []).join(' ')) + ' ' + (s.category || '')).toLowerCase();
     return useful.indexOf(dep) !== -1 || useful.indexOf('general') !== -1;
   });
+  return matched.length ? matched : (slides || []);
+}
+
+function applyDepartmentFilter_(lib, department) {
+  if (!lib || !lib.slides) return lib;
+  const filtered = filterLibrarySlidesByDepartment_(lib.slides, department);
+  if (!filtered.length || filtered.length < 8 || filtered.length === lib.slides.length) return lib;
+  const copy = {};
+  Object.keys(lib).forEach(function (k) { copy[k] = lib[k]; });
+  copy.slides = filtered;
+  return copy;
+}
+
+function getFilteredReferenceLibrary(department) {
+  const lib = loadReferenceLibrary(false);
+  if (!lib || !lib.slides) return [];
+  return filterLibrarySlidesByDepartment_(lib.slides, normalizeDepartment_(department));
 }

@@ -248,7 +248,11 @@ function assertGasSyntaxAndSymbols() {
     "getProgress",
     "cancelRun",
     "drawSlidesIntoActive_",
-    "renderEngineSlide"
+    "renderEngineSlide",
+    "normalizePresentationType_",
+    "normalizeDepartment_",
+    "clampSlideCount_",
+    "applyDepartmentFilter_"
   ];
   for (const fn of requiredFns) {
     if (typeof sandbox[fn] !== "function") fail(`Missing global function: ${fn}`);
@@ -363,6 +367,58 @@ function assertSamePresentation() {
   } else {
     ok("Generator.html completion link uses the returned presentation id/url");
   }
+  if (!/<h2>\s*66° Deck Agent\s*<\/h2>/.test(html)) {
+    fail("Generator.html must use the 66° Deck Agent headline");
+  } else {
+    ok("Generator.html uses 66° Deck Agent headline");
+  }
+  if (/<h2>\s*66degrees AI Presentation Generator\s*<\/h2>/.test(html)) {
+    fail("Generator.html must not use the obsolete generator heading");
+  } else {
+    ok("Generator.html does not use the obsolete generator heading");
+  }
+  if (!/Prompt \+ docs/.test(html)) {
+    fail("Generator.html missing product subtitle");
+  } else {
+    ok("Generator.html has product subtitle");
+  }
+  if (!/presentationType:\s*presentationType/.test(html) || !/department:\s*department/.test(html) || !/slideCount:\s*slides/.test(html)) {
+    fail("Generator.html must send presentationType, department, and slideCount to generatePresentation");
+  } else {
+    ok("Generator.html sends presentationType, department, and slideCount");
+  }
+  if (!/id="presentationType"/.test(html) || !/id="department"/.test(html)) {
+    fail("Generator.html missing presentation type / department controls");
+  } else {
+    ok("Generator.html has presentation type and department controls");
+  }
+  if (!/min="3"/.test(html) || !/max="20"/.test(html) || /max="100"/.test(html)) {
+    fail("Generator.html slide count must be 3–20");
+  } else {
+    ok("Generator.html slide count is 3–20");
+  }
+  if (!/data\.presentationType/.test(code) || !/data\.department/.test(code) || !/data\.slideCount/.test(code)) {
+    fail("Code.gs must read presentationType, department, and slideCount from generator data");
+  } else {
+    ok("Code.gs reads presentationType, department, and slideCount");
+  }
+  if (!/PRESENTATION TYPE:/.test(code) || !/DEPARTMENT:/.test(code)) {
+    fail("planContent must include presentation type and department");
+  } else {
+    ok("planContent includes presentation type and department");
+  }
+  const brand = read("src/Brand.gs");
+  for (const name of ["Pitch", "Strategy", "Proposal", "Sales", "Case Study", "Report", "Custom"]) {
+    if (brand.indexOf("'" + name + "'") === -1 && brand.indexOf('"' + name + '"') === -1) {
+      fail("Brand.gs PRESENTATION_TYPES missing " + name);
+    }
+  }
+  for (const name of ["Sales", "Marketing", "Technology", "Finance", "Operations", "HR", "Leadership", "Other"]) {
+    if (brand.indexOf("'" + name + "'") === -1 && !new RegExp("\\b" + name + "\\b").test(brand)) {
+      fail("Brand.gs DEPARTMENTS missing " + name);
+    }
+  }
+  ok("Brand.gs has presentation type and department catalogs");
   if (!/function splitSpace/.test(read("src/Engine.gs")) || !/function innerSize/.test(read("src/Engine.gs"))) {
     fail("Engine.gs missing splitSpace/innerSize geometry helpers");
   } else {

@@ -9,7 +9,7 @@ The uploaded V.1_17 specification is the source of truth. Gemini (or Vertex AI G
 ```
 CURRENT GOOGLE SLIDES PRESENTATION
         ↓
-sidebar (Extensions → 66degrees AI Presentation Generator)
+sidebar (Extensions → 66° Deck Agent)
         ↓
 Create pipeline
         ↓
@@ -31,7 +31,7 @@ The sidebar “Open presentation” link is optional navigation. It is **not** h
 | `Brand.gs` | Brand colours, default brand profile, approved facts, Gemini/Vertex client |
 | `Rebrand.gs` | Rebrand mode: restyles existing slides to the brand |
 | `ShapeKit.gs` | Embedded rounded-rectangle shape kit (~3pt corners). Copy this file whole. |
-| `Generator.html` | Sidebar: prompt, upload, progress, Stop, completion link |
+| `Generator.html` | Sidebar: 66° Deck Agent UI (Create/Rebrand, type, department, 3–20 slides, prompt, upload, progress, Stop) |
 
 Pipeline (Create):
 
