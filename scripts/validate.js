@@ -252,7 +252,11 @@ function assertGasSyntaxAndSymbols() {
     "normalizePresentationType_",
     "normalizeDepartment_",
     "clampSlideCount_",
-    "applyDepartmentFilter_"
+    "applyDepartmentFilter_",
+    "callVertexGemini_",
+    "getVertexConfig_",
+    "isVertexConfigured_",
+    "buildVertexEndpoint_"
   ];
   for (const fn of requiredFns) {
     if (typeof sandbox[fn] !== "function") fail(`Missing global function: ${fn}`);
@@ -476,6 +480,68 @@ function assertNoDriveRestApi() {
   }
 }
 
+function assertVertexOauthOnly() {
+  const srcFiles = [
+    "src/Code.gs",
+    "src/Brand.gs",
+    "src/Reference.gs",
+    "src/Rebrand.gs",
+    "src/Engine.gs",
+    "src/EngineRenderer.gs",
+    "src/ShapeKit.gs",
+    "src/Generator.html",
+    "src/appsscript.json"
+  ];
+  const banned = [
+    { re: /\bGEMINI_API_KEY\b/, label: "GEMINI_API_KEY" },
+    { re: /\bGOOGLE_API_KEY\b/, label: "GOOGLE_API_KEY" },
+    { re: /x-goog-api-key/, label: "x-goog-api-key" },
+    { re: /generativelanguage\.googleapis\.com/, label: "generativelanguage.googleapis.com" }
+  ];
+  let hits = 0;
+  for (const rel of srcFiles) {
+    const src = read(rel);
+    for (const item of banned) {
+      if (item.re.test(src)) {
+        fail(`${rel} must not contain ${item.label}`);
+        hits += 1;
+      }
+    }
+  }
+  if (!hits) ok("No Gemini API-key / AI Studio authentication path in production source");
+
+  const brand = read("src/Brand.gs");
+  if (!/function callVertexGemini_/.test(brand) || !/ScriptApp\.getOAuthToken\(\)/.test(brand) || !/aiplatform\.googleapis\.com/.test(brand)) {
+    fail("Brand.gs missing Vertex AI OAuth helper");
+  } else {
+    ok("Brand.gs has Vertex AI OAuth helper");
+  }
+  if (!/Vertex AI API is not enabled/.test(brand)) {
+    fail("Brand.gs must report when Vertex AI API is not enabled");
+  } else {
+    ok("Brand.gs reports missing Vertex AI API clearly");
+  }
+
+  const code = read("src/Code.gs");
+  const show = code.slice(code.indexOf("function showGenerator()"), code.indexOf("function showGeneratorSidebar"));
+  if (/\.setTitle\(\s*['"]66° Deck Agent['"]\s*\)/.test(show)) {
+    fail("showGenerator must not set the outer sidebar title to 66° Deck Agent");
+  } else {
+    ok("Outer sidebar title is not configured as 66° Deck Agent");
+  }
+  if (!/showSidebar/.test(show) || !/createHtmlOutputFromFile\('Generator'\)/.test(show)) {
+    fail("showGenerator must still open the Generator sidebar");
+  } else {
+    ok("showGenerator still opens the Generator sidebar");
+  }
+  const html = read("src/Generator.html");
+  if (!/<h2>\s*66° Deck Agent\s*<\/h2>/.test(html)) {
+    fail("Inner Generator heading 66° Deck Agent must remain");
+  } else {
+    ok("Inner Generator heading 66° Deck Agent is retained");
+  }
+}
+
 function assertShapeKitIntact() {
   const src = read("src/ShapeKit.gs");
   const m = src.match(/b64:\s*'([^']+)'/);
@@ -503,6 +569,7 @@ function main() {
   assertShapeKitIntact();
   assertShapeTypeSafety();
   assertNoDriveRestApi();
+  assertVertexOauthOnly();
   assertSamePresentation();
   assertGasSyntaxAndSymbols();
 

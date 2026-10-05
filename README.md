@@ -82,14 +82,20 @@ Rebrand applies the brand pass to the open deck in place.
    - `cloud-platform` (Vertex)
 4. Script properties (Project Settings):
 
+   Generation uses **Vertex AI OAuth only** (`ScriptApp.getOAuthToken()` → `Authorization: Bearer`). There is no Gemini API-key path.
+
    | Property | Required | Notes |
    |---|---|---|
-   | `VERTEX_PROJECT_ID` | Preferred | Vertex AI Gemini via `ScriptApp.getOAuthToken()` |
+   | `VERTEX_PROJECT_ID` | **Yes** | Linked Google Cloud project id (not the numeric GCP number from error messages) |
    | `VERTEX_LOCATION` | No | Default `us-central1` (or `global`) |
    | `VERTEX_MODEL` | No | Default `gemini-2.5-flash` |
-   | `GEMINI_API_KEY` | If no Vertex | Gemini Developer API |
-   | `SCITE_API_KEY` | No | Academic research; Gemini Search is the fallback |
+   | `SCITE_API_KEY` | No | Academic research; Vertex Search/knowledge is the fallback |
    | `BEAUTIFUL_AI_KEY` | No | Unused unless `CONFIG.useBeautifulAi` is turned on |
+
+   Also required on that Cloud project:
+   - **Vertex AI API** enabled (`aiplatform.googleapis.com`)
+   - Add-on users granted **Vertex AI User** (`roles/aiplatform.user`)
+   - Re-authorize the add-on after the `cloud-platform` scope is added
 
 5. One-time reference library (from the spec):
    - Upload `66d_reference_library.json` and set `CONFIG.refLibraryFileId`

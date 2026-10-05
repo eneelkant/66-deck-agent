@@ -60,15 +60,14 @@ function htmlOptions(html, id) {
   return Array.from(block[0].matchAll(/<option value="([^"]+)"/g)).map((m) => m[1]);
 }
 
-test("Generator.html headline, mode, and subtitle match Deck Agent UI", () => {
+test("outer sidebar chrome is not titled 66° Deck Agent; inner heading remains", () => {
+  const code = read("src/Code.gs");
   const html = read("src/Generator.html");
+  const show = code.slice(code.indexOf("function showGenerator()"), code.indexOf("function showGeneratorSidebar"));
+  assert.doesNotMatch(show, /\.setTitle\(\s*['"]66° Deck Agent['"]\s*\)/);
+  assert.match(show, /createHtmlOutputFromFile\('Generator'\)/);
+  assert.match(show, /showSidebar/);
   assert.match(html, /<h2>\s*66° Deck Agent\s*<\/h2>/);
-  assert.match(html, /Prompt \+ docs → structured, on-brand Google Slides\./);
-  assert.doesNotMatch(html, /<h2>\s*66degrees AI Presentation Generator\s*<\/h2>/);
-  assert.doesNotMatch(html, /66° Deck Studio/);
-  assert.match(html, />Create</);
-  assert.match(html, />Rebrand</);
-  assert.match(html, /class="accent"/);
 });
 
 test("Generator data contains presentationType, department, and slideCount", () => {

@@ -6,7 +6,7 @@
  *          -> slides are added to the user's open deck.
  * REBRAND: the brand pass (with Gemini review) is applied to the open deck.
  *
- * Script properties required: GEMINI_API_KEY, BEAUTIFUL_AI_KEY, SCITE_API_KEY
+ * Script properties required: VERTEX_PROJECT_ID, SCITE_API_KEY (optional), BEAUTIFUL_AI_KEY (optional)
  * Advanced service required: Slides API (v1). Drive file access uses DriveApp (no runtime Drive API enablement).
  *
  * Files: Code.gs (this), Brand.gs (brand kit, Gemini, storage), Rebrand.gs (brand pass),
@@ -34,9 +34,8 @@ var CONFIG = {
   sciteApiBase: 'https://api.scite.ai',
   sciteMaxPapers: 8,             // top N papers pulled per deck; Gemini uses these as the factual basis
 
-  // Hero image generation — DISABLED on free tier (Gemini image models are paid-tier only).
-  // When you switch to the 66degrees paid account, set imageGeneration: true and add VERTEX_PROJECT_ID
-  // (for Imagen) or keep GEMINI_API_KEY (for Nano Banana). See TODO in generatePresentation().
+  // Hero image generation — DISABLED by default. When enabled, images go through Vertex AI OAuth
+  // (VERTEX_PROJECT_ID). There is no Gemini API-key path.
   imageGeneration: false,
   imageProvider: 'gemini',       // 'gemini' = gemini-2.5-flash-image (Nano Banana), 'imagen' = Vertex AI Imagen 4
   imagesPerDeck: 3,              // hero images to generate per deck (cover, one strategic slide, closing background)
@@ -79,7 +78,7 @@ function onInstall() {
 
 function showGenerator() {
   const html = HtmlService.createHtmlOutputFromFile('Generator')
-    .setTitle('66° Deck Agent')
+    .setTitle(' ')
     .setWidth(540);
   SlidesApp.getUi().showSidebar(html);
 }
@@ -1228,28 +1227,25 @@ function toResearchSources_(list) {
 // Returns { text, grounding: [groundingChunks] }.
 function callGeminiText_(parts, apiKey, opts) {
   opts = opts || {};
+  requireVertexConfig_();
   const models = modelCandidates(apiKey, 'text').slice(0, opts.maxModels || 2);
   const body = { contents: [{ role: 'user', parts: parts }], generationConfig: { temperature: opts.temperature == null ? 0.3 : opts.temperature } };
   if (opts.tools) body.tools = opts.tools;
   let lastError = 'no response';
   for (let m = 0; m < models.length; m++) {
     for (let attempt = 0; attempt < (opts.attempts || 2); attempt++) {
-      const resp = UrlFetchApp.fetch(generateContentUrl_(models[m]), {
-        method: 'post', contentType: 'application/json', headers: generateContentHeaders_(apiKey),
-        payload: JSON.stringify(body), muteHttpExceptions: true
-      });
-      const code = resp.getResponseCode();
-      let json = {};
-      try { json = JSON.parse(resp.getContentText()); } catch (e) {}
-      if (json.error) {
-        lastError = json.error.message || ('HTTP ' + code);
-        if (isRetryable(code, lastError) && attempt + 1 < (opts.attempts || 2)) { Utilities.sleep(3000); continue; }
-        break;   // next model
+      try {
+        const json = callVertexGemini_(body, { model: models[m] }).result;
+        const cand = json.candidates && json.candidates[0];
+        const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
+        if (text) return { text: text, grounding: (cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [] };
+        lastError = 'empty response';
+      } catch (e) {
+        lastError = e.message;
+        if (/not enabled|VERTEX_PROJECT_ID is not configured|authentication failed/i.test(lastError)) throw e;
+        if (isRetryable(0, lastError) && attempt + 1 < (opts.attempts || 2)) { Utilities.sleep(3000); continue; }
+        break;
       }
-      const cand = json.candidates && json.candidates[0];
-      const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
-      if (text) return { text: text, grounding: (cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [] };
-      lastError = 'empty response';
     }
   }
   throw new Error(lastError);
@@ -1718,8 +1714,7 @@ function getGeneratorBootstrap() {
     departments: DEPARTMENTS.slice(),
     minSlides: 3,
     maxSlides: 20,
-    hasVertexConfig: isVertexConfigured_(),
-    hasGeminiKey: !!String(getScriptProperty_('GEMINI_API_KEY') || '').trim()
+    hasVertexConfig: isVertexConfigured_()
   };
 }
 

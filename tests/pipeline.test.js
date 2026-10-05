@@ -118,7 +118,7 @@ test("global Vertex endpoint construction", () => {
   );
 });
 
-test("getApiKey uses Vertex sentinel when VERTEX_PROJECT_ID is set", () => {
+test("getApiKey uses the Vertex sentinel when VERTEX_PROJECT_ID is set", () => {
   const sandbox = loadEngineStack({ VERTEX_PROJECT_ID: "demo-project" });
   assert.equal(sandbox.getApiKey(), "vertex");
 });

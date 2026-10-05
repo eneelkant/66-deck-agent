@@ -205,6 +205,16 @@ function isVertexConfigured_() {
   return !!getVertexConfig_().projectId;
 }
 
+function requireVertexConfig_() {
+  const config = getVertexConfig_();
+  if (!config.projectId) {
+    throw new Error(
+      'VERTEX_PROJECT_ID is not configured. Link this Apps Script project to Google Cloud, enable the Vertex AI API, and set VERTEX_PROJECT_ID in Script properties.'
+    );
+  }
+  return config;
+}
+
 function buildVertexEndpoint_(config, modelOverride) {
   config = config || getVertexConfig_();
   var projectId = encodeURIComponent(config.projectId);
@@ -217,27 +227,66 @@ function buildVertexEndpoint_(config, modelOverride) {
   return 'https://' + location + '-aiplatform.googleapis.com' + resource;
 }
 
-function generateContentUrl_(model) {
-  if (isVertexConfigured_()) return buildVertexEndpoint_(getVertexConfig_(), model);
-  return 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
+function vertexAuthHeaders_() {
+  return { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
 }
 
-function generateContentHeaders_(apiKey) {
-  if (isVertexConfigured_()) return { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
-  return { 'x-goog-api-key': apiKey };
+function generateContentUrl_(model) {
+  return buildVertexEndpoint_(requireVertexConfig_(), model);
+}
+
+function generateContentHeaders_() {
+  return vertexAuthHeaders_();
+}
+
+function describeVertexHttpError_(code, body, result) {
+  const msg = String((result && result.error && result.error.message) || body || '');
+  const hay = msg + ' ' + String(body || '');
+  if (/SERVICE_DISABLED|has not been used|API has not been used|is not enabled|aiplatform\.googleapis\.com is disabled/i.test(hay)) {
+    return 'Vertex AI API is not enabled for the linked Google Cloud project.';
+  }
+  if (code === 401 || code === 403) {
+    return 'Vertex AI authentication failed (HTTP ' + code + '). Grant Vertex AI User on the linked Cloud project and re-authorize the add-on.';
+  }
+  if (code === 429) {
+    return 'Vertex AI quota exceeded (HTTP 429).';
+  }
+  return 'Vertex AI HTTP ' + code + ': ' + msg.slice(0, 300);
+}
+
+function callVertexGemini_(requestBody, opts) {
+  opts = opts || {};
+  const config = requireVertexConfig_();
+  const model = opts.model || config.model;
+  const endpoint = buildVertexEndpoint_(config, model);
+  var response;
+  try {
+    response = UrlFetchApp.fetch(endpoint, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: vertexAuthHeaders_(),
+      payload: JSON.stringify(requestBody),
+      muteHttpExceptions: true
+    });
+  } catch (e) {
+    throw new Error('Vertex AI request failed: ' + e.message);
+  }
+  const code = response.getResponseCode();
+  const body = response.getContentText();
+  var result = {};
+  try { result = JSON.parse(body); } catch (e1) { result = {}; }
+  if (code < 200 || code >= 300 || result.error) {
+    throw new Error(describeVertexHttpError_(code, body, result));
+  }
+  return { code: code, result: result, model: model };
 }
 
 function getApiKey() {
-  if (isVertexConfigured_()) {
-    var existing = String(getScriptProperty_('GEMINI_API_KEY') || '').trim();
-    return existing || 'vertex';
-  }
-  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  if (!apiKey) throw new Error('GEMINI_API_KEY is missing (Project Settings → Script properties), or set VERTEX_PROJECT_ID for Vertex AI OAuth.');
-  return apiKey;
+  requireVertexConfig_();
+  return 'vertex';
 }
 
-// Ordered list of models to try: CONFIG.model (if set) first, then the best available models on the API key.
+// Ordered list of Vertex publisher models to try.
 function modelCandidates(apiKey, kind) {
   const props = PropertiesService.getScriptProperties();
   const cacheKey = 'model_candidates_' + kind + (CONFIG.preferProModel ? '_pro' : '');
@@ -245,51 +294,10 @@ function modelCandidates(apiKey, kind) {
   try { list = JSON.parse(props.getProperty(cacheKey) || 'null'); } catch (e) {}
 
   if (!list || !list.length) {
-    const fallback = kind === 'image' ? ['gemini-2.5-flash-image'] : ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
-    if (isVertexConfigured_()) {
-      const vc = getVertexConfig_();
-      list = kind === 'image' ? fallback : [vc.model, 'gemini-2.5-flash'];
-      list = list.filter(function (n, i) { return list.indexOf(n) === i; });
-      try { props.setProperty(cacheKey, JSON.stringify(list)); } catch (e) {}
-    } else try {
-      const resp = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
-        { headers: generateContentHeaders_(apiKey), muteHttpExceptions: true });
-      const models = (JSON.parse(resp.getContentText()).models || [])
-        .filter(function (m) { return (m.supportedGenerationMethods || []).indexOf('generateContent') !== -1; })
-        .map(function (m) { return m.name.replace(/^models\//, ''); })
-        .filter(function (n) { return /^gemini-\d/.test(n) && !/tts|audio|live|embedding|thinking-exp|learnlm|robotics|computer-use/i.test(n); });
-
-      const version = function (n) { const m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; };
-      const stableFirst = function (x, y) {
-        const dv = version(y) - version(x);
-        if (dv) return dv;
-        return (/preview|exp/i.test(x) ? 1 : 0) - (/preview|exp/i.test(y) ? 1 : 0);
-      };
-      if (kind === 'image') {
-        list = models.filter(function (n) { return /image/i.test(n); }).sort(stableFirst);
-      } else {
-        const text = models.filter(function (n) { return !/image/i.test(n); });
-        // Prefer the free-tier-friendly 2.5 line first; only reach for 3.x heavy models if the pinned model is 3.x.
-        // gemini-2.5-flash-lite is deprecated for new users — use gemini-3.5-flash-lite instead.
-        const wanted = CONFIG.model && CONFIG.model !== 'auto' ? CONFIG.model : '';
-        const majorPin = wanted ? (wanted.match(/gemini-(\d+)/) || [])[1] : '';
-        const flash25 = text.filter(function (n) { return /gemini-2\.5.*-flash/i.test(n) && !/lite/i.test(n); }).sort(stableFirst);
-        const flash20 = text.filter(function (n) { return /gemini-2\.0.*-flash/i.test(n) && !/lite/i.test(n); }).sort(stableFirst);
-        const lite35  = text.filter(function (n) { return /gemini-3\.5.*-flash-lite/i.test(n); }).sort(stableFirst);
-        const flash3  = text.filter(function (n) { return /gemini-3\..*-flash/i.test(n) && !/lite/i.test(n); }).sort(stableFirst);
-        const pro25   = text.filter(function (n) { return /gemini-2\.5.*-pro/i.test(n); }).sort(stableFirst);
-        // Free-tier default: newest 2.5-flash, older 2.5 flash backup, 2.0-flash, then 3.5-flash-lite as last-ditch.
-        list = flash25.slice(0, 2).concat(flash20.slice(0, 1), lite35.slice(0, 1));
-        // Only add 3.x heavy Flash at the tail if the user pinned to one of them (they have paid billing).
-        if (majorPin === '3') list = list.concat(flash3.slice(0, 2));
-        if (CONFIG.preferProModel) list = pro25.slice(0, 1).concat(list);
-      }
-      list = list.filter(function (n, i) { return list.indexOf(n) === i; });
-      if (!list.length) list = fallback;
-      props.setProperty(cacheKey, JSON.stringify(list));
-    } catch (e) {
-      list = fallback;
-    }
+    const vc = getVertexConfig_();
+    const fallback = kind === 'image' ? ['gemini-2.5-flash-image'] : [vc.model || DEFAULT_VERTEX_MODEL, 'gemini-2.5-flash'];
+    list = fallback.filter(function (n, i) { return fallback.indexOf(n) === i; });
+    try { props.setProperty(cacheKey, JSON.stringify(list)); } catch (e2) {}
   }
 
   const wanted = kind === 'image' ? CONFIG.imageModel : CONFIG.model;
@@ -307,53 +315,35 @@ function isRetryable(code, message) {
 }
 
 function callGeminiJSON(parts, apiKey, temperature) {
+  requireVertexConfig_();
   const models = modelCandidates(apiKey, 'text').slice(0, 4);
-  const payload = JSON.stringify({
+  const payload = {
     contents: [{ role: 'user', parts: parts }],
     generationConfig: { responseMimeType: 'application/json', temperature: temperature === undefined ? 0.4 : temperature }
-  });
-  const waits = [2000, 6000];       // retries per model after the first attempt
+  };
+  const waits = [2000, 6000];
   const started = Date.now();
-  let lastError = 'Gemini did not respond.';
+  let lastError = 'Vertex AI did not respond.';
 
   for (let m = 0; m < models.length; m++) {
     for (let attempt = 0; attempt <= waits.length; attempt++) {
-      if (Date.now() - started > 150000) break; // stay well inside the 6-minute Apps Script limit
+      if (Date.now() - started > 150000) break;
 
-      let code = 0, result = null, body = '';
+      let result = null;
       try {
-        const response = UrlFetchApp.fetch(
-          generateContentUrl_(models[m]),
-          {
-            method: 'post',
-            contentType: 'application/json',
-            headers: generateContentHeaders_(apiKey),
-            payload: payload,
-            muteHttpExceptions: true
-          }
-        );
-        code = response.getResponseCode();
-        body = response.getContentText();
-        result = JSON.parse(body);
+        result = callVertexGemini_(payload, { model: models[m] }).result;
       } catch (e) {
         lastError = e.message;
+        if (/not enabled|VERTEX_PROJECT_ID is not configured|authentication failed/i.test(lastError)) throw e;
+        if (isRetryable(0, lastError) && attempt < waits.length) { Utilities.sleep(waits[attempt]); continue; }
+        if (/not found|not supported/i.test(lastError)) break;
         if (attempt < waits.length) { Utilities.sleep(waits[attempt]); continue; }
         break;
       }
 
-      if (result && result.error) {
-        lastError = result.error.message || ('HTTP ' + code);
-        if (code === 404 || /not found|not supported/i.test(lastError)) break;          // try the next model
-        if (isRetryable(code || result.error.code, lastError)) {
-          if (attempt < waits.length) { Utilities.sleep(waits[attempt]); continue; }
-          break;                                                                          // next model
-        }
-        throw new Error('Gemini (' + models[m] + '): ' + lastError);                    // real error, e.g. bad request
-      }
-
       const cand = result && result.candidates && result.candidates[0];
       if (!cand || !cand.content || !cand.content.parts) {
-        lastError = 'Gemini returned no content' + (cand && cand.finishReason ? ' (' + cand.finishReason + ')' : '') + '.';
+        lastError = 'Vertex AI returned no content' + (cand && cand.finishReason ? ' (' + cand.finishReason + ')' : '') + '.';
         if (attempt < waits.length) { Utilities.sleep(waits[attempt]); continue; }
         break;
       }
@@ -372,13 +362,13 @@ function callGeminiJSON(parts, apiKey, temperature) {
         if (start !== -1 && end > start) {
           try { return JSON.parse(raw.slice(start, end + 1)); } catch (e2) {}
         }
-        lastError = 'Gemini returned invalid JSON.';
+        lastError = 'Vertex AI returned invalid JSON.';
         if (attempt < waits.length) continue;
         break;
       }
     }
   }
-  throw new Error('Gemini is busy right now (' + lastError + ') Tried: ' + models.join(', ') + '. Please try again in a minute.');
+  throw new Error('Vertex AI is busy right now (' + lastError + ') Tried: ' + models.join(', ') + '. Please try again in a minute.');
 }
 
 function generateIconImage(description, dark, ctx) {
@@ -393,20 +383,11 @@ function generateIconImage(description, dark, ctx) {
     'no text, no shading, no gradients, no 3D.';
 
   try {
-    const response = UrlFetchApp.fetch(
-      generateContentUrl_(resolveModel(ctx.apiKey, 'image')),
-      {
-        method: 'post',
-        contentType: 'application/json',
-        headers: generateContentHeaders_(ctx.apiKey),
-        payload: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { responseModalities: ['IMAGE'] }
-        }),
-        muteHttpExceptions: true
-      }
-    );
-    const result = JSON.parse(response.getContentText());
+    const fetched = callVertexGemini_({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ['IMAGE'] }
+    }, { model: resolveModel(ctx.apiKey, 'image') });
+    const result = fetched.result;
     const parts = (result.candidates && result.candidates[0] && result.candidates[0].content &&
       result.candidates[0].content.parts) || [];
     for (let i = 0; i < parts.length; i++) {
