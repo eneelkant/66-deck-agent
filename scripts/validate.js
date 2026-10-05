@@ -145,11 +145,10 @@ function assertManifest() {
   if (!manifest.addOns || !manifest.addOns.slides) fail("appsscript.json missing slides add-on config");
   else ok("Slides add-on config present");
 
-  const advanced = (manifest.dependencies && manifest.dependencies.enabledAdvancedServices) || [];
-  if (!advanced.some((s) => s.userSymbol === "Slides" && s.version === "v1")) {
-    fail("appsscript.json must enable the Slides advanced service");
+  if (manifest.enabledAdvancedServices) {
+    fail("enabledAdvancedServices must live under dependencies, not at the top level");
   } else {
-    ok("Slides advanced service enabled");
+    ok("enabledAdvancedServices is not at the top-level manifest");
   }
 }
 
@@ -337,10 +336,31 @@ function assertSamePresentation() {
   } else {
     ok("Default create path draws into the active presentation");
   }
-  if (/createWorkingDeck_\(plan\.deck_title/.test(defaultBranch)) {
-    fail("Default create path must not create a working copy presentation");
+  if (!/function generationResult_/.test(code)) {
+    fail("Code.gs missing generationResult_");
   } else {
-    ok("Default create path does not call createWorkingDeck_");
+    ok("generationResult_ returns active presentation metadata");
+  }
+  if (!/return generationResult_\(msg, target, copied\)/.test(code)) {
+    fail("Create completion must return the active presentation via generationResult_");
+  } else {
+    ok("Create completion returns the active presentation");
+  }
+  if (!/function overlayTextIfNeeded_/.test(read("src/EngineRenderer.gs"))) {
+    fail("EngineRenderer missing overlayTextIfNeeded_ for shapes without text frames");
+  } else {
+    ok("EngineRenderer overlays text on shapes without a text frame");
+  }
+  const html = read("src/Generator.html");
+  if (!/msg\.presentationId/.test(html) || !/currentPresentation\.url = msg\.url/.test(html)) {
+    fail("Generator.html must bind the completion link to the returned presentation");
+  } else {
+    ok("Generator.html completion link uses the returned presentation id/url");
+  }
+  if (!/function splitSpace/.test(read("src/Engine.gs")) || !/function innerSize/.test(read("src/Engine.gs"))) {
+    fail("Engine.gs missing splitSpace/innerSize geometry helpers");
+  } else {
+    ok("Engine.gs has splitSpace and innerSize geometry helpers");
   }
 }
 

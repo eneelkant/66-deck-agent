@@ -526,9 +526,10 @@ function insertLibraryIcon(slide, iconTag, left, top, size, onDark, ctx, color) 
     const iconEl = slide.getPageElementById(icon.getObjectId());
     if (inserted.length > 1) { inserted.length = 0; inserted.push(iconEl); }
     recolorElement_(iconEl, color || (onDark ? IPAY.white : IPAY.blue));
-    const w = iconEl.getWidth(), h = iconEl.getHeight();
-    const k = size / Math.max(w, h, 0.01);
-    iconEl.setWidth(w * k).setHeight(h * k);
+    const w = Math.max(0.01, Number(iconEl.getWidth()) || 0.01);
+    const h = Math.max(0.01, Number(iconEl.getHeight()) || 0.01);
+    const k = Math.max(0.01, Number(size) || 1) / Math.max(w, h);
+    iconEl.setWidth(Math.max(1, w * k)).setHeight(Math.max(1, h * k));
     iconEl.setLeft(left + (size - w * k) / 2).setTop(top + (size - h * k) / 2);
     try { iconEl.setTitle('66D icon ' + iconTag); } catch (e) {}
     return true;
@@ -659,7 +660,11 @@ function harvestIcons_(slide, lib, pageW) {
   const els = slide.getPageElements().filter(function (el) {
     try {
       if (el.getWidth() > pageW * 0.2) return false;                                   // background / title
-      if (el.getPageElementType() === SlidesApp.PageElementType.SHAPE && el.asShape().getText().asString().trim()) return false;
+      if (el.getPageElementType() === SlidesApp.PageElementType.SHAPE) {
+        const sh = el.asShape();
+        if (typeof hasTextFrame_ === 'function' && !hasTextFrame_(sh)) return true;
+        if (sh.getText().asString().trim()) return false;
+      }
       return true;
     } catch (e) { return false; }
   }).map(function (el) {
@@ -780,9 +785,13 @@ function iconCheck() {
     const k = i % perSlide, x = 14 + (k % cols) * 70, y = 12 + Math.floor(k / cols) * 98;
     const ic = icons[i];
     const ok = insertLibraryIcon(slide, ic.tag, x + 18, y, 30, false, ctx, IPAY.blue);
-    const box = slide.insertTextBox(ic.name + (ok ? '' : ' (missing)'), x, y + 36, 66, 40);
-    box.getText().getTextStyle().setFontSize(7).setForegroundColor(ok ? '#040A1B' : '#0052FF');
-    box.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+    const box = (typeof insertTextBoxSafe_ === 'function')
+      ? insertTextBoxSafe_(slide, ic.name + (ok ? '' : ' (missing)'), x, y + 36, 66, 40)
+      : slide.insertTextBox(ic.name + (ok ? '' : ' (missing)'), x, y + 36, 66, 40);
+    if (typeof hasTextFrame_ !== 'function' || hasTextFrame_(box)) {
+      box.getText().getTextStyle().setFontSize(7).setForegroundColor(ok ? '#040A1B' : '#0052FF');
+      box.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+    }
     state.next++;
   }
   const done = state.next >= icons.length;

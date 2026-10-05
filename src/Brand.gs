@@ -380,7 +380,9 @@ function readDeckText(pres) {
           const t = el.getPageElementType();
           if (t === SlidesApp.PageElementType.GROUP) walk(el.asGroup().getChildren());
           else if (t === SlidesApp.PageElementType.SHAPE) {
-            const s = el.asShape().getText().asString().trim();
+            const sh = el.asShape();
+            if (typeof hasTextFrame_ === 'function' && !hasTextFrame_(sh)) return;
+            const s = sh.getText().asString().trim();
             if (s) lines.push(s);
           } else if (t === SlidesApp.PageElementType.TABLE) {
             const tb = el.asTable();
@@ -409,7 +411,9 @@ function isBlankDeck(slides) {
   for (let i = 0; i < els.length; i++) {
     try {
       if (els[i].getPageElementType() !== SlidesApp.PageElementType.SHAPE) return false;
-      if (els[i].asShape().getText().asString().trim()) return false;
+      const sh = els[i].asShape();
+      if (typeof hasTextFrame_ === 'function' && !hasTextFrame_(sh)) continue;
+      if (sh.getText().asString().trim()) return false;
     } catch (e) {}
   }
   return true;

@@ -174,6 +174,23 @@ var ENGINE = (function () {
     if (!isFinite(hh) || hh < 1) hh = 1;
     return { w: ww, h: hh };
   }
+  // Shared geometry: every (available / count - gap) style split stays finite and >= 1.
+  function splitSpace(total, count, gap) {
+    var n = Math.max(1, Math.round(Number(count) || 1));
+    var g = Number(gap);
+    if (!isFinite(g) || g < 0) g = 0;
+    var t = Number(total);
+    if (!isFinite(t)) t = 1;
+    var inner = t - g * (n - 1);
+    if (!isFinite(inner) || inner < 1) inner = 1;
+    return Math.max(1, inner / n);
+  }
+  function innerSize(outer, pad) {
+    var o = Number(outer), p = Number(pad);
+    if (!isFinite(o)) o = 1;
+    if (!isFinite(p)) p = 0;
+    return Math.max(1, o - p);
+  }
   function rect(els, x, y, w, h, fill, line) {
     var d = posSize(w, h);
     var e = { t: 'rect', x: x, y: y, w: d.w, h: d.h, fill: fill };
@@ -239,7 +256,12 @@ var ENGINE = (function () {
 
   // Box height follows the content: tall enough for the text plus padding, at least 70% of the free space (so there is
   // no wide empty band between the intro and the boxes), never more than the space.
-  function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.7)); }
+  function boxH(need, avail) {
+    var a = Number(avail), n = Number(need);
+    if (!isFinite(a) || a < 1) a = 1;
+    if (!isFinite(n) || n < 1) n = 1;
+    return Math.min(a, Math.max(n, a * 0.7));
+  }
   var boxH_ = boxH;
   // Cuts a text at the last whole word that fits on one line (no ellipsis; trailing joining words are dropped)
   function oneLine(str, w, size, weight) {
@@ -285,7 +307,7 @@ var ENGINE = (function () {
     var iconSize = item && (item.icon || item.material) ? 16 : 0;
     var numW = (!iconSize && num) ? 34 : 0;
     var padL = style === 'rule' ? 16 : 14;
-    var hw = w - padL - 12 - numW - (iconSize ? iconSize + 8 : 0);
+    var hw = innerSize(w, padL + 12 + numW + (iconSize ? iconSize + 8 : 0));
     // Template cards are top-aligned (66D_UI_CARD_001): heading row at the same height in every card of a row
     var topPad = 12;
     if (numW) text(els, x + padL, y + topPad - 3, numW, 26, num, { font: 'mono', weight: 600, max: 20, min: 16, maxLines: 1, color: T.blue });
@@ -350,7 +372,7 @@ var ENGINE = (function () {
     text(els, X0, 24, 520, 30, s.title || 'Agenda', { weight: 600, max: 20, min: 16, maxLines: 1, color: T.title || T.ink });
     var items = agendaItems(s);
     var n = Math.max(items.length, 1);
-    var top = 76, listEnd = 520, rowH = Math.min(42, (334 - top) / n);
+    var top = 76, listEnd = 520, rowH = Math.min(42, splitSpace(334 - top, n, 0));
     var tx = X0 + 42, tw = listEnd - tx;
     // Topics are the full slide titles and are never cut: if one does not fit on a line, every topic gets two lines
     // and the descriptions are left out only when there is no room for them.
@@ -398,13 +420,13 @@ var ENGINE = (function () {
     var numbered = !items.some(function (it) { return it && (it.icon || it.material); });
     var top = header(els, s);
     var cols = n <= 3 ? n : (n === 4 ? 2 : 3), rows = Math.ceil(n / cols);
-    var gap = 12, cw = (CW - gap * (cols - 1)) / cols;
-    var avail = (BOTTOM - top - gap * (rows - 1)) / rows;
+    var gap = 12, cw = splitSpace(CW, cols, gap);
+    var avail = splitSpace(BOTTOM - top, rows, gap);
     var padL = style === 'rule' ? 18 : 16, numW = numbered ? 38 : 0, iconW = numbered ? 0 : 26;
-    var hw = cw - padL - 14 - numW - iconW, bw = cw - padL - 14;
+    var hw = innerSize(cw, padL + 14 + numW + iconW), bw = innerSize(cw, padL + 14);
     var hSize = uniformSize(items.map(function (it) { return it.title; }), hw, 36, { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var headBlock = Math.max(linesBlock(items.map(function (it) { return it.title; }), hw, hSize, 600, 2), numbered ? 24 : 18);
-    var bSize = uniformSize(items.map(function (it) { return it.text; }), bw, avail - headBlock - 44, { weight: 400, max: TSZ.body, min: TSZ.body });
+    var bSize = uniformSize(items.map(function (it) { return it.text; }), bw, innerSize(avail, headBlock + 44), { weight: 400, max: TSZ.body, min: TSZ.body });
     var need = 0;
     items.forEach(function (it) { need = Math.max(need, 16 + headBlock + 10 + textH(it.text, bw, bSize) + 18 + hlNeed(items, bw, bSize)); });
     var ch = boxH(need, avail);
@@ -416,7 +438,7 @@ var ENGINE = (function () {
       if (numbered) text(els, x + padL, y + 13, numW, 26, pad2(i + 1), { font: 'mono', weight: 600, max: 20, min: 16, maxLines: 1, color: T.blue });
       else icon(els, it, x + cw - 14 - 18, y + 16, 18, false);
       text(els, x + padL + numW, y + 16 + (numbered ? 3 : 0), hw, headBlock, it.title, { weight: 600, max: hSize, min: hSize, maxLines: 2, color: T.ink });
-      cardBody(els, x + padL, y + 16 + headBlock + 10, bw, ch - headBlock - 44, it, bSize, items);
+      cardBody(els, x + padL, y + 16 + headBlock + 10, bw, innerSize(ch, headBlock + 44), it, bSize, items);
     });
     return { bg: style === 'elevated' ? T.bgLight : T.white, els: els };
   };
@@ -431,13 +453,13 @@ var ENGINE = (function () {
     var n = Math.max(items.length, 1);
     var top = header(els, s);
     var takeH = s.takeaway ? 44 : 0, takeGap = s.takeaway ? 14 : 0;
-    var gap = 12, tw = (CW - gap * (n - 1)) / n, iw = tw - 28;
-    var avail = BOTTOM - top - takeH - takeGap;
+    var gap = 12, tw = splitSpace(CW, n, gap), iw = innerSize(tw, 28);
+    var avail = innerSize(BOTTOM - top, takeH + takeGap);
     var vSize = uniformSize(items.map(function (it) { return it.value; }), iw, 52, { font: 'mono', weight: 600, max: n <= 3 ? 40 : 34, min: 16, maxLines: 1 });
     var lSize = uniformSize(items.map(function (it) { return it.label; }), iw, 34, { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var lBlock = linesBlock(items.map(function (it) { return it.label; }), iw, lSize, 600, 2);
     var vH = lineHeight('mono', vSize);
-    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, avail - vH - lBlock - 60, { weight: 400, max: TSZ.body, min: TSZ.body });
+    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, innerSize(avail, vH + lBlock + 60), { weight: 400, max: TSZ.body, min: TSZ.body });
     var need = 0;
     items.forEach(function (it) { need = Math.max(need, 16 + vH + 10 + lBlock + 8 + textH(it.text, iw, bSize) + 22); });
     var th = boxH(need, avail);
@@ -468,9 +490,9 @@ var ENGINE = (function () {
       rows.forEach(function (r) { mx = Math.max(mx, String(r[j] || '').length); });
       return Math.min(Math.max(mx, 8), 60);
     });
-    var sumW = weights.reduce(function (a, b) { return a + b; }, 0);
-    var widths = weights.map(function (w) { return CW * w / sumW; });
-    var pad = 7, size = 10, hdrH, rowHs, availH = BOTTOM - top;
+    var sumW = weights.reduce(function (a, b) { return a + b; }, 0) || 1;
+    var widths = weights.map(function (w) { return Math.max(1, CW * w / sumW); });
+    var pad = 7, size = 10, hdrH, rowHs, availH = Math.max(1, BOTTOM - top);
     for (; size >= 7.5; size -= 0.5) {
       hdrH = 24; rowHs = [];
       rows.forEach(function (r) {
@@ -504,7 +526,7 @@ var ENGINE = (function () {
     var steps = arr(s.items, 6);
     var n = Math.max(steps.length, 1);
     var top = header(els, s, { eyebrow: true });
-    var gap = 14, tw = (CW - gap * (n - 1)) / n;
+    var gap = 14, tw = splitSpace(CW, n, gap);
     var colors = n >= 6 ? T.ramp : T.ramp.slice(0, n);
     var boxTop = top + 32 + 44;
     // Measure the tallest step's body text and size all boxes to that (with padding).
@@ -538,7 +560,7 @@ var ENGINE = (function () {
     var ms = arr(s.items, 6);
     var n = Math.max(ms.length, 1);
     var top = header(els, s) + 4;
-    var gap = 12, colW = (CW - gap * (n - 1)) / n;
+    var gap = 12, colW = splitSpace(CW, n, gap);
     var ly = top + 26;                                   // band y
     rect(els, CX, ly, CW, 6, T.blue);
     var cardTop = ly + 24;
@@ -613,7 +635,7 @@ var ENGINE = (function () {
   L.comparison = function (s, ctx) {
     var els = [];
     var top = header(els, s) + 6;
-    var gap = 17, pw = (CW - gap) / 2, avail = BOTTOM - top;
+    var gap = 17, pw = splitSpace(CW, 2, gap), avail = Math.max(1, BOTTOM - top);
     var left = s.left || {}, right = s.right || {};
     // Measure both panels' content and size to the taller — no more stretching to fill the page.
     function panelHeight(p) {
@@ -635,17 +657,17 @@ var ENGINE = (function () {
     var top = header(els, s) + 4;
     var cols = items.length > 5 ? 2 : 1, perCol = Math.ceil(items.length / cols);
     var bottom = s.cta ? BOTTOM - 44 : BOTTOM;
-    var colW = (CW - (cols - 1) * 16) / cols;
+    var colW = splitSpace(CW, cols, 16);
     var rowGap = 8;
-    var rowH = Math.min(96, (bottom - top + rowGap) / Math.max(perCol, 1));   // rows fill the content area
+    var rowH = Math.min(96, splitSpace(bottom - top + rowGap, Math.max(perCol, 1), 0));   // rows fill the content area
     items.forEach(function (it, i) {
       var c = Math.floor(i / perCol), r = i % perCol;
-      var x = CX + c * (colW + 16), y = top + r * rowH, h = rowH - rowGap;
+      var x = CX + c * (colW + 16), y = top + r * rowH, h = innerSize(rowH, rowGap);
       rect(els, x, y, colW, h, T.bgLight);
       rect(els, x, y, 40, h, T.blue);
       text(els, x, y + h / 2 - 8, 40, 16, String(i + 1), { font: 'mono', weight: 600, max: TSZ.heading, min: TSZ.heading, align: 'center', maxLines: 1, color: T.white });
       var rightW = it.timing ? 110 : 0;
-      var tx = x + 54, tw = colW - 54 - rightW - 12;
+      var tx = x + 54, tw = innerSize(colW, 54 + rightW + 12);
       var tt = fit(String(it.title || ''), tw, 20, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 1 });
       var bt = it.text ? fit(String(it.text), tw, Math.max(h - tt.height - 16, 12), { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3 }) : { height: 0 };
       var ty = y + Math.max(8, (h - tt.height - 4 - bt.height) / 2);
@@ -692,11 +714,11 @@ var ENGINE = (function () {
     text(els, CX + 18, y, leftW - 18, st.height + 4, stText, { weight: 500, max: st.size, min: st.size, maxLines: 5, color: T.ink });
     if (s.text) text(els, CX + 18, y + st.height + 18, leftW - 18, tx.height + 4, s.text, { weight: 400, max: tx.size, min: tx.size, maxLines: 6, color: T.body });
     if (points.length) {
-      var px = CX + leftW + 24, pw = CW - leftW - 24, gap = 12, pTop = top, pAvail = BOTTOM - pTop;
-      var hSize = uniformSize(points.map(function (p) { return p.title || p; }), pw - 28, 34, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
-      var ch = (pAvail - gap * (points.length - 1)) / points.length;
-      var hBlk = linesBlock(points.map(function (p) { return p.title || p; }), pw - 28, hSize, 500, 2);
-      var bSize = uniformSize(points.map(function (p) { return p.text || ''; }), pw - 28, ch - hBlk - 30, { weight: 400, max: TSZ.body, min: TSZ.body });
+      var px = CX + leftW + 24, pw = innerSize(CW - leftW, 24), gap = 12, pTop = top, pAvail = Math.max(1, BOTTOM - pTop);
+      var hSize = uniformSize(points.map(function (p) { return p.title || p; }), innerSize(pw, 28), 34, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
+      var ch = splitSpace(pAvail, points.length, gap);
+      var hBlk = linesBlock(points.map(function (p) { return p.title || p; }), innerSize(pw, 28), hSize, 500, 2);
+      var bSize = uniformSize(points.map(function (p) { return p.text || ''; }), innerSize(pw, 28), innerSize(ch, hBlk + 30), { weight: 400, max: TSZ.body, min: TSZ.body });
       points.forEach(function (p, i) {
         var yy = pTop + i * (ch + gap);
         rect(els, px, yy, pw, ch, T.white, { color: T.cardLine, width: 0.75 });
@@ -741,7 +763,7 @@ var ENGINE = (function () {
       });
       y += 20;
     }
-    var axisW = 40, plotTop = y + 14, plotBottom = BOTTOM - 30, plotH = plotBottom - plotTop;
+    var axisW = 40, plotTop = y + 14, plotBottom = BOTTOM - 30, plotH = Math.max(1, plotBottom - plotTop);
     var maxV = 0;
     series.forEach(function (se) { se.values.forEach(function (v) { if (v > maxV) maxV = v; }); });
     maxV = niceMax(maxV * 1.08);
@@ -750,7 +772,7 @@ var ENGINE = (function () {
       line(els, cx + axisW, gy, cx + cw, gy, T.cardLine, 0.75);
       text(els, cx, gy - 7, axisW - 6, 14, fmt(maxV * g / 4, ch.unit), { font: 'mono', weight: 400, max: 10, min: 10, maxLines: 1, color: T.ink, align: 'right' });
     }
-    var n = Math.max(cats.length, 1), slotW = (cw - axisW) / n, x0 = cx + axisW;
+    var n = Math.max(cats.length, 1), slotW = splitSpace(innerSize(cw, axisW), n, 0), x0 = cx + axisW;
     var hi = (ch.highlight === 0 || ch.highlight) ? Number(ch.highlight) : -1;
     if (ch.type === 'line') {
       series.forEach(function (se, k) {
@@ -804,8 +826,8 @@ var ENGINE = (function () {
     }
     var els = [];
     var top = header(els, s);
-    var gap = 14, avail = BOTTOM - top;
-    var pw = 190, cw = (CW - pw - 2 * gap) / 2;
+    var gap = 14, avail = Math.max(1, BOTTOM - top);
+    var pw = 190, cw = splitSpace(innerSize(CW, pw), 2, gap);
     var chal = asList(s.challenge), sol = asList(s.solution).slice(0, 5);
     // Challenge card
     rect(els, CX, top, cw, avail, T.bgLight);
@@ -822,10 +844,10 @@ var ENGINE = (function () {
     rect(els, hx, top, cw, 3, T.blue);
     icon(els, { icon: 'idea solution', material: '' }, hx + 16, top + 16, 20, false);
     text(els, hx + 44, top + 16, cw - 60, 20, s.solution_label || 'How 66degrees Helped', { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 1, color: T.ink });
-    var sTop = top + 50, sAvail = BOTTOM - sTop - 12, n = Math.max(sol.length, 1);
-    var sSize = uniformSize(sol, cw - 64, sAvail / n - 10, { weight: 400, max: TSZ.body, min: TSZ.body });
+    var sTop = top + 50, sAvail = Math.max(1, BOTTOM - sTop - 12), n = Math.max(sol.length, 1);
+    var sSize = uniformSize(sol, innerSize(cw, 64), innerSize(splitSpace(sAvail, n, 0), 10), { weight: 400, max: TSZ.body, min: TSZ.body });
     sSize = cSize = Math.min(sSize, cSize);   // one text size across the slide
-    var rowH = sAvail / n;
+    var rowH = splitSpace(sAvail, n, 0);
     sol.forEach(function (t, i) {
       var y = sTop + i * rowH;
       ellipse(els, hx + 16, y + 1, 20, 20, T.blue);
@@ -837,7 +859,7 @@ var ENGINE = (function () {
     var px = CX + CW - pw;
     rect(els, px, top, pw, avail, T.blue);
     text(els, px + 16, top + 16, pw - 32, 20, 'Business Impact', { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 1, color: T.white });
-    var res = arr(s.results, 3), rn = Math.max(res.length, 1), rH = (avail - 50) / rn;
+    var res = arr(s.results, 3), rn = Math.max(res.length, 1), rH = splitSpace(innerSize(avail, 50), rn, 0);
     res.forEach(function (r, i) {
       var y = top + 46 + i * rH;
       if (i > 0) line(els, px + 16, y - 6, px + pw - 16, y - 6, T.tints[2], 0.75);
@@ -908,7 +930,10 @@ var ENGINE = (function () {
   var V = {};
 
   function shape(els, kind, x, y, w, h, fill, ln) { var d = posSize(w, h); els.push({ t: 'shape', shape: kind, x: x, y: y, w: d.w, h: d.h, fill: fill, line: ln || null }); }
-  function ring(els, x, y, d, fill, color, width) { els.push({ t: 'ellipse', x: x, y: y, w: d, h: d, fill: fill, line: { color: color, width: width } }); }
+  function ring(els, x, y, d, fill, color, width) {
+    var dim = posSize(d, d);
+    els.push({ t: 'ellipse', x: x, y: y, w: dim.w, h: dim.h, fill: fill, line: { color: color, width: width } });
+  }
   function dashedLine(els, x1, y1, x2, y2, color, width, dash, gap) {
     var len = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
     if (len < 1) return;
@@ -952,7 +977,7 @@ var ENGINE = (function () {
     if (n < 2 || n > 9) return null;
     var els = [];
     text(els, X0, 24, 520, 30, s.title || 'Agenda', { weight: 600, max: 20, min: 16, maxLines: 1, color: T.title || T.ink });
-    var top = 80, listW = 480, rowH = Math.min(44, (332 - top) / n);
+    var top = 80, listW = 480, rowH = Math.min(44, splitSpace(332 - top, n, 0));
     var tSize = uniformSize(items.map(function (it) { return it.title; }), listW - 20, 18, { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 1 });
     var dSize = uniformSize(items.map(function (it) { return it.text; }), listW - 20, 14, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 1 });
     items.forEach(function (it, i) {
@@ -1014,11 +1039,11 @@ var ENGINE = (function () {
     var els = [];
     var top = header(els, s);
     var cols = n === 4 ? 2 : 3, rows = Math.ceil(n / cols), gap = 12;
-    var cw = (CW - gap * (cols - 1)) / cols, avail = (BOTTOM - top - gap * (rows - 1)) / rows;
-    var numW = 44, iw = cw - numW - 26;
+    var cw = splitSpace(CW, cols, gap), avail = splitSpace(BOTTOM - top, rows, gap);
+    var numW = 44, iw = innerSize(cw, numW + 26);
     var hSize = uniformSize(items.map(function (it) { return it.title; }), iw, 32, { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var hBlock = Math.max(linesBlock(items.map(function (it) { return it.title; }), iw, hSize, 600, 2), 18);
-    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, avail - hBlock - 50, { weight: 400, max: TSZ.body, min: TSZ.body });
+    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, innerSize(avail, hBlock + 50), { weight: 400, max: TSZ.body, min: TSZ.body });
     var need = 0;
     items.forEach(function (it) { need = Math.max(need, 16 + hBlock + 16 + textH(it.text, iw, bSize) + 18 + hlNeed(items, iw, bSize)); });
     var ch = boxH(need, avail);
@@ -1041,10 +1066,10 @@ var ENGINE = (function () {
     if (n < 2) return null;
     var els = [];
     var top = header(els, s);
-    var gap = 14, cw = (CW - gap * (n - 1)) / n, avail = BOTTOM - top, iw = cw - 32;
+    var gap = 14, cw = splitSpace(CW, n, gap), avail = Math.max(1, BOTTOM - top), iw = innerSize(cw, 32);
     var hSize = uniformSize(items.map(function (it) { return it.title; }), iw, 34, { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var hBlock = linesBlock(items.map(function (it) { return it.title; }), iw, hSize, 600, 2);
-    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, avail - hBlock - 80, { weight: 400, max: TSZ.body, min: TSZ.body });
+    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, innerSize(avail, hBlock + 80), { weight: 400, max: TSZ.body, min: TSZ.body });
     var need = 0;
     items.forEach(function (it) { need = Math.max(need, 52 + hBlock + 10 + textH(it.text, iw, bSize) + 20 + hlNeed(items, iw, bSize)); });
     var ch = boxH(need, avail);
@@ -1053,7 +1078,7 @@ var ENGINE = (function () {
       rect(els, x, top, cw, ch, T.bgLight);
       icon(els, autoIcon(it), x + 16, top + 18, 20, false);
       text(els, x + 16, top + 52, iw, hBlock, it.title, { weight: 600, max: hSize, min: hSize, maxLines: 2, color: T.ink });
-      cardBody(els, x + 16, top + 52 + hBlock + 10, iw, ch - hBlock - 72, it, bSize, items);
+      cardBody(els, x + 16, top + 52 + hBlock + 10, iw, innerSize(ch, hBlock + 72), it, bSize, items);
     });
     return { bg: T.white, els: els };
   };
@@ -1064,10 +1089,10 @@ var ENGINE = (function () {
     if (n < 3 || (n === 5 && maxLen(items, function (it) { return it.text; }) > 200)) return null;
     var els = [];
     var top = header(els, s);
-    var gap = 10, cw = (CW - gap * (n - 1)) / n, avail = BOTTOM - top, iw = cw - 28;
+    var gap = 10, cw = splitSpace(CW, n, gap), avail = Math.max(1, BOTTOM - top), iw = innerSize(cw, 28);
     var hSize = uniformSize(items.map(function (it) { return it.title; }), iw, 30, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var hBlock = linesBlock(items.map(function (it) { return it.title; }), iw, hSize, 700, 2);
-    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, avail - hBlock - 90, { weight: 400, max: TSZ.body, min: TSZ.body });
+    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, innerSize(avail, hBlock + 90), { weight: 400, max: TSZ.body, min: TSZ.body });
     var need = 0;
     items.forEach(function (it) { need = Math.max(need, 54 + hBlock + 18 + textH(it.text, iw, bSize) + 20 + hlNeed(items, iw, bSize)); });
     var ch = boxH(need, avail);
@@ -1089,10 +1114,10 @@ var ENGINE = (function () {
     if (n < 2) return null;
     var els = [];
     var top = header(els, s);
-    var pad = 14, gap = 14, cw = (CW - 2 * pad + 8 - gap * (n - 1)) / n, availC = BOTTOM - top - 2 * pad, iw = cw - 28;
+    var pad = 14, gap = 14, cw = splitSpace(innerSize(CW, 2 * pad - 8), n, gap), availC = Math.max(1, BOTTOM - top - 2 * pad), iw = innerSize(cw, 28);
     var hSize = uniformSize(items.map(function (it) { return it.title; }), iw, 30, { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var hBlock = linesBlock(items.map(function (it) { return it.title; }), iw, hSize, 600, 2);
-    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, availC - hBlock - 110, { weight: 400, max: TSZ.body, min: TSZ.body });
+    var bSize = uniformSize(items.map(function (it) { return it.text; }), iw, innerSize(availC, hBlock + 110), { weight: 400, max: TSZ.body, min: TSZ.body });
     var need = 0;
     items.forEach(function (it) { need = Math.max(need, 84 + hBlock + 18 + textH(it.text, iw, bSize) + 20 + hlNeed(items, iw, bSize)); });
     var ch = boxH(need, availC);
@@ -1122,7 +1147,7 @@ var ENGINE = (function () {
     if (n < 3) return null;
     var els = [];
     var top = header(els, s, { eyebrow: true });
-    var bandH = 58, colW = CW / n;
+    var bandH = 58, colW = splitSpace(CW, n, 0);
     rect(els, 0, top, W, bandH, T.bgLight);
     var ly = top + 34;
     line(els, CX, ly, CX + CW, ly, T.blue, 1);
@@ -1153,10 +1178,10 @@ var ENGINE = (function () {
     if (n < 3) return null;
     var els = [];
     var top = header(els, s, { eyebrow: true }) + 4;
-    var gap = 10, cw = (CW - gap * (n - 1)) / n, ch = BOTTOM - top;
-    var hSize = uniformSize(steps.map(function (st) { return st.title; }), cw - 16, 30, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
+    var gap = 10, cw = splitSpace(CW, n, gap), ch = Math.max(1, BOTTOM - top);
+    var hSize = uniformSize(steps.map(function (st) { return st.title; }), innerSize(cw, 16), 30, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var hasPill = steps.some(function (st) { return st.timing || st.label; });
-    var pbSize = uniformSize(steps.map(function (st) { return st.text; }), cw - 16, ch - 120, { weight: 400, max: TSZ.body, min: TSZ.body });
+    var pbSize = uniformSize(steps.map(function (st) { return st.text; }), innerSize(cw, 16), innerSize(ch, 120), { weight: 400, max: TSZ.body, min: TSZ.body });
     var needP = 0;
     steps.forEach(function (st) { needP = Math.max(needP, 46 + 2 * lineHeight('sans', hSize) + 8 + (hasPill ? 26 : 0) + textH(st.text, cw - 16, pbSize) + 20); });
     ch = boxH(needP, ch);
@@ -1184,7 +1209,7 @@ var ENGINE = (function () {
     if (n < 3) return null;
     var els = [];
     var top = header(els, s, { eyebrow: true }) + 4;
-    var gap = 8, cw = (CW - gap * (n - 1)) / n, arrowH = 34;
+    var gap = 8, cw = splitSpace(CW, n, gap), arrowH = 34;
     var hSize = uniformSize(steps.map(function (st) { return st.title; }), cw - 44, 26, { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var c3Avail = BOTTOM - (top + arrowH + 12);
     var c3Size = uniformSize(steps.map(function (st) { return st.text; }), cw - 24, c3Avail - 26, { weight: 400, max: TSZ.body, min: TSZ.body });
@@ -1208,7 +1233,7 @@ var ENGINE = (function () {
     if (n < 3) return null;
     var els = [];
     var top = header(els, s, { eyebrow: true });
-    var colW = CW / n, stepH = 24, rise = Math.min(n <= 3 ? 58 : 40, (BOTTOM - top - 150) / Math.max(n - 1, 1));
+    var colW = splitSpace(CW, n, 0), stepH = 24, rise = Math.min(n <= 3 ? 58 : 40, splitSpace(BOTTOM - top - 150, Math.max(n - 1, 1), 0));
     var baseY = top + 26 + rise * (n - 1);
     var colors = [T.tints[2], T.tints[1], T.blue, T.ramp[1], T.ramp[2]];
     var hSize = uniformSize(steps.map(function (st) { return st.title; }), colW - 20, 30, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
@@ -1235,7 +1260,7 @@ var ENGINE = (function () {
     if (n < 3 || maxLen(steps, function (st) { return st.text; }) > 170) return null;
     var els = [];
     var top = header(els, s, { eyebrow: true });
-    var colW = CW / n, d = Math.min(78, colW - 30), cy = top + (BOTTOM - top) / 2;
+    var colW = splitSpace(CW, n, 0), d = Math.min(78, innerSize(colW, 30)), cy = top + Math.max(1, BOTTOM - top) / 2;
     var textW = Math.min(colW * 1.7, 230);
     var hSize = uniformSize(steps.map(function (st) { return st.title; }), textW, 16, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 1 });
     steps.forEach(function (st, i) {
@@ -1269,7 +1294,7 @@ var ENGINE = (function () {
     if (n < 3) return null;
     var els = [];
     var top = header(els, s);
-    var colW = CW / n, bandH = 18, bandY = top + (BOTTOM - top) / 2 - bandH / 2;
+    var colW = splitSpace(CW, n, 0), bandH = 18, bandY = top + Math.max(1, BOTTOM - top) / 2 - bandH / 2;
     line(els, CX, bandY - 10, CX + CW, bandY - 10, T.blue, 0.75);
     line(els, CX + CW - 5, bandY - 13, CX + CW, bandY - 10, T.blue, 0.75);
     line(els, CX + CW - 5, bandY - 7, CX + CW, bandY - 10, T.blue, 0.75);
@@ -1303,7 +1328,7 @@ var ENGINE = (function () {
     if (n < 3) return null;
     var els = [];
     var top = header(els, s) + 4;
-    var colW = CW / n, tabW = Math.min(colW - 30, 110), tabH = 34;
+    var colW = splitSpace(CW, n, 0), tabW = Math.min(innerSize(colW, 30), 110), tabH = 34;
     var fills = [T.blue, T.tints[1], T.tints[2], T.tints[3], T.tints[4]];
     var hSize = uniformSize(ms.map(function (m) { return m.title; }), colW - 40, 30, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var t4Avail = BOTTOM - (top + tabH + 20);
@@ -1338,7 +1363,7 @@ var ENGINE = (function () {
     if (n < 2 || !items.some(function (it) { return it.text; })) return null;
     var els = [];
     var top = header(els, s);
-    var gap = 10, tw = (CW - gap * (n - 1)) / n, tileH = 86;
+    var gap = 10, tw = splitSpace(CW, n, gap), tileH = 86;
     var vSize = uniformSize(items.map(function (it) { return it.value; }), tw - 20, 40, { font: 'mono', weight: 600, max: 30, min: 16, maxLines: 1 });
     var lSize = uniformSize(items.map(function (it) { return it.label; }), tw - 24, 28, { weight: 500, max: 11, min: 10, maxLines: 2 });
     items.forEach(function (it, i) {
@@ -1352,8 +1377,8 @@ var ENGINE = (function () {
     rect(els, CX + c1, ty, CW - c1, 20, T.blue);
     text(els, CX + 8, ty + 3.5, c1 - 16, 13, 'Measure', { weight: 500, max: 10, min: 10, maxLines: 1, color: T.white });
     text(els, CX + c1 + 8, ty + 3.5, CW - c1 - 16, 13, 'Why it matters', { weight: 500, max: 10, min: 10, maxLines: 1, color: T.white });
-    var rSize = uniformSize(items.map(function (it) { return it.text; }), CW - c1 - 16, rowsAvail / n - 8, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3 });
-    var rowH = Math.min(rowsAvail / n, Math.max(26, linesBlock(items.map(function (it) { return it.text; }), CW - c1 - 16, rSize, 400, 3) + 12, rowsAvail * 0.75 / n));
+    var rSize = uniformSize(items.map(function (it) { return it.text; }), innerSize(CW, c1 + 16), innerSize(splitSpace(rowsAvail, n, 0), 8), { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3 });
+    var rowH = Math.min(splitSpace(rowsAvail, n, 0), Math.max(26, linesBlock(items.map(function (it) { return it.text; }), innerSize(CW, c1 + 16), rSize, 400, 3) + 12, splitSpace(rowsAvail * 0.75, n, 0)));
     items.forEach(function (it, i) {
       var y = ty + 22 + i * rowH;
       text(els, CX + 8, y, c1 - 16, rowH, it.label || '', { weight: 500, max: 10.5, min: 10, maxLines: 2, color: T.ink, valign: 'middle' });
@@ -1377,7 +1402,7 @@ var ENGINE = (function () {
     rect(els, CX, sy + 2, 4, st.height - 4, T.blue);
     text(els, CX + 20, sy, lw - 22, st.height, story, { weight: 500, max: st.size, min: st.size, color: T.ink });
     // Right: one row per stat - number | bold label + explanation
-    var px = CX + lw + 28, pw = CW - lw - 28, rowH = avail / n, numW = 112, tx = px + numW + 14, tw = pw - numW - 14;
+    var px = CX + lw + 28, pw = innerSize(CW, lw + 28), rowH = splitSpace(avail, n, 0), numW = 112, tx = px + numW + 14, tw = innerSize(pw, numW + 14);
     var vSize = uniformSize(items.map(function (it) { return it.value; }), numW, 40, { font: 'mono', weight: 600, max: 28, min: 16, maxLines: 1 });
     items.forEach(function (it, i) {
       var y = top + i * rowH;
@@ -1400,10 +1425,10 @@ var ENGINE = (function () {
     var res = arr(s.results, 3);
     if (!res.length) return null;
     var els = [];
-    var bandW = 196, bx = W - bandW, lw = bx - CX - 28, colW = (lw - 22) / 2;
+    var bandW = 196, bx = W - bandW, lw = innerSize(bx - CX, 28), colW = splitSpace(lw, 2, 22);
     var top = header(els, s, { maxW: bx - X0 - 24 });
     rect(els, bx, 0, bandW, H, T.blue);
-    var rowH = (H - 70) / res.length;
+    var rowH = splitSpace(innerSize(H, 70), Math.max(res.length, 1), 0);
     res.forEach(function (r, i) {
       var y = 44 + i * rowH;
       if (i > 0) line(els, bx + 20, y - 8, W - 20, y - 8, T.tints[2], 0.75);
@@ -1445,7 +1470,7 @@ var ENGINE = (function () {
     if (n < 2) return null;
     var els = [];
     var top = header(els, s) - 4;
-    var colW = CW / n, iw = colW - 18, bandH = 60, ly = top + 28;
+    var colW = splitSpace(CW, n, 0), iw = innerSize(colW, 18), bandH = 60, ly = top + 28;
     // Phase band: blue line through numbered dots, phase name above the line, offering below it
     rect(els, 0, top, W, bandH, T.bgLight);
     line(els, 0, ly, W, ly, T.blue, 1);
@@ -1492,10 +1517,10 @@ var ENGINE = (function () {
     if (!lp.length || !rp.length) return null;
     var els = [];
     var top = header(els, s);
-    var gap = 22, pw = (CW - gap) / 2, avail = BOTTOM - top, hh = 26;
+    var gap = 22, pw = splitSpace(CW, 2, gap), avail = Math.max(1, BOTTOM - top), hh = 26;
     var nRows = Math.max(lp.length, rp.length);
-    var pSize = uniformSize(lp.concat(rp), pw - 52, (avail - hh - 24) / nRows - 10, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3 });
-    var rowH = Math.min((avail - hh - 24) / nRows, linesBlock(lp.concat(rp), pw - 52, pSize, 400, 3) + 16);
+    var pSize = uniformSize(lp.concat(rp), innerSize(pw, 52), innerSize(splitSpace(innerSize(avail, hh + 24), nRows, 0), 10), { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3 });
+    var rowH = Math.min(splitSpace(innerSize(avail, hh + 24), nRows, 0), linesBlock(lp.concat(rp), innerSize(pw, 52), pSize, 400, 3) + 16);
     var ph = boxH(hh + 14 + rowH * nRows + 10, avail);
     [[left, lp, 'cross'], [right, rp, 'check']].forEach(function (c, k) {
       var x = CX + k * (pw + gap);
@@ -1685,5 +1710,5 @@ var ENGINE = (function () {
     agendaTextFits: function (t) { return wrap(String(t), AGENDA_DESC_W, 'sans', 400, 11).length <= 1; },
     agendaTextMaxChars: function (t) { return maxCharsFor(t, AGENDA_DESC_W, 11, 400); },
     render: render, measure: measure, variantsFor: function (type) { return (VARIANTS[type] || []).slice(); }, cleanSpec: cleanSpec, cleanText: cleanText, designMenu: designMenu, layouts: Object.keys(L), VARIANTS: VARIANTS, BRAND: BRAND, TOKENS: T, W: W, H: H, INSET: INSET,
-    textWidth: textWidth, wrap: wrap, fit: fit };
+    textWidth: textWidth, wrap: wrap, fit: fit, posSize: posSize, splitSpace: splitSpace, innerSize: innerSize, boxH: boxH };
 })();
