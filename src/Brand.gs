@@ -98,6 +98,66 @@ const TYPE_GUIDANCE = {
 var DEFAULT_VERTEX_LOCATION = 'us-central1';
 var DEFAULT_VERTEX_MODEL = 'gemini-2.5-flash';
 
+/* =========================
+   DRIVE ACCESS (Apps Script built-ins only)
+   Never call https://www.googleapis.com/drive via UrlFetchApp.
+   That path attempts to enable the Drive API on the script's GCP project at
+   runtime and fails for ordinary end users with:
+   "Permission denied while enabling APIs: drive for GCP project …"
+========================= */
+
+function isDriveApiEnablementError_(err) {
+  const msg = String(err && err.message ? err.message : err || '');
+  return /Permission denied while enabling APIs:\s*drive/i.test(msg) ||
+    (/enable(?:ing)? APIs/i.test(msg) && /\bdrive\b/i.test(msg));
+}
+
+function sanitizeDriveError_(err) {
+  const msg = String(err && err.message ? err.message : err || 'Drive unavailable');
+  if (isDriveApiEnablementError_(msg)) {
+    return 'Google Drive access is unavailable in this Apps Script project (Drive REST API was not used). Try again, or use a PDF / Google Docs link instead of an Office upload.';
+  }
+  return msg;
+}
+
+function emptyAssetIndex_() {
+  return { icons: {}, gcp: {}, images: [], logos: {}, patterns: {}, design: {}, doneFolders: [], savedAt: Date.now(), partial: true, filesSeen: 0 };
+}
+
+function driveFileById_(id) {
+  return DriveApp.getFileById(id);
+}
+
+function trashDriveFileById_(id) {
+  if (!id) return;
+  try { DriveApp.getFileById(id).setTrashed(true); } catch (e) {}
+}
+
+function exportDriveFileAsText_(file) {
+  const mime = file.getMimeType();
+  if (/^text\//.test(mime) || mime === 'application/json' || mime === 'application/xml') {
+    return file.getBlob().getDataAsString();
+  }
+  // Prefer SlidesApp for decks (already authorized via presentations scope).
+  if (mime === 'application/vnd.google-apps.presentation') {
+    try { return readDeckText(SlidesApp.openById(file.getId())); } catch (e0) {}
+  }
+  // DriveApp.getAs converts Google Docs/Sheets/Slides without Drive REST / API enablement.
+  if (mime === 'application/vnd.google-apps.spreadsheet') {
+    try { return file.getAs(MimeType.CSV).getDataAsString(); } catch (e1) {}
+  }
+  try { return file.getAs(MimeType.PLAIN_TEXT).getDataAsString(); } catch (e2) {}
+  throw new Error('Could not read text from "' + file.getName() + '" (' + mime + ').');
+}
+
+function exportDriveFileAsPdfBytes_(file) {
+  const mime = file.getMimeType();
+  if (mime === 'application/pdf') return file.getBlob().getBytes();
+  try { return file.getAs(MimeType.PDF).getBytes(); } catch (e) {
+    throw new Error('Could not export "' + file.getName() + '" as PDF: ' + sanitizeDriveError_(e));
+  }
+}
+
 function getScriptProperty_(key) {
   try { return PropertiesService.getScriptProperties().getProperty(key) || ''; }
   catch (e) { return ''; }
@@ -337,34 +397,23 @@ function readSourceDocument(url, sources) {
   if (!m) throw new Error('Could not read a Google Drive file ID from the source link.');
   const id = m[0];
   let file;
-  try { file = DriveApp.getFileById(id); } catch (e) {
-    throw new Error('Cannot open the source document. Check that you have access to it.');
+  try { file = driveFileById_(id); } catch (e) {
+    throw new Error('Cannot open the source document. ' + sanitizeDriveError_(e));
   }
   const mime = file.getMimeType();
 
-  const exportText = function (exportMime) {
-    const resp = UrlFetchApp.fetch(
-      'https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=' + encodeURIComponent(exportMime),
-      { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }
-    );
-    if (resp.getResponseCode() !== 200) throw new Error('Could not export the source document (HTTP ' + resp.getResponseCode() + ').');
-    return resp.getContentText();
-  };
-
-  let text = '';
-  if (mime === 'application/vnd.google-apps.document' || mime === 'application/vnd.google-apps.presentation') {
-    text = exportText('text/plain');
-  } else if (mime === 'application/vnd.google-apps.spreadsheet') {
-    text = exportText('text/csv');
-  } else if (mime === 'application/pdf') {
+  if (mime === 'application/pdf') {
     const blob = file.getBlob();
     if (blob.getBytes().length > 18 * 1024 * 1024) throw new Error('The source PDF is larger than 18 MB.');
     sources.pdfs.push(Utilities.base64Encode(blob.getBytes()));
     return;
-  } else if (/^text\//.test(mime)) {
-    text = file.getBlob().getDataAsString();
-  } else {
-    throw new Error('Source type not supported (' + mime + '). Use a Google Doc, Google Slides, Google Sheet, PDF or text file.');
+  }
+
+  let text = '';
+  try {
+    text = exportDriveFileAsText_(file);
+  } catch (e) {
+    throw new Error('Could not read the source document. Use a Google Doc, Google Slides, Google Sheet, PDF or text file. ' + sanitizeDriveError_(e));
   }
 
   sources.text += (sources.text ? '\n\n' : '') + 'SOURCE DOCUMENT "' + file.getName() + '":\n' + text.slice(0, CONFIG.maxSourceChars);
@@ -471,14 +520,14 @@ function buildBrandProfileFromFolder(apiKey) {
     const mime = f.getMimeType();
     try {
       let bytes = null;
-      if (mime === 'application/pdf') {
-        bytes = f.getBlob().getBytes();
-      } else if (mime === 'application/vnd.google-apps.document' || mime === 'application/vnd.google-apps.presentation') {
-        const resp = UrlFetchApp.fetch(
-          'https://www.googleapis.com/drive/v3/files/' + f.getId() + '/export?mimeType=application%2Fpdf',
-          { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }
-        );
-        if (resp.getResponseCode() === 200) bytes = resp.getBlob().getBytes();
+      try {
+        if (mime === 'application/pdf' ||
+            mime === 'application/vnd.google-apps.document' ||
+            mime === 'application/vnd.google-apps.presentation') {
+          bytes = exportDriveFileAsPdfBytes_(f);
+        }
+      } catch (ePdf) {
+        Logger.log('Guideline export skipped for ' + f.getName() + ': ' + ePdf.message);
       }
       if (bytes && bytes.length < 18 * 1024 * 1024) {
         parts.push({ inline_data: { mime_type: 'application/pdf', data: Utilities.base64Encode(bytes) } });
@@ -543,11 +592,18 @@ function getAssetIndex(forceRefresh) {
     // An older or partial index is still better than a slow rescan inside a generation run
     if (stored && stored.savedAt) return stored;
   }
-  const resume = forceRefresh && stored && stored.partial ? stored : null;
-  const index = buildAssetIndex(resume);
-  index.savedAt = Date.now();
-  writeStore('assets', index);
-  return index;
+  try {
+    const resume = forceRefresh && stored && stored.partial ? stored : null;
+    const index = buildAssetIndex(resume);
+    index.savedAt = Date.now();
+    writeStore('assets', index);
+    return index;
+  } catch (e) {
+    // Brand-folder scans must never abort Create/Research (e.g. Drive enablement errors).
+    Logger.log('Asset index unavailable: ' + e.message);
+    if (stored) return stored;
+    return emptyAssetIndex_();
+  }
 }
 
 // Walks the Drive brand folder for icons, logos, patterns and design images.

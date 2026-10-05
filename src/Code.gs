@@ -207,11 +207,15 @@ function generatePresentationRun_(data, run) {
   progressInit_(ctx, mode);
 
   ctx.apiKey = getApiKey();
-  ctx.brand = getBrandProfile(ctx.apiKey, false);
-  ctx.assets = getAssetIndex(false);
-  ctx.lib = loadReferenceLibrary(false);                  // 66degrees 2026 template reference library (null = not configured)
+  try { ctx.brand = getBrandProfile(ctx.apiKey, false); }
+  catch (e) { ctx.brand = JSON.parse(JSON.stringify(DEFAULT_BRAND)); ctx.log.push('Brand profile fallback: ' + sanitizeDriveError_(e)); }
+  try { ctx.assets = getAssetIndex(false); }
+  catch (e) { ctx.assets = emptyAssetIndex_(); ctx.log.push('Brand assets skipped: ' + sanitizeDriveError_(e)); }
+  try { ctx.lib = loadReferenceLibrary(false); }
+  catch (e) { ctx.lib = null; ctx.log.push('Reference library skipped: ' + sanitizeDriveError_(e)); }
   ctx.tokens = libraryTokens(ctx.lib);                    // template design tokens (template values even without the library)
-  ctx.refRuntime = ctx.lib ? loadReferenceRuntime(false) : null;
+  try { ctx.refRuntime = ctx.lib ? loadReferenceRuntime(false) : null; }
+  catch (e) { ctx.refRuntime = null; ctx.log.push('Reference harvest skipped: ' + sanitizeDriveError_(e)); }
   if (ctx.lib && !ctx.refRuntime) ctx.iconIssue = 'harvest data not loaded: ' + (REF_RUNTIME_ERROR || 'unknown reason') + '. Run Harvest reference deck again';
   const target = SlidesApp.getActivePresentation();
   if (!ctx.lib && CONFIG.useReferenceLibrary) ctx.log.push('Reference library not loaded — using built-in 66degrees template values.');
@@ -937,41 +941,23 @@ function beautifulExportPptx(presentationId) {
 }
 
 /* =========================
-   4. PPTX -> GOOGLE SLIDES (Drive API)
+   4. PPTX -> GOOGLE SLIDES
+   Office→Google conversion historically used Drive REST upload, which attempts to
+   enable the Drive API on the script GCP project at runtime. That fails for
+   ordinary end users. We never call drive.googleapis.com here.
 ========================= */
 
 function convertPptxToSlides(blob, name) {
-  const boundary = 'b66' + Utilities.getUuid();
-  const meta = JSON.stringify({ name: name, mimeType: 'application/vnd.google-apps.presentation' });
-  const head = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + meta + '\r\n' +
-    '--' + boundary + '\r\nContent-Type: ' + blob.getContentType() + '\r\n\r\n';
-  const tail = '\r\n--' + boundary + '--';
-  const payload = Utilities.newBlob(head).getBytes().concat(blob.getBytes()).concat(Utilities.newBlob(tail).getBytes());
-
-  const resp = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-    method: 'post',
-    contentType: 'multipart/related; boundary=' + boundary,
-    payload: payload,
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-    muteHttpExceptions: true
-  });
-  if (resp.getResponseCode() !== 200) {
-    throw new Error('Google Drive could not convert the deck (HTTP ' + resp.getResponseCode() + '). ' +
-      'Make sure the Google Drive API is enabled for this Apps Script project. ' + resp.getContentText().slice(0, 200));
-  }
-  return JSON.parse(resp.getContentText()).id;
+  // Optional Beautiful.ai / ShapeKit path only. DriveApp cannot convert PPTX→Slides.
+  // Callers must treat failure as soft (ShapeKit falls back to square boxes).
+  throw new Error(
+    'PowerPoint→Google Slides conversion is unavailable without Drive REST API calls. ' +
+    'Default Create draws directly into the open presentation and does not need this step.'
+  );
 }
 
 function trashDriveFile(id) {
-  try {
-    UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id, {
-      method: 'patch',
-      contentType: 'application/json',
-      payload: JSON.stringify({ trashed: true }),
-      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-      muteHttpExceptions: true
-    });
-  } catch (e) {}
+  trashDriveFileById_(id);
 }
 
 /* =========================
@@ -1407,42 +1393,24 @@ function readUploadedFile_(upload, sources) {
     addText(Utilities.newBlob(bytes).getDataAsString());
     return;
   }
-  const targets = {
-    doc: ['application/vnd.google-apps.document', 'text/plain'], docx: ['application/vnd.google-apps.document', 'text/plain'], odt: ['application/vnd.google-apps.document', 'text/plain'],
-    xls: ['application/vnd.google-apps.spreadsheet', 'text/csv'], xlsx: ['application/vnd.google-apps.spreadsheet', 'text/csv'], ods: ['application/vnd.google-apps.spreadsheet', 'text/csv'],
-    ppt: ['application/vnd.google-apps.presentation', 'text/plain'], pptx: ['application/vnd.google-apps.presentation', 'text/plain'], odp: ['application/vnd.google-apps.presentation', 'text/plain']
-  };
-  const t = targets[ext];
-  if (!t) throw new Error('This file type is not supported (' + name + '). Use PDF, Word, Excel, PowerPoint, CSV, text or an image.');
-  const blob = Utilities.newBlob(bytes, mime || 'application/octet-stream', name);
-  const id = convertUploadToGoogle_(blob, name + ' (source, temporary)', t[0]);
-  try {
-    let text = '';
-    // Drive export: text for documents and slides, CSV for spreadsheets (first sheet)
-    const resp = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=' + encodeURIComponent(t[1]),
-      { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
-    if (resp.getResponseCode() !== 200) throw new Error('Could not read the uploaded file (HTTP ' + resp.getResponseCode() + ').');
-    text = resp.getContentText();
-    addText(text);
-  } finally {
-    trashDriveFile(id);
+  if (/^(doc|docx|odt|xls|xlsx|ods|ppt|pptx|odp)$/.test(ext)) {
+    // Office→Google conversion previously used Drive REST upload/export, which
+    // triggers "Permission denied while enabling APIs: drive" for end users.
+    // Accept PDF / text / CSV / images / Google Workspace links instead.
+    throw new Error(
+      'Uploaded .' + ext + ' files are not converted via the Drive REST API. ' +
+      'Please upload a PDF, CSV, text or image, or paste a Google Docs / Sheets / Slides link.'
+    );
   }
+  throw new Error('This file type is not supported (' + name + '). Use PDF, CSV, text, an image, or a Google Docs/Sheets/Slides link.');
 }
 
-// Uploads a file to Drive converted to a Google Docs / Sheets / Slides file; returns its id
+// Kept for admin/Beautiful.ai callers that previously converted Office blobs.
+// Intentionally does not call drive.googleapis.com.
 function convertUploadToGoogle_(blob, name, targetMime) {
-  const boundary = 'b66' + Utilities.getUuid();
-  const meta = JSON.stringify({ name: name, mimeType: targetMime });
-  const head = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + meta + '\r\n' +
-    '--' + boundary + '\r\nContent-Type: ' + (blob.getContentType() || 'application/octet-stream') + '\r\n\r\n';
-  const tail = '\r\n--' + boundary + '--';
-  const payload = Utilities.newBlob(head).getBytes().concat(blob.getBytes()).concat(Utilities.newBlob(tail).getBytes());
-  const resp = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-    method: 'post', contentType: 'multipart/related; boundary=' + boundary, payload: payload,
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
-  });
-  if (resp.getResponseCode() !== 200) throw new Error('Google Drive could not read the uploaded file (HTTP ' + resp.getResponseCode() + ').');
-  return JSON.parse(resp.getContentText()).id;
+  throw new Error(
+    'convertUploadToGoogle_ is disabled: Drive REST conversion is not used (avoids runtime Drive API enablement).'
+  );
 }
 
 /* =========================

@@ -202,7 +202,13 @@ function gasStubs() {
     var PropertiesService = {getScriptProperties:function(){return {getProperty:function(){return '';},setProperty:function(){},deleteProperty:function(){}};}};
     var ScriptApp = {getOAuthToken:function(){return 'test-token';}};
     var UrlFetchApp = {fetch:function(){throw new Error('network disabled in validate');}};
-    var DriveApp = {getFileById:function(){throw new Error('drive disabled in validate');},getFolderById:function(){throw new Error('drive disabled in validate');}};
+    var DriveApp = {
+      getFileById:function(){throw new Error('drive disabled in validate');},
+      getFolderById:function(){throw new Error('drive disabled in validate');},
+      createFolder:function(){return {getId:function(){return 'folder';}};},
+      getRootFolder:function(){return {createFile:function(){return {getId:function(){return 'file';}};}}; }
+    };
+    var MimeType = {PLAIN_TEXT:'text/plain', CSV:'text/csv', PDF:'application/pdf', GOOGLE_SLIDES:'application/vnd.google-apps.presentation'};
     var console = {error:function(){},log:function(){}};
   `;
 }
@@ -364,6 +370,56 @@ function assertSamePresentation() {
   }
 }
 
+function assertNoDriveRestApi() {
+  const files = [
+    "src/Code.gs",
+    "src/Brand.gs",
+    "src/Reference.gs",
+    "src/Rebrand.gs",
+    "src/Engine.gs",
+    "src/EngineRenderer.gs",
+    "src/ShapeKit.gs",
+    "src/Generator.html"
+  ];
+  const banned = [
+    /googleapis\.com\/drive\//,
+    /googleapis\.com\/upload\/drive\//,
+    /\bDrive\.Files\b/,
+    /\bDrive\.About\b/,
+    /serviceusage\.googleapis\.com/
+  ];
+  let hits = 0;
+  for (const rel of files) {
+    const src = read(rel);
+    for (const re of banned) {
+      if (re.test(src)) {
+        fail(`${rel} contains forbidden Drive REST / Advanced Drive usage (${re})`);
+        hits += 1;
+      }
+    }
+  }
+  if (!hits) ok("No Drive REST / Advanced Drive / serviceusage enablement calls in source");
+
+  const brand = read("src/Brand.gs");
+  if (!/function exportDriveFileAsText_/.test(brand) || !/function isDriveApiEnablementError_/.test(brand)) {
+    fail("Brand.gs missing DriveApp-safe export/enablement helpers");
+  } else {
+    ok("Brand.gs has DriveApp-safe export helpers");
+  }
+  if (!/function trashDriveFileById_/.test(brand)) {
+    fail("Brand.gs missing trashDriveFileById_");
+  } else {
+    ok("Drive trash uses DriveApp helper");
+  }
+
+  const code = read("src/Code.gs");
+  if (/Make sure the Google Drive API is enabled/.test(code)) {
+    fail("Code.gs must not instruct end users to enable the Drive API");
+  } else {
+    ok("Code.gs does not ask users to enable the Drive API");
+  }
+}
+
 function assertShapeKitIntact() {
   const src = read("src/ShapeKit.gs");
   const m = src.match(/b64:\s*'([^']+)'/);
@@ -390,6 +446,7 @@ function main() {
   assertNoSecrets();
   assertShapeKitIntact();
   assertShapeTypeSafety();
+  assertNoDriveRestApi();
   assertSamePresentation();
   assertGasSyntaxAndSymbols();
 

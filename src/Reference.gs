@@ -703,44 +703,26 @@ function harvestIcons_(slide, lib, pageW) {
 function ensureThumbFolder_() {
   const props = PropertiesService.getScriptProperties();
   const existing = props.getProperty(REF.thumbFolderPropKey);
-  if (existing) return existing;
-  const resp = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({ name: '66degrees Reference Thumbnails', mimeType: 'application/vnd.google-apps.folder' }),
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-    muteHttpExceptions: true
-  });
-  if (resp.getResponseCode() !== 200) throw new Error('Could not create the thumbnail folder (HTTP ' + resp.getResponseCode() + ').');
-  const id = JSON.parse(resp.getContentText()).id;
+  if (existing) {
+    try { DriveApp.getFolderById(existing); return existing; } catch (e) {}
+  }
+  // DriveApp only — never UrlFetchApp to drive.googleapis.com (runtime API enablement).
+  const id = DriveApp.createFolder('66degrees Reference Thumbnails').getId();
   props.setProperty(REF.thumbFolderPropKey, id);
   return id;
 }
 
-// Creates (or overwrites, when existingId is given) a Drive file through the REST API (works with the drive.file scope)
+// Creates (or replaces) a Drive file with DriveApp. No Drive REST / no runtime API enablement.
 function uploadDriveFile_(blob, mime, parentId, existingId) {
-  const boundary = 'r66' + Utilities.getUuid();
-  const meta = existingId ? {} : { name: blob.getName(), mimeType: mime };
-  if (!existingId && parentId) meta.parents = [parentId];
-  const head = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n' +
-    '--' + boundary + '\r\nContent-Type: ' + mime + '\r\n\r\n';
-  const tail = '\r\n--' + boundary + '--';
-  const payload = Utilities.newBlob(head).getBytes().concat(blob.getBytes()).concat(Utilities.newBlob(tail).getBytes());
-  const url = existingId
-    ? 'https://www.googleapis.com/upload/drive/v3/files/' + existingId + '?uploadType=multipart&fields=id'
-    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id';
-  const resp = UrlFetchApp.fetch(url, {
-    method: existingId ? 'patch' : 'post',
-    contentType: 'multipart/related; boundary=' + boundary,
-    payload: payload,
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-    muteHttpExceptions: true
-  });
-  if (resp.getResponseCode() !== 200) {
-    if (existingId) return uploadDriveFile_(blob, mime, parentId, null);   // the old file may be gone: create a new one
-    throw new Error('Drive upload failed (HTTP ' + resp.getResponseCode() + '): ' + resp.getContentText().slice(0, 160));
+  const named = blob.setName(blob.getName() || 'upload.bin');
+  if (mime) {
+    try { named.setContentType(mime); } catch (e) {}
   }
-  return JSON.parse(resp.getContentText()).id;
+  if (existingId) {
+    try { DriveApp.getFileById(existingId).setTrashed(true); } catch (e) {}
+  }
+  const folder = parentId ? DriveApp.getFolderById(parentId) : DriveApp.getRootFolder();
+  return folder.createFile(named).getId();
 }
 
 /* =========================

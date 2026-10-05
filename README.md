@@ -74,9 +74,9 @@ Rebrand applies the brand pass to the open deck in place.
 
 1. `npm ci`
 2. `npm test`
-3. Apps Script project: enable **Google Drive API** and **Google Slides API**. Manifest already requests:
+3. Apps Script project: enable **Google Slides API** for the advanced Slides service. Drive access uses built-in `DriveApp` only — the add-on does **not** call `drive.googleapis.com` via `UrlFetchApp` (that path tries to enable the Drive API at runtime and fails for ordinary users). Manifest already requests:
    - `presentations`
-   - `drive` (write: uploads, shape kit, optional Beautiful.ai convert)
+   - `drive` (DriveApp file/folder access)
    - `script.external_request`
    - `script.container.ui`
    - `cloud-platform` (Vertex)
