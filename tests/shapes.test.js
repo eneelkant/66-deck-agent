@@ -112,3 +112,83 @@ test("normalizeShapeType never returns undefined or ROUNDED_RECTANGLE", () => {
     assert.match(String(resolved), /^[A-Z][A-Z0-9_]*$/);
   }
 });
+
+test("layoutDiagramPositions keeps node dimensions positive with many nodes", () => {
+  const { EngineRenderer } = loadRenderer();
+
+  const nodes = Array.from({ length: 20 }, (_, i) => ({
+    id: `node-${i}`,
+    label: `Node ${i}`,
+    type: "process"
+  }));
+
+  const positions = EngineRenderer.layoutDiagramPositions(
+    { direction: "LR", nodes },
+    { x: 20, y: 80, w: 680, h: 260 }
+  );
+
+  for (const node of nodes) {
+    const pos = positions[node.id];
+    assert.ok(pos, `missing position for ${node.id}`);
+    assert.ok(pos.w > 0, `non-positive width for ${node.id}: ${pos.w}`);
+    assert.ok(pos.h > 0, `non-positive height for ${node.id}: ${pos.h}`);
+  }
+});
+
+test("layoutDiagramPositions keeps node dimensions positive for TB diagrams", () => {
+  const { EngineRenderer } = loadRenderer();
+
+  const nodes = Array.from({ length: 20 }, (_, i) => ({
+    id: `node-${i}`,
+    label: `Node ${i}`,
+    type: "process"
+  }));
+
+  const positions = EngineRenderer.layoutDiagramPositions(
+    { direction: "TB", nodes },
+    { x: 20, y: 80, w: 680, h: 260 }
+  );
+
+  for (const node of nodes) {
+    const pos = positions[node.id];
+    assert.ok(pos, `missing position for ${node.id}`);
+    assert.ok(pos.w > 0, `non-positive width for ${node.id}: ${pos.w}`);
+    assert.ok(pos.h > 0, `non-positive height for ${node.id}: ${pos.h}`);
+  }
+});
+
+test("layoutDiagramPositions stays positive with overflow counts and missing area", () => {
+  const { EngineRenderer } = loadRenderer();
+  const nodes = Array.from({ length: 40 }, (_, i) => ({ id: `n${i}` }));
+
+  const crowded = EngineRenderer.layoutDiagramPositions(
+    { direction: "LR", nodes },
+    { x: 0, y: 0, w: 100, h: 40 }
+  );
+  for (const node of nodes) {
+    assert.ok(crowded[node.id].w > 0);
+    assert.ok(crowded[node.id].h > 0);
+  }
+
+  const emptyArea = EngineRenderer.layoutDiagramPositions(
+    { direction: "TB", nodes: [{ id: "only" }] },
+    { x: 0, y: 0, w: 0, h: 0 }
+  );
+  assert.ok(emptyArea.only.w > 0);
+  assert.ok(emptyArea.only.h > 0);
+});
+
+test("safeBox never returns zero or negative width/height", () => {
+  const { EngineRenderer } = loadRenderer();
+  const samples = [
+    [0, 0, 0, 0],
+    [10, 10, -40, -12],
+    [0, 0, NaN, undefined],
+    [0, 0, null, ""]
+  ];
+  for (const [x, y, w, h] of samples) {
+    const box = EngineRenderer.safeBox(x, y, w, h);
+    assert.ok(box.w > 0, `width ${box.w} for ${w}`);
+    assert.ok(box.h > 0, `height ${box.h} for ${h}`);
+  }
+});

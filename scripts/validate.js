@@ -269,6 +269,17 @@ function assertShapeTypeSafety() {
   } else {
     ok("EngineRenderer has shape-type normalization helpers");
   }
+  if (!/function safeBox_/.test(src)) {
+    fail("EngineRenderer missing safeBox_ dimension helper");
+  } else {
+    ok("EngineRenderer has safeBox_ dimension helper");
+  }
+  const textBoxCalls = src.match(/\.insertTextBox\s*\(/g) || [];
+  if (textBoxCalls.length !== 1) {
+    fail(`Expected exactly one insertTextBox call (addTextBox), found ${textBoxCalls.length}`);
+  } else {
+    ok("All text box inserts go through addTextBox");
+  }
 }
 
 function main() {
