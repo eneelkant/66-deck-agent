@@ -39,6 +39,47 @@ jobs:
               json.dump(data, f, indent=2)
               f.write("\n")
           PY
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.error, urllib.request
+          clasprc_path = os.path.expanduser("~/.clasprc.json")
+          with open(clasprc_path, "r", encoding="utf-8") as f:
+              clasprc = json.load(f)
+          token = None
+          if isinstance(clasprc.get("token"), dict):
+              token = clasprc["token"].get("access_token")
+          tokens = clasprc.get("tokens")
+          if not token and isinstance(tokens, dict):
+              default = tokens.get("default") or next(iter(tokens.values()), None)
+              if isinstance(default, dict):
+                  token = default.get("access_token")
+          script_id = os.environ["SCRIPT_ID"]
+          if not token:
+              raise SystemExit("Could not read clasp access token")
+          def get(url):
+              req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
+              with urllib.request.urlopen(req) as resp:
+                  return json.load(resp)
+          try:
+              meta = get("https://script.googleapis.com/v1/projects/" + script_id)
+              print("PROJECT_TITLE=" + str(meta.get("title")))
+              print("PROJECT_UPDATE_TIME=" + str(meta.get("updateTime")))
+              print("PROJECT_CREATE_TIME=" + str(meta.get("createTime")))
+          except urllib.error.HTTPError as e:
+              print("PROJECT_META_HTTP=" + str(e.code))
+          try:
+              content = get("https://script.googleapis.com/v1/projects/" + script_id + "/content")
+              files = content.get("files") or []
+              print("REMOTE_FILE_COUNT=" + str(len(files)))
+              for item in files:
+                  name = item.get("name")
+                  typ = item.get("type")
+                  source = item.get("source") or ""
+                  digest = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
+                  print("REMOTE_FILE name=%s type=%s bytes=%s sha256_16=%s" % (name, typ, len(source.encode("utf-8")), digest))
+          except urllib.error.HTTPError as e:
+              print("PROJECT_CONTENT_HTTP=" + str(e.code))
+          PY
+          rm -f src/*.gs src/*.js src/*.html src/appsscript.json
           clasp pull --force
           python3 - <<'PY'
           import json
