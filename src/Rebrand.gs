@@ -22,7 +22,7 @@ const ALWAYS_ENGINE = ['cover', 'agenda', 'section', 'chart', 'closing'];
 // layouts match the template references (66D_LAYOUT_COMPARISON_002, 66D_LAYOUT_TIMELINE_001), so always redraw them.
 // stats: KPI numbers must show exactly the planned values, so they are always drawn from the plan.
 // cards / process: drawn in the template design chosen for the slide (rotates between decks).
-const CREATE_ENGINE = ['comparison', 'timeline', 'next_steps', 'stats', 'cards', 'process', 'case_study'];
+const CREATE_ENGINE = ['comparison', 'timeline', 'next_steps', 'stats', 'cards', 'process', 'case_study', 'diagram', 'table', 'bullets', 'statement'];
 // Design tokens — defaults are the 2026 template values; applyReferenceTokens_() refreshes them from the library.
 const IPAY = {
   // 66degrees Brand Guidelines 2026 colors (applyReferenceTokens_() sets the same values from Reference.gs)

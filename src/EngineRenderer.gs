@@ -214,6 +214,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   const s = safeSize_(pageW, ENGINE.W) / ENGINE.W;
 
   slide.getPageElements().forEach(function (el) { try { el.remove(); } catch (e) {} });
+  ctx.slideIcons = {};
   const bgId = out.bgImage ? engineAssetId(out.bgImage, ctx) : null;
   if (bgId) {
     try { slide.getBackground().setPictureFill(getBlobCached(bgId, ctx)); } catch (e) { slide.getBackground().setSolidFill(out.bg); }
@@ -244,6 +245,10 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
           sh.getBorder().setTransparent();
         }
         overlayTextIfNeeded_(slide, sh, e, box);
+      } else if (e.t === 'arc') {
+        if (typeof insertArc_ === 'function') {
+          insertArc_(slide, e.kind, finiteNumber_(e.cx, 0) * s, finiteNumber_(e.cy, 0) * s, finiteNumber_(e.r, 1) * s, e.sweep, e.start || 0, e.fill, ctx);
+        }
       } else if (e.t === 'shape') {
         const box = safeBox_(e.x * s, e.y * s, e.w * s, e.h * s);
         const sh = insertShapeSafe_(slide, e.shape, box.x, box.y, box.w, box.h);
@@ -343,11 +348,18 @@ function drawEngineIcon(slide, e, s, ctx) {
     if (step === 'library' && ctx.lib) {
       const tags = [];
       [e.name].concat(e.alt || []).forEach(function (n) { const t = libraryIconByName(ctx.lib, n); if (t && tags.indexOf(t) === -1) tags.push(t); });
-      const guess = pickLibraryIcon(ctx.lib, [e.name, e.material].filter(Boolean).join(' '));
+      const used = ctx.slideIcons || (ctx.slideIcons = {});
+      const guess = pickLibraryIcon(ctx.lib, [e.name, e.material].filter(Boolean).join(' '), used);
       if (guess && tags.indexOf(guess) === -1) tags.push(guess);
+      GENERIC_ICON_WORDS_.forEach(function (w) {
+        const g = pickLibraryIcon(ctx.lib, w, used);
+        if (g && tags.indexOf(g) === -1) tags.push(g);
+      });
       for (let j = 0; j < tags.length; j++) {
+        if (used[tags[j]]) continue;
         if (insertLibraryIcon(slide, tags[j], e.x * s, e.y * s, size, e.dark, ctx, e.color || null)) {
           ctx.libraryIconsPlaced = (ctx.libraryIconsPlaced || 0) + 1;
+          used[tags[j]] = true;
           return;
         }
       }
@@ -358,6 +370,22 @@ function drawEngineIcon(slide, e, s, ctx) {
         slide.insertImage(getBlobCached(id, ctx), e.x * s, e.y * s, size, size);
         return;
       }
+    } else if (step === 'material' && anyLibraryIcon_(slide, e, s, size, ctx)) {
+      return;
+    } else if (step === 'material' && e.fallback) {
+      const bw = size * 2.2;
+      const tb = insertTextBoxSafe_(slide, String(e.fallback), e.x * s + size / 2 - bw / 2, e.y * s, bw, size);
+      try { tb.getAutofit().disableAutofit(); } catch (err) {}
+      try { tb.setLeft(e.x * s + size / 2 - bw / 2); } catch (err) {}
+      if (hasTextFrame_(tb)) {
+        const tr = tb.getText();
+        applyTextStyleSafe_(tr, function (ts) {
+          ts.setFontFamily(ctx.brand.fonts.mono.slides).setFontSize(Math.max(9, Math.min(14, Math.round(size * 0.45)))).setForegroundColor(e.dark ? ENGINE.TOKENS.white : ENGINE.TOKENS.blue);
+        });
+        try { tr.getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER); } catch (err) {}
+        try { tb.setContentAlignment(SlidesApp.ContentAlignment.MIDDLE); } catch (err) {}
+      }
+      return;
     } else if (step === 'material') {
       const ringEl = insertShapeSafe_(slide, 'ELLIPSE', e.x * s + size * 0.2, e.y * s + size * 0.2, size * 0.6, size * 0.6);
       ringEl.getFill().setTransparent();
@@ -367,6 +395,27 @@ function drawEngineIcon(slide, e, s, ctx) {
       return;
     }
   }
+}
+
+var GENERIC_ICON_WORDS_ = ['idea', 'target', 'growth', 'team', 'check', 'chart', 'cloud', 'settings', 'search', 'star', 'rocket', 'shield'];
+
+function anyLibraryIcon_(slide, e, s, size, ctx) {
+  const rt = ctx.refRuntime;
+  if (!ctx.lib || !rt || !rt.icons) return false;
+  const used = ctx.slideIcons || (ctx.slideIcons = {});
+  const tags = Object.keys(rt.icons).filter(function (t) { return !used[t]; }).sort();
+  if (!tags.length) return false;
+  let h = 0;
+  String(e.name || e.fallback || '').split('').forEach(function (c) { h = (h * 31 + c.charCodeAt(0)) % 100003; });
+  for (let k = 0; k < Math.min(4, tags.length); k++) {
+    const tag = tags[(h + k * 7) % tags.length];
+    if (insertLibraryIcon(slide, tag, e.x * s, e.y * s, size, e.dark, ctx, e.color || null)) {
+      used[tag] = true;
+      ctx.libraryIconsPlaced = (ctx.libraryIconsPlaced || 0) + 1;
+      return true;
+    }
+  }
+  return false;
 }
 
 var EngineRenderer = {
