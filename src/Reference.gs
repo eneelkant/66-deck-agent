@@ -10,7 +10,7 @@
  * Everything here degrades gracefully: when the library can't be loaded, the pipeline runs exactly as before.
  */
 
-var REF = {
+const REF = {
   cacheKey: 'ref_lib_v1',
   runtimeCacheKey: 'ref_runtime_v1',
   runtimePropKey: 'REF_RUNTIME_FILE_ID',
@@ -267,7 +267,9 @@ function selectReferenceForSpec(lib, spec, usage) {
 
   // Types the engine can draw in several template designs: rotate through the designs that fit the
   // item count, continuing from where the previous deck stopped, and never repeat the previous slide's design.
-  const designs = drawableDesigns_(type, itemCount_(spec), spec);
+  const designs = drawableDesigns_(type, itemCount_(spec), spec).filter(function (d) {
+    return d && /^66D_/.test(d.tag);
+  });
   if (designs.length) {
     const rot = loadRotation_(usage);
     const last = usage.lastByType ? usage.lastByType[type] : null;
@@ -338,7 +340,7 @@ function referenceForTag_(lib, tag) {
 function drawableDesigns_(type, n, spec) {
   const all = ((typeof ENGINE !== 'undefined' && ENGINE.VARIANTS && ENGINE.VARIANTS[type]) || []).filter(function (v) {
     // designs that need extra fields (e.g. the client journey needs spec.cases) are only offered when the slide has them
-    return !v.needs || (spec && Array.isArray(spec[v.needs]) && spec[v.needs].length >= 2);
+    return !v.needs || designNeedsMet_(v.needs, spec);
   });
   const fits = all.filter(function (v) { return !n || (n >= v.min && n <= v.max); });
   return fits.length ? fits : all.slice(0, 1);
@@ -461,10 +463,11 @@ function libraryIconByName(lib, name) {
 }
 
 // Best library icon for free text (item title, Gemini icon name, Material name). Returns tag or null.
-function pickLibraryIcon(lib, text) {
+function pickLibraryIcon(lib, text, avoid) {
   if (!lib || !text) return null;
+  avoid = avoid || {};
   const direct = libraryIconByName(lib, text);
-  if (direct) return direct;
+  if (direct && !avoid[direct]) return direct;
   const words = tokenize_(String(text).replace(/[_-]/g, ' '));
   if (!words.length) return null;
   const wanted = {};
@@ -479,7 +482,7 @@ function pickLibraryIcon(lib, text) {
     let score = 0;
     parts.forEach(function (p, k) { if (wanted[p]) score += wanted[p] * (k === 0 ? 1.2 : 1); });
     (ic.keywords || []).forEach(function (kw) { if (wanted[kw.toLowerCase()]) score += 0.5; });
-    if (!score) return;
+    if (!score || avoid[ic.tag]) return;                             // icons already on this slide are skipped
     if (parts.length === 1 && wanted[ic.name]) score += 2;           // the plain icon beats compound variants
     score += (familyBoost[ic.family] || 0) * 0.3 - parts.length * 0.3;
     if (!best || score > best.score) best = { tag: ic.tag, score: score };
@@ -506,14 +509,14 @@ function openReferenceDeck_(ctx) {
 function insertLibraryIcon(slide, iconTag, left, top, size, onDark, ctx, color) {
   const rt = ctx.refRuntime;
   ctx.iconAttempts = (ctx.iconAttempts || 0) + 1;
-  if (!rt || !rt.icons || !rt.iconSlideId) { ctx.iconIssue = ctx.iconIssue || 'harvest data not loaded'; return false; }
+  if (!rt || !rt.icons || !rt.iconSlideId) { ctx.iconIssue = ctx.iconIssue || 'harvest data not loaded (run Harvest reference deck again)'; return false; }
   if (!iconTag || !rt.icons[iconTag]) return false;
   const deck = openReferenceDeck_(ctx);
   if (!deck) return false;
   const inserted = [];   // PageElements on the target slide (for cleanup)
   try {
     const src = deck.getSlideById(rt.iconSlideId);
-    if (!src) { ctx.iconIssue = ctx.iconIssue || 'icon slide not found in the reference deck'; return false; }
+    if (!src) { ctx.iconIssue = ctx.iconIssue || 'icon slide not found in the reference deck (run Harvest reference deck again)'; return false; }
     rt.icons[iconTag].forEach(function (objectId) {
       const el = src.getPageElementById(objectId);
       if (!el) return;
@@ -531,10 +534,9 @@ function insertLibraryIcon(slide, iconTag, left, top, size, onDark, ctx, color) 
     const iconEl = slide.getPageElementById(icon.getObjectId());
     if (inserted.length > 1) { inserted.length = 0; inserted.push(iconEl); }
     recolorElement_(iconEl, color || (onDark ? IPAY.white : IPAY.blue));
-    const w = Math.max(0.01, Number(iconEl.getWidth()) || 0.01);
-    const h = Math.max(0.01, Number(iconEl.getHeight()) || 0.01);
-    const k = Math.max(0.01, Number(size) || 1) / Math.max(w, h);
-    iconEl.setWidth(Math.max(1, w * k)).setHeight(Math.max(1, h * k));
+    const w = iconEl.getWidth(), h = iconEl.getHeight();
+    const k = size / Math.max(w, h, 0.01);
+    iconEl.setWidth(w * k).setHeight(h * k);
     iconEl.setLeft(left + (size - w * k) / 2).setTop(top + (size - h * k) / 2);
     try { iconEl.setTitle('66D icon ' + iconTag); } catch (e) {}
     return true;
@@ -655,7 +657,7 @@ function harvestReferenceDeck() {
 
   const msg = done
     ? 'Reference deck harvested: ' + Object.keys(rt.slides).length + ' slides, ' + rt.iconCount + ' icons, ' + Object.keys(rt.thumbs).length + ' thumbnails.'
-    : 'Harvest paused at thumbnail ' + state.nextThumb + ' of ' + targets.length + ' (time limit). Run harvestReferenceDeck again to continue.';
+    : 'Harvest paused at thumbnail ' + state.nextThumb + ' of ' + targets.length + ' (time limit). Run "Harvest reference deck" again to continue.';
   try { SlidesApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
   return msg;
 }
@@ -665,11 +667,7 @@ function harvestIcons_(slide, lib, pageW) {
   const els = slide.getPageElements().filter(function (el) {
     try {
       if (el.getWidth() > pageW * 0.2) return false;                                   // background / title
-      if (el.getPageElementType() === SlidesApp.PageElementType.SHAPE) {
-        const sh = el.asShape();
-        if (typeof hasTextFrame_ === 'function' && !hasTextFrame_(sh)) return true;
-        if (sh.getText().asString().trim()) return false;
-      }
+      if (el.getPageElementType() === SlidesApp.PageElementType.SHAPE && el.asShape().getText().asString().trim()) return false;
       return true;
     } catch (e) { return false; }
   }).map(function (el) {
@@ -718,6 +716,7 @@ function ensureThumbFolder_() {
 }
 
 // Creates (or replaces) a Drive file with DriveApp. No Drive REST / no runtime API enablement.
+
 function uploadDriveFile_(blob, mime, parentId, existingId) {
   const named = blob.setName(blob.getName() || 'upload.bin');
   if (mime) {
@@ -739,7 +738,7 @@ function referenceStatus() {
   const rt = loadReferenceRuntime(true);
   const msg = 'Reference library: ' + (lib ? lib.slides.length + ' slides, ' + lib.icons.length + ' icons, ' + lib.companyFacts.length + ' facts' : 'NOT LOADED (check CONFIG.refLibraryFileId)') + '\n' +
     'Reference deck: ' + (CONFIG.referenceDeckId ? 'set' : 'NOT SET (CONFIG.referenceDeckId)') + '\n' +
-    'Harvest: ' + (rt ? Object.keys(rt.slides || {}).length + ' slides, ' + Object.keys(rt.icons || {}).length + ' icons, ' + Object.keys(rt.thumbs || {}).length + ' thumbnails (' + rt.harvestedAt + ')' : 'not run yet');
+    'Harvest: ' + (rt ? Object.keys(rt.slides || {}).length + ' slides, ' + Object.keys(rt.icons || {}).length + ' icons, ' + Object.keys(rt.thumbs || {}).length + ' thumbnails (' + rt.harvestedAt + ')' : 'not run yet — use "Harvest reference deck"');
   try { SlidesApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
   return msg;
 }
@@ -772,13 +771,9 @@ function iconCheck() {
     const k = i % perSlide, x = 14 + (k % cols) * 70, y = 12 + Math.floor(k / cols) * 98;
     const ic = icons[i];
     const ok = insertLibraryIcon(slide, ic.tag, x + 18, y, 30, false, ctx, IPAY.blue);
-    const box = (typeof insertTextBoxSafe_ === 'function')
-      ? insertTextBoxSafe_(slide, ic.name + (ok ? '' : ' (missing)'), x, y + 36, 66, 40)
-      : slide.insertTextBox(ic.name + (ok ? '' : ' (missing)'), x, y + 36, 66, 40);
-    if (typeof hasTextFrame_ !== 'function' || hasTextFrame_(box)) {
-      box.getText().getTextStyle().setFontSize(7).setForegroundColor(ok ? '#040A1B' : '#0052FF');
-      box.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
-    }
+    const box = slide.insertTextBox(ic.name + (ok ? '' : ' (missing)'), x, y + 36, 66, 40);
+    box.getText().getTextStyle().setFontSize(7).setForegroundColor(ok ? '#040A1B' : '#0052FF');
+    box.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
     state.next++;
   }
   const done = state.next >= icons.length;
@@ -787,3 +782,35 @@ function iconCheck() {
     ? 'Done: all ' + icons.length + ' icons are in the presentation "66degrees icon check" in your Drive. Each icon should match the name under it.'
     : state.next + ' of ' + icons.length + ' icons drawn. Run Icon check again to continue.', ui.ButtonSet.OK);
 }
+
+// Extra content a design needs: e.g. the client journey needs spec.cases, some card designs need fields on every item
+function designNeedsMet_(need, spec) {
+  if (!spec) return false;
+  const items = Array.isArray(spec.items) ? spec.items.filter(Boolean) : [];
+  const every = function (f) { return items.length >= 2 && items.every(f); };
+  switch (need) {
+    case 'itemPoints': return every(function (it) { return Array.isArray(it.points) && it.points.length >= 2; });
+    case 'itemChallenge': return every(function (it) { return it.challenge && it.benefit; });
+    case 'itemValue': return every(function (it) { return it.value; });
+    case 'rows': return Array.isArray(spec.rows) && spec.rows.length >= 2;
+    case 'options': return Array.isArray(spec.options) && spec.options.length >= 2;
+    case 'text': return typeof spec.text === 'string' && spec.text.length > 30;
+    case 'statement': return typeof spec.statement === 'string' && spec.statement.length > 10;
+    case 'callout': return !!(spec.callout && (spec.callout.text || spec.callout.title));
+    case 'noPoints': return !(Array.isArray(spec.points) && spec.points.length);
+    case 'itemLabel': return every(function (it) { return it.label; });
+    case 'stacked': return !!(spec.chart && String(spec.chart.type || '').toLowerCase() === 'stacked' && Array.isArray(spec.chart.series) && spec.chart.series.length >= 2);
+    case 'layers': return Array.isArray(spec.layers) && spec.layers.length >= 2;
+    case 'tasks': return Array.isArray(spec.tasks) && spec.tasks.length >= 2 && Array.isArray(spec.periods) && spec.periods.length >= 3;
+    case 'workstreams': return Array.isArray(spec.workstreams) && spec.workstreams.length >= 2 && Array.isArray(spec.periods) && spec.periods.length >= 3;
+    case 'risks': return Array.isArray(spec.risks) && spec.risks.length >= 2;
+    case 'rag': return !!(spec.rag && typeof spec.rag === 'object');
+    case 'prices': return Array.isArray(spec.prices) && spec.prices.length >= 2;
+    case 'pricingOptions': return Array.isArray(spec.pricingOptions) && spec.pricingOptions.length === 2;
+    case 'teams': return Array.isArray(spec.teams) && spec.teams.length === 2;
+    case 'org': return !!(spec.org && Array.isArray(spec.org.reports) && spec.org.reports.length >= 2);
+    case 'tabs': return Array.isArray(spec.tabs) && spec.tabs.length >= 2 && Array.isArray(spec.epics) && spec.epics.length >= 1;
+    default: return Array.isArray(spec[need]) && spec[need].length >= 2;
+  }
+}
+
