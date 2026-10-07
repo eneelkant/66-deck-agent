@@ -4,8 +4,8 @@
  *
  * Data (see CONFIG in Code.gs):
  *   refLibraryFileId  -> 66d_reference_library.json (full model, uploaded to Drive)
- *   referenceDeckId   -> the template imported as native Google Slides (icons + thumbnails)
- *   Runtime file      -> 66d_reference_runtime.json, CREATED by harvestReferenceDeck() (objectIds + thumbnail ids)
+ *   referenceDeckId   -> the template imported as native Google Slides (icons + thumbnails) — never the working deck
+ *   Runtime file      -> 66d_reference_runtime.json, CREATED by harvestReferenceDeck() in the brand folder (objectIds + thumbnail ids)
  *
  * Everything here degrades gracefully: when the library can't be loaded, the pipeline runs exactly as before.
  */
@@ -101,6 +101,7 @@ function loadReferenceRuntime(force) {
   }
   try {
     const rt = JSON.parse(DriveApp.getFileById(id).getBlob().getDataAsString());
+    // A harvest made from another template copy (e.g. after the deck/script was copied) has the wrong objectIds
     if (rt && rt.deckId && rt.deckId !== CONFIG.referenceDeckId) {
       REF_RUNTIME_ERROR = 'harvest is from a different template deck; run "Set up template (harvest)"';
       return null;
@@ -513,14 +514,14 @@ function openReferenceDeck_(ctx) {
 function insertLibraryIcon(slide, iconTag, left, top, size, onDark, ctx, color) {
   const rt = ctx.refRuntime;
   ctx.iconAttempts = (ctx.iconAttempts || 0) + 1;
-  if (!rt || !rt.icons || !rt.iconSlideId) { ctx.iconIssue = ctx.iconIssue || 'harvest data not loaded (run Harvest reference deck again)'; return false; }
+  if (!rt || !rt.icons || !rt.iconSlideId) { ctx.iconIssue = ctx.iconIssue || 'harvest data not loaded (run "Set up template (harvest)")'; return false; }
   if (!iconTag || !rt.icons[iconTag]) return false;
   const deck = openReferenceDeck_(ctx);
   if (!deck) return false;
   const inserted = [];   // PageElements on the target slide (for cleanup)
   try {
     const src = deck.getSlideById(rt.iconSlideId);
-    if (!src) { ctx.iconIssue = ctx.iconIssue || 'icon slide not found in the reference deck (run Harvest reference deck again)'; return false; }
+    if (!src) { ctx.iconIssue = ctx.iconIssue || 'icon slide not found in the reference deck (run "Set up template (harvest)" again)'; return false; }
     rt.icons[iconTag].forEach(function (objectId) {
       const el = src.getPageElementById(objectId);
       if (!el) return;
@@ -615,7 +616,7 @@ function harvestReferenceDeck() {
 
   let state = null;
   try { state = JSON.parse(props.getProperty(REF.harvestStateKey) || 'null'); } catch (e) {}
-  if (state && state.runtime && state.runtime.deckId !== CONFIG.referenceDeckId) state = null;
+  if (state && state.runtime && state.runtime.deckId !== CONFIG.referenceDeckId) state = null;   // paused harvest of another template
   if (!state) state = { runtime: { deckId: CONFIG.referenceDeckId, slides: {}, icons: {}, thumbs: {}, iconSlideId: null }, nextThumb: 0 };
   const rt = state.runtime;
 
@@ -653,7 +654,8 @@ function harvestReferenceDeck() {
   if (done) {
     rt.deckId = CONFIG.referenceDeckId;
     const json = Utilities.newBlob(JSON.stringify(rt), 'application/json', '66d_reference_runtime.json');
-    const id = uploadDriveFile_(json, 'application/json', null, props.getProperty(REF.runtimePropKey));
+    // Saved next to the brand assets (66degrees shared drive) so every user of the add-on can read it
+    const id = uploadDriveFile_(json, 'application/json', sharedAssetFolderId_(), props.getProperty(REF.runtimePropKey));
     props.setProperty(REF.runtimePropKey, id);
     props.deleteProperty(REF.harvestStateKey);
     clearCache(REF.runtimeCacheKey);
@@ -663,7 +665,7 @@ function harvestReferenceDeck() {
 
   const msg = done
     ? 'Reference deck harvested: ' + Object.keys(rt.slides).length + ' slides, ' + rt.iconCount + ' icons, ' + Object.keys(rt.thumbs).length + ' thumbnails.'
-    : 'Harvest paused at thumbnail ' + state.nextThumb + ' of ' + targets.length + ' (time limit). Run "Harvest reference deck" again to continue.';
+    : 'Harvest paused at thumbnail ' + state.nextThumb + ' of ' + targets.length + ' (time limit). Run "Set up template (harvest)" again to continue.';
   try { SlidesApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
   return msg;
 }
@@ -716,9 +718,19 @@ function ensureThumbFolder_() {
     try { DriveApp.getFolderById(existing); return existing; } catch (e) {}
   }
   // DriveApp only — never UrlFetchApp to drive.googleapis.com (runtime API enablement).
-  const id = DriveApp.createFolder('66degrees Reference Thumbnails').getId();
+  // Created inside the brand folder (66degrees shared drive) so every user can read the thumbnails;
+  // buildAssetIndex() skips folders named "reference thumbnails".
+  const parentId = sharedAssetFolderId_();
+  const parent = parentId ? DriveApp.getFolderById(parentId) : DriveApp.getRootFolder();
+  const id = parent.createFolder('66degrees Reference Thumbnails').getId();
   props.setProperty(REF.thumbFolderPropKey, id);
   return id;
+}
+
+// Folder for files the harvest creates: the brand folder when it is reachable, otherwise My Drive (null).
+function sharedAssetFolderId_() {
+  if (!CONFIG.brandFolderId) return null;
+  try { DriveApp.getFolderById(CONFIG.brandFolderId); return CONFIG.brandFolderId; } catch (e) { return null; }
 }
 
 // Creates (or replaces) a Drive file with DriveApp. No Drive REST / no runtime API enablement.
@@ -744,7 +756,7 @@ function referenceStatus() {
   const rt = loadReferenceRuntime(true);
   const msg = 'Reference library: ' + (lib ? lib.slides.length + ' slides, ' + lib.icons.length + ' icons, ' + lib.companyFacts.length + ' facts' : 'NOT LOADED (check CONFIG.refLibraryFileId)') + '\n' +
     'Reference deck: ' + (CONFIG.referenceDeckId ? 'set' : 'NOT SET (CONFIG.referenceDeckId)') + '\n' +
-    'Harvest: ' + (rt ? Object.keys(rt.slides || {}).length + ' slides, ' + Object.keys(rt.icons || {}).length + ' icons, ' + Object.keys(rt.thumbs || {}).length + ' thumbnails (' + rt.harvestedAt + ')' : 'not run yet — use "Harvest reference deck"');
+    'Harvest: ' + (rt ? Object.keys(rt.slides || {}).length + ' slides, ' + Object.keys(rt.icons || {}).length + ' icons, ' + Object.keys(rt.thumbs || {}).length + ' thumbnails (' + rt.harvestedAt + ')' : 'not run yet — use "Set up template (harvest)"');
   try { SlidesApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
   return msg;
 }
@@ -758,7 +770,7 @@ function iconCheck() {
   const ui = SlidesApp.getUi();
   const lib = loadReferenceLibrary(false);
   const rt = loadReferenceRuntime(true);
-  if (!lib || !rt || !rt.icons) { ui.alert('Icon check', 'Reference library or harvest data not found. Run Harvest reference deck first.', ui.ButtonSet.OK); return; }
+  if (!lib || !rt || !rt.icons) { ui.alert('Icon check', 'Reference library or harvest data not found. Run "Set up template (harvest)" first.', ui.ButtonSet.OK); return; }
   const props = PropertiesService.getScriptProperties();
   let state = {};
   try { state = JSON.parse(props.getProperty('ICON_CHECK_STATE') || '{}'); } catch (e) { state = {}; }
