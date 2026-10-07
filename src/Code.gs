@@ -45,7 +45,7 @@ var CONFIG = {
   useBeautifulAi: false,
   roundedBoxes: true,            // Brand rule: boxes with ~3pt rounded corners (ShapeKit.gs); false = square boxes         // Create mode: false = slides drawn directly in the 66degrees template designs (Beautiful.ai key kept for later)
   refLibraryFileId: '1UE7SKEtQ3_FNf7nxyCMxeymA3g2pFtsJ',          // Drive file ID of 66d_reference_library.json
-  referenceDeckId: '1YOOnRXODUisuqDZCZJdeXXKkAmZt4FMiFbvxOaY5xVs',   // Google Slides copy of "66degrees Presentation Template - 2026"
+  referenceDeckId: '1x8_o6cC5YebkpYLjnco4ke8Mf9nnKN44O3ecl_ueaFk',   // Google Slides copy of "66degrees Presentation Template - 2026"
   iconOrder: ['library', 'drive', 'material'],   // library = template icon set (slide 114, vector)
 
   reviewWithGemini: true,        // Gemini looks at every slide image during the brand pass
