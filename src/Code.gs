@@ -234,9 +234,14 @@ function generationResult_(message, presentation, slideCount) {
 
 function generatePresentation(data) {
   data = data || {};
+  // The panel sends "Create" / "Rebrand"; older panels sent "create" / "rebrand"
+  data.mode = String(data.mode || 'create').toLowerCase() === 'rebrand' ? 'rebrand' : 'create';
   const run = { runId: data.runId ? String(data.runId).slice(0, 60) : null, tempId: null, ctx: null };
+  const t0 = Date.now();
   try {
-    return generatePresentationRun_(data, run);
+    const res = generatePresentationRun_(data, run);
+    if (res && typeof res === 'object') res.elapsedMs = Date.now() - t0;
+    return res;
   } catch (e) {
     const ctx = run.ctx || { runId: run.runId, progress: null };
     if (e && e.cancelled) {
@@ -289,12 +294,24 @@ function generatePresentationRun_(data, run) {
   const userPrompt = String(data.prompt || '').trim();
   const sources = { text: '', pdfs: [], images: [] };
   if (data.sourceUrl && String(data.sourceUrl).trim()) readSourceDocument(String(data.sourceUrl).trim(), sources);
-  if (data.upload && data.upload.data) {
-    readUploadedFile_(data.upload, sources);
-    ctx.log.push('Source file used: ' + data.upload.name + '.');
-  }
+  // Uploaded files: one (data.upload, older panel) or several (data.files, current panel). A file that cannot be read
+  // is skipped with a note; the run only stops when nothing at all is left to build from.
+  const uploads = [].concat(data.upload && data.upload.data ? [data.upload] : [], Array.isArray(data.files) ? data.files : [])
+    .filter(function (f) { return f && f.data; }).slice(0, 10);
+  const skippedFiles = [];
+  uploads.forEach(function (f) {
+    try {
+      readUploadedFile_(f, sources);
+      ctx.log.push('Source file used: ' + f.name + '.');
+    } catch (e) {
+      skippedFiles.push(String(f.name || 'file') + ' (' + e.message + ')');
+    }
+  });
+  if (skippedFiles.length) ctx.log.push('Skipped file(s): ' + skippedFiles.join('; '));
   if (!userPrompt && !sources.text && !sources.pdfs.length && !sources.images.length) {
-    throw new Error('Please describe the presentation you want, or add a source link or file.');
+    throw new Error(skippedFiles.length
+      ? 'None of the uploaded files could be read: ' + skippedFiles.join('; ') + '. Add a topic, a PDF, CSV, text or image, or a Google Docs/Sheets/Slides link.'
+      : 'Please describe the presentation you want, or add a source link or file.');
   }
   const presentationType = normalizePresentationType_(data.presentationType || data.type);
   const department = normalizeDepartment_(data.department);
@@ -427,6 +444,7 @@ function generatePresentationRun_(data, run) {
   const secs = Math.round((Date.now() - started) / 1000);
   let msg = 'SUCCESS: ' + copied + ' branded slides added to this presentation (' + secs + 's). ' + summarizeStats(stats);
   if (ctx.roundIssue) msg += '\nRounded boxes: not available (' + ctx.roundIssue + '); square boxes were used.';
+  if (ctx.arcIssue) msg += '\nDiagram rings and pie segments: not drawn (' + ctx.arcIssue + ').';
   if (ctx.iconAttempts && !ctx.libraryIconsPlaced) {
     msg += '\nTemplate icons: none placed' + (ctx.iconIssue ? ' (' + ctx.iconIssue + ')' : '') + '. Drive or fallback icons were used.';
   }
@@ -556,6 +574,11 @@ function getProgress(runId) {
 }
 
 // Called by the dialog's Cancel button: the run stops at its next checkpoint
+// The current panel calls cancelDeckGeneration; older panels call cancelRun
+function cancelDeckGeneration(runId) {
+  return cancelRun(runId);
+}
+
 function cancelRun(runId) {
   if (!runId) return false;
   CacheService.getUserCache().put('cancel_' + String(runId).slice(0, 60), '1', 1800);
@@ -903,7 +926,7 @@ function normalizeSpecialSlides_(slides, userPrompt, sources, ctx) {
       const tags = TEMPLATE_SLIDES_[key].slice().sort(function (a, b) { return recencyScore_(history, b) - recencyScore_(history, a); });
       const tag = tags[0];
       try { saveDesignUsage_([tag]); } catch (e) {}
-      out.push({ type: 'template', template: key, tag: tag, title: templateSlideTitle_(ctx.lib, tag) || sp.title || '',
+      out.push({ type: 'template', template: key, tag: tag, title: sentenceCase_(templateSlideTitle_(ctx.lib, tag) || sp.title || '', 2),
         notes: sp.notes || '', fact_tags: sp.fact_tags || [], reference: { tag: tag, fallback: false } });
       return;
     }
@@ -1798,6 +1821,8 @@ function chooseDesignsByContent_(plan, ctx) {
       const trial = Object.assign({}, sp, { reference: Object.assign({}, sp.reference || {}, { tag: d.tag }) });
       const m = ENGINE.measure(trial, { tokens: ctx.tokens || null });
       let score = 100;
+      if (m.content === 0) score -= 500;                              // a design that would show nothing under the title
+      if (d.needs) score += 30;                                     // built for this slide's special content (risks, prices, ...)
       score -= 35 * m.overflow.length;                               // text that would not fit
       score -= 80 * Math.max(0, 0.5 - m.fill);                      // half-empty boxes
       if (sp.design && String(sp.design).trim() === d.tag) score += 12;   // Gemini's choice
@@ -1907,9 +1932,13 @@ function headingCase_(t) {
   return words.map(function (w, i) {
     return w.split('-').map(function (part, j) {
       if (i === 0 && j === 0) return part;                                 // the first word keeps its capital
-      const bare = part.replace(/['’]s$/i, '').replace(/[^A-Za-z0-9]/g, '');
-      if (keep.test(bare) || /^[A-Z]{2,}/.test(bare) || /\d/.test(bare)) return part;
-      return /^[^a-z]*[A-Z][a-z]/.test(part) ? part.toLowerCase() : part;
+      // "Engineers/IT" -> "engineers/IT": each side of a slash is checked on its own
+      return part.split('/').map(function (piece, q) {
+        if (i === 0 && j === 0 && q === 0) return piece;
+        const bare = piece.replace(/['’]s$/i, '').replace(/[^A-Za-z0-9]/g, '');
+        if (keep.test(bare) || /^[A-Z]{2,}/.test(bare) || /\d/.test(bare)) return piece;
+        return /^[^a-z]*[A-Z][a-z]/.test(piece) ? piece.toLowerCase() : piece;
+      }).join('/');
     }).join('-');
   }).join(' ').replace(PRODUCT_NAMES_RE_, function (m) { return PRODUCT_NAMES_[m.toLowerCase()] || m; }).replace(/\.$/, '');
 }
@@ -2044,6 +2073,13 @@ function splitRangeValues_(sp) {
       const lbl = String(o.label || '').trim();
       if (!/^target/i.test(lbl)) o.label = 'Target: ' + (/^[A-Z][a-z]/.test(lbl) ? lbl.charAt(0).toLowerCase() + lbl.slice(1) : lbl);
       if (o.value.length <= 9) return;                     // a short target range ("15-20%", "3-5 days") stays as it is
+    }
+    // "Up to 60%" -> value "60%", label "Improved forecast accuracy (up to)": the big number stays a number
+    const up = o.value.match(/^\s*(up to|as much as|at least|as little as)\s+(.+?)\s*$/i);
+    if (up && /\d/.test(up[2])) {
+      o.value = up[2];
+      const lb = String(o.label || '').trim();
+      o.label = (lb ? lb.replace(/\.$/, '') + ' ' : '') + '(' + up[1].toLowerCase() + ')';     // "Improved forecast accuracy (up to)"
     }
     const q = o.value.match(/^\s*(nearly|almost|about|around|approximately|approx\.?|roughly|over|more than|above)\s+(.+?)\s*$/i);
     if (q) o.value = /^(over|more than|above)$/i.test(q[1]) ? q[2].replace(/\+?$/, '+') : '~' + q[2];
