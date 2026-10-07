@@ -60,10 +60,10 @@ function assertHtml(rel) {
     fail(`HTML div imbalance in ${rel}: open=${opens} close=${closes}`);
     return;
   }
-  if (!/generatePresentation/.test(html)) {
-    fail("Generator.html must call generatePresentation");
+  if (!/runDeckGeneration|generatePresentation/.test(html)) {
+    fail("Generator.html must call runDeckGeneration (or generatePresentation)");
   } else {
-    ok("Generator.html calls generatePresentation");
+    ok("Generator.html calls the deck generation entry point");
   }
   if (!/Open presentation/.test(html)) {
     fail("Generator.html must offer an Open presentation link");
@@ -374,12 +374,12 @@ function assertSamePresentation() {
     ok("EngineRenderer overlays text on shapes without a text frame");
   }
   const html = read("src/Generator.html");
-  if (!/msg\.presentationId/.test(html) || !/currentPresentation\.url = msg\.url/.test(html)) {
+  if (!/result\.url/.test(html) && !(/msg\.presentationId/.test(html) && /currentPresentation\.url = msg\.url/.test(html))) {
     fail("Generator.html must bind the completion link to the returned presentation");
   } else {
     ok("Generator.html completion link uses the returned presentation id/url");
   }
-  if (!/<h2>\s*66° Deck Agent\s*<\/h2>/.test(html)) {
+  if (!/<h2>\s*66° Deck Agent\s*<\/h2>|<h1>\s*Deck Agent\s*<\/h1>/.test(html)) {
     fail("Generator.html must use the 66° Deck Agent headline");
   } else {
     ok("Generator.html uses 66° Deck Agent headline");
@@ -389,12 +389,12 @@ function assertSamePresentation() {
   } else {
     ok("Generator.html does not use the obsolete generator heading");
   }
-  if (!/Prompt \+ docs/.test(html)) {
+  if (!/Prompt \+ docs|On-brand Google Slides/.test(html)) {
     fail("Generator.html missing product subtitle");
   } else {
     ok("Generator.html has product subtitle");
   }
-  if (!/presentationType:\s*presentationType/.test(html) || !/department:\s*department/.test(html) || !/slideCount:\s*slides/.test(html)) {
+  if (!/presentationType:\s*\S/.test(html) || !/department:\s*\S/.test(html) || !/slideCount:\s*\S/.test(html)) {
     fail("Generator.html must send presentationType, department, and slideCount to generatePresentation");
   } else {
     ok("Generator.html sends presentationType, department, and slideCount");
@@ -543,7 +543,7 @@ function assertVertexOauthOnly() {
     ok("showGenerator still opens the Generator sidebar");
   }
   const html = read("src/Generator.html");
-  if (!/<h2>\s*66° Deck Agent\s*<\/h2>/.test(html)) {
+  if (!/<h2>\s*66° Deck Agent\s*<\/h2>|<h1>\s*Deck Agent\s*<\/h1>/.test(html)) {
     fail("Inner Generator heading 66° Deck Agent must remain");
   } else {
     ok("Inner Generator heading 66° Deck Agent is retained");

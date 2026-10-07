@@ -467,6 +467,13 @@ function readSourceDocument(url, sources) {
     sources.pdfs.push(Utilities.base64Encode(blob.getBytes()));
     return;
   }
+  if (/^image\/(png|jpe?g|webp|gif)$/.test(mime)) {
+    const img = file.getBlob();
+    if (img.getBytes().length > 18 * 1024 * 1024) throw new Error('The source image is larger than 18 MB.');
+    sources.images = sources.images || [];
+    sources.images.push({ mime: mime, data: Utilities.base64Encode(img.getBytes()) });
+    return;
+  }
 
   let text = '';
   try {

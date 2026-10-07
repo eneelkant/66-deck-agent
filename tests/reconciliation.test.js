@@ -319,12 +319,13 @@ test("default Create path never calls SlidesApp.create", () => {
 
 test("sidebar completion uses the returned active presentation URL", () => {
   const html = read("src/Generator.html");
-  assert.match(html, /generatePresentation/);
+  const code = read("src/Code.gs");
+  assert.match(html, /runDeckGeneration/);
   assert.match(html, /Open presentation/);
-  assert.match(html, /if \(msg\.presentationId\) currentPresentation\.id = msg\.presentationId/);
-  assert.match(html, /if \(msg\.url\) currentPresentation\.url = msg\.url/);
-  assert.match(html, /setOpenLink\(url\)/);
+  assert.match(html, /var url = String\(result\.url \|\| ""\)/);
+  assert.match(html, /\$\("openBtn"\)\.setAttribute\("href", url\)/);
   assert.match(html, /getGeneratorBootstrap/);
+  assert.match(code, /url: pres \? pres\.getUrl\(\) : ''/);
 });
 
 test("pipeline stages stay in the V1_17 create order", () => {

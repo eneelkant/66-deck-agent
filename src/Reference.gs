@@ -626,6 +626,12 @@ function insertTemplateSlide_(placeholder, tag, ctx) {
     for (let i = 0; i < all.length; i++) { if (all[i].getObjectId() === id) { index = i; break; } }
     const copy = pres.insertSlide(index, src);
     placeholder.remove();
+    // Brand rule: sentence-case titles ("Client Logos" -> "Client logos") on the copied slide as well
+    try {
+      const original = templateSlideTitle_(ctx.lib, tag);
+      const fixed = typeof sentenceCase_ === 'function' ? sentenceCase_(original, 2) : original;
+      if (original && fixed && fixed !== original) copy.replaceAllText(original, fixed, true);
+    } catch (e) {}
     return copy;
   } catch (e) {
     ctx.log.push('Template slide ' + tag + ' could not be copied: ' + e.message);

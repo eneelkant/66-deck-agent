@@ -3514,7 +3514,16 @@ var ENGINE = (function () {
     // Never an empty slide: content the chosen type cannot show is drawn as cards (items) or bullets (points)
     if (['cover', 'agenda', 'closing', 'section', 'statement', 'quote', 'template'].indexOf(type) === -1 && contentCount_(out) === 0) {
       var alt = null;
-      var its = arr(s.items, 8).concat(arr(s.layers, 4)).filter(Boolean);
+      // 1. a design of this type made for the slide's special content (risks -> RAID register, prices, RAG status...)
+      (VARIANTS[type] || []).forEach(function (v) {
+        if (alt || !v.needs || !V[v.tag]) return;
+        try { var o2 = V[v.tag](s, lctx); if (o2 && contentCount_(o2) > 0) alt = o2; } catch (e) {}
+      });
+      if (alt) return alt;
+      // 2. otherwise the content as cards (items, layers, risks) or bullets (points)
+      var its = arr(s.items, 8).concat(arr(s.layers, 4)).concat(arr(s.risks, 6).map(function (r) {
+        return r && { title: r.description || r.title || '', text: r.mitigation || r.text || '' };
+      })).filter(function (x) { return x && (x.title || x.text || typeof x === 'string'); });
       if (its.length >= 2) alt = L.cards(Object.assign({}, s, { items: its, reference: null }), lctx);
       else if (arr(s.points, 6).length) alt = L.bullets(Object.assign({}, s, { reference: null }), lctx);
       if (alt && contentCount_(alt) > 0) out = alt;
@@ -3565,6 +3574,7 @@ var ENGINE = (function () {
     var fill = boxes.length ? boxes.reduce(function (t, a) { return t + Math.min(a.fill, 1); }, 0) / boxes.length : 0.8;
     return {
       dark: !!(lay && (lay.dark || lay.bgImage)),                       // photo or dark design (for the deck rhythm)
+      content: lay ? contentCount_(lay) : 0,                            // 0 = the design shows nothing under the title
       fill: fill,
       overflow: res.filter(function (a) { return a.truncated; }).map(function (a) { return { text: a.text, maxChars: a.maxChars, isTitle: !!a.isTitle }; }),
       underfill: res.filter(function (a) { return !a.truncated && a.body && a.fill < 0.6; })
