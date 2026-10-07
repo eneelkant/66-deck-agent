@@ -1,5 +1,6 @@
 {
   "scriptId": "REPLACE_WITH_APPS_SCRIPT_ID",
+  "parentId": ["1YOOnRXODUisuqDZCZJdeXXKkAmZt4FMiFbvxOaY5xVs"],
   "rootDir": "src",
   "scriptExtensions": [".js", ".gs"],
   "htmlExtensions": [".html"],
