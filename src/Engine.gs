@@ -258,7 +258,7 @@ var ENGINE = (function () {
     var a = Number(avail), n = Number(need);
     if (!isFinite(a) || a < 1) a = 1;
     if (!isFinite(n) || n < 1) n = 1;
-    return Math.min(a, Math.max(n, a * 0.7));
+    return Math.min(a, Math.max(n, a * 0.6));
   }
   var boxH_ = boxH;
   // Cuts a text at the last whole word that fits on one line (no ellipsis; trailing joining words are dropped)
@@ -2102,8 +2102,9 @@ var ENGINE = (function () {
     var sweep = 180 / n;
     if ([30, 36, 45, 60].indexOf(sweep) === -1) return null;
     var els = [];
-    var top = header(els, s);
+    // The intro sits on the left: the lead is shown there OR under the title, never twice
     var intro = s.text || s.lead || '';
+    var top = header(els, (!s.text && s.lead) ? Object.assign({}, s, { lead: '', subtitle: '' }) : s);
     var cx = 300, cy = top + (BOTTOM - top) / 2, r = Math.min(118, (BOTTOM - top) / 2 - 6), fills = DIA_FILLS();
     if (intro) text(els, CX, cy - 60, 170, 130, intro, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body, valign: 'middle' });
     ellipse(els, cx - r * 0.64, cy - r * 0.64, r * 1.28, r * 1.28, T.bgLight);
@@ -2240,8 +2241,9 @@ var ENGINE = (function () {
     var steps = items_(s, 5), n = steps.length;
     if (n < 4) return null;
     var els = [];
-    var top = header(els, s);
+    // The intro sits on the left: the lead is shown there OR under the title, never twice
     var intro = s.text || s.lead || '';
+    var top = header(els, (!s.text && s.lead) ? Object.assign({}, s, { lead: '', subtitle: '' }) : s);
     var x0 = intro ? 220 : CX, stepW = 92, stepH = Math.min(36, (BOTTOM - top) / n - 6), dx = 44;
     if (intro) text(els, CX, top + 10, 170, BOTTOM - top - 20, intro, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
     var fills = [T.slate, T.slate, T.blue, T.blue, T.ink];
@@ -2809,8 +2811,8 @@ var ENGINE = (function () {
         var it = items[k], x = x0 + c * (cw + gap), y = top + r * (rowH + gap);
         rect(els, x, y, cw, rowH - 3, T.bgLight);
         rect(els, x, y + rowH - 3, cw, 3, T.blue);
-        var t = text(els, x + 10, y + 8, cw - 20, 28, it.title, { weight: 500, max: TSZ.body + 0.5, min: TSZ.body, maxLines: 2, color: T.ink });
-        text(els, x + 10, y + 12 + t.height, cw - 20, rowH - t.height - 22, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
+        var t = text(els, x + 10, y + 8, cw - 28, 28, it.title, { weight: 500, max: TSZ.body + 0.5, min: TSZ.body, maxLines: 2, color: T.ink });
+        text(els, x + 10, y + 14 + t.height, cw - 20, rowH - t.height - 24, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
       }
     });
     return { bg: T.ink, bgImage: 'section-bg', els: els, noBalance: true };
@@ -3254,6 +3256,97 @@ var ENGINE = (function () {
     return { bg: T.ink, bgImage: 'section-bg', els: els, noBalance: true };
   };
 
+  /* ================= TEAM / LEADERSHIP (template slides 84-88) =================
+     People come ONLY from the request or the source material (spec.people[{name, title, location, text}]).
+     No photos are generated: every person gets a neutral tile with their initials, in the template's photo position. */
+  function people_(s, max) {
+    return arr(s.people, max).filter(Boolean).map(function (p) { return typeof p === 'string' ? { name: p } : p; })
+      .filter(function (p) { return p.name || p.title; });
+  }
+  function initials_(name) {
+    var w = String(name || '').replace(/[^A-Za-z\s'-]/g, ' ').trim().split(/\s+/).filter(Boolean);
+    if (!w.length) return '·';
+    return (w[0].charAt(0) + (w.length > 1 ? w[w.length - 1].charAt(0) : '')).toUpperCase();
+  }
+  function avatar_(els, x, y, size, name, fill) {
+    rect(els, x, y, size, size, fill || T.bgLight, { color: T.cardLine, width: 0.75 });
+    text(els, x, y, size, size, initials_(name), { font: 'mono', weight: 500, max: Math.max(10, Math.min(24, Math.round(size * 0.3))), min: 9,
+      maxLines: 1, align: 'center', valign: 'middle', color: T.blue, noFill: true });
+  }
+  // Slides 84 / 87 (LEADERSHIP_002 / 004): panel, 3 or 4 white cards: initials tile, blue name, title, location, short text
+  function leaderCards_(s, want) {
+    var ppl = people_(s, want);
+    if (ppl.length !== want) return null;
+    var els = [];
+    var top = header(els, s);
+    var gap = 14, cw = (CW - gap * (want - 1)) / want, av = Math.min(64, cw - 28);
+    var need = 0;
+    ppl.forEach(function (p) {
+      var h = av + 30 + 16 + (p.title ? 26 : 0) + (p.location ? 16 : 0) + (p.text ? 54 : 0);
+      need = Math.max(need, h);
+    });
+    var ch = boxH(need, BOTTOM - top);
+    ppl.forEach(function (p, i) {
+      var x = CX + i * (cw + gap);
+      rect(els, x, top, cw, ch, T.white, { color: T.cardLine, width: 0.75 });
+      avatar_(els, x + 14, top + 14, av, p.name);
+      var y = top + 14 + av + 12;
+      var t1 = text(els, x + 14, y, cw - 28, 18, p.name || '', { weight: 500, max: 12, min: 10, maxLines: 1, color: T.blue });
+      y += t1.height + 2;
+      if (p.title) { var t2 = text(els, x + 14, y, cw - 28, 26, p.title, { weight: 500, max: TSZ.body, min: TSZ.body, maxLines: 2, color: T.ink }); y += t2.height + 2; }
+      if (p.location) { var t3 = text(els, x + 14, y, cw - 28, 14, p.location, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 1, color: T.body }); y += t3.height + 4; }
+      if (p.text) text(els, x + 14, y + 4, cw - 28, top + ch - y - 16, p.text, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body, noFill: true });
+    });
+    return { bg: T.bgLight, els: els };
+  }
+  V['66D_LAYOUT_LEADERSHIP_004'] = function (s) { return leaderCards_(s, 3); };
+  V['66D_LAYOUT_LEADERSHIP_002'] = function (s) { return leaderCards_(s, 4); };
+  // Rows of bordered tiles with name and title under each: slide 85 (5 in a row), 86 (5 + 4), 88 (2 rows of 6)
+  function peopleRows_(s, rowsSpec, bg, tileMax) {
+    var total = rowsSpec.reduce(function (a, b) { return a + b; }, 0);
+    var ppl = people_(s, total);
+    var minN = rowsSpec.length > 1 ? total - rowsSpec[rowsSpec.length - 1] + 1 : total;
+    if (ppl.length < minN || ppl.length > total) return null;
+    var els = [];
+    var top = header(els, s);
+    var rows = rowsSpec.length, maxCols = Math.max.apply(null, rowsSpec), gap = 14;
+    var colW = (CW - gap * (maxCols - 1)) / maxCols;
+    var labelH = 38, rowH = (BOTTOM - top - gap * (rows - 1)) / rows;
+    var tile = Math.min(tileMax, colW - 10, rowH - labelH - 6);
+    var k = 0;
+    rowsSpec.forEach(function (cnt, r) {
+      var inRow = Math.min(cnt, ppl.length - k);
+      if (inRow <= 0) return;
+      var rowW = inRow * colW + (inRow - 1) * gap, x0 = CX + (CW - rowW) / 2, y = top + r * (rowH + gap);
+      for (var c = 0; c < inRow; c++, k++) {
+        var p = ppl[k], x = x0 + c * (colW + gap);
+        avatar_(els, x + (colW - tile) / 2, y, tile, p.name, bg === T.white ? T.bgLight : T.white);
+        var t1 = text(els, x, y + tile + 6, colW, 16, p.name || '', { weight: 500, max: TSZ.body + 0.5, min: TSZ.body, maxLines: 1, align: 'center', color: T.ink });
+        if (p.title) text(els, x, y + tile + 8 + t1.height, colW, 26, p.title, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, align: 'center', color: T.body, noFill: true });
+      }
+    });
+    return { bg: bg, els: els, center: true };
+  }
+  V['66D_LAYOUT_LEADERSHIP_003'] = function (s) { return peopleRows_(s, [5], T.white, 110); };
+  V['66D_LAYOUT_TEAM_002'] = function (s) { return peopleRows_(s, [5, 4], T.white, 74); };
+  V['66D_LAYOUT_TEAM_003'] = function (s) { return peopleRows_(s, [6, 6], T.bgLight, 66); };
+  L.team = function (s, ctx) {
+    var n = people_(s, 12).length;
+    var tag = n <= 3 ? '66D_LAYOUT_LEADERSHIP_004' : n === 4 ? '66D_LAYOUT_LEADERSHIP_002' : n === 5 ? '66D_LAYOUT_LEADERSHIP_003'
+      : n <= 9 ? '66D_LAYOUT_TEAM_002' : '66D_LAYOUT_TEAM_003';
+    var out = V[tag](s, ctx);
+    if (!out && n === 2) out = peopleRows_(s, [2], T.white, 110);
+    if (!out && n === 1) out = peopleRows_(s, [1], T.white, 120);
+    return out || L.cards(Object.assign({}, s, { items: people_(s, 12).map(function (p) { return { title: p.name, text: [p.title, p.location].filter(Boolean).join(', ') }; }), reference: null }), ctx);
+  };
+  // Real template slides (client logos, leadership, industries) are COPIED from the template by Code.gs.
+  // This layout is only drawn when that copy is not possible: the title and lead, nothing invented.
+  L.template = function (s) {
+    var els = [];
+    header(els, s);
+    return { bg: T.white, els: els };
+  };
+
   var VARIANTS = {
     agenda: [
       { tag: '66D_LAYOUT_AGENDA_002', min: 1, max: 8, desc: 'numbered rows with square badges; the classic agenda' },
@@ -3340,6 +3433,12 @@ var ENGINE = (function () {
       { tag: 'ENGINE_CHART', min: 0, max: 99, desc: 'bar or line chart with an insight panel', words: 'insight 20-35' },
       { tag: '66D_LAYOUT_CHART_003', min: 0, max: 99, needs: 'rows', desc: 'bar chart panel next to a data table panel (chart + columns/rows)', words: 'cells 1-4' },
       { tag: '66D_LAYOUT_CHART_001', min: 0, max: 99, needs: 'stacked', desc: 'narrative and sources on the left, stacked bars (e.g. cost today vs after) with a legend (chart.type "stacked")', words: 'text 40-70' }],
+    team: [
+      { tag: '66D_LAYOUT_LEADERSHIP_004', min: 3, max: 3, desc: 'three white cards: initials tile, name in blue, title, location, one-line text; a small leadership group', words: 'text 8-16' },
+      { tag: '66D_LAYOUT_LEADERSHIP_002', min: 4, max: 4, desc: 'four white cards: initials tile, name in blue, title, location; leadership team', words: 'text 6-12' },
+      { tag: '66D_LAYOUT_LEADERSHIP_003', min: 5, max: 5, desc: 'five large bordered tiles in a row with name and title; leadership team', words: 'titles 2-6' },
+      { tag: '66D_LAYOUT_TEAM_002', min: 6, max: 9, desc: 'tiles staggered 5 + 4 with name and title; key contributors', words: 'titles 2-6' },
+      { tag: '66D_LAYOUT_TEAM_003', min: 10, max: 12, desc: 'two rows of six tiles with name and title; a project team', words: 'titles 2-6' }],
     diagram: [
       { tag: '66D_LAYOUT_DIAGRAM_001', min: 5, max: 8, desc: 'hub and spoke: a centre label with numbered circles around it and captions outside; capabilities around one platform', words: '8-16' },
       { tag: '66D_LAYOUT_DIAGRAM_002', min: 3, max: 3, desc: 'three numbered diagonal bars with three text rows; three pillars or levers', words: '20-35' },
@@ -3363,7 +3462,9 @@ var ENGINE = (function () {
   var ALIASES = { intro: 'statement', key_message: 'statement', problem: 'cards', benefits: 'cards', kpi: 'stats', metrics: 'stats',
     steps: 'process', roadmap: 'timeline', list: 'bullets', thank_you: 'closing', title: 'cover', divider: 'section',
     case: 'case_study', checklist: 'next_steps', two_column: 'comparison',
-    architecture: 'bullets', flowchart: 'bullets', diagram: 'bullets' };
+    architecture: 'diagram', flowchart: 'diagram', cycle: 'diagram',
+    leadership: 'team', people: 'team', contributors: 'team',
+    clients: 'template', logos: 'template', client_logos: 'template', industries: 'template' };
 
   // Removes color codes (e.g. "#0052FF") and stray whitespace that a model may copy from design rules into slide text
   function cleanText(v) {
@@ -3398,10 +3499,26 @@ var ENGINE = (function () {
     }).join('\n');
   }
 
+  // Elements below the title area (images excluded): 0 means the design drew no content
+  function contentCount_(out) {
+    return ((out && out.els) || []).filter(function (e) {
+      var y = e.t === 'line' ? Math.min(e.y1, e.y2) : e.y;
+      return e.t !== 'image' && y >= 64;
+    }).length;
+  }
   function layoutSlide(s, type, lctx) {
     var tag = s.reference && s.reference.tag;
     var out = (tag && V[tag] && variantOf(type, tag)) ? V[tag](s, lctx) : null;
+    if (out && contentCount_(out) === 0) out = null;
     out = out || L[type](s, lctx);
+    // Never an empty slide: content the chosen type cannot show is drawn as cards (items) or bullets (points)
+    if (['cover', 'agenda', 'closing', 'section', 'statement', 'quote', 'template'].indexOf(type) === -1 && contentCount_(out) === 0) {
+      var alt = null;
+      var its = arr(s.items, 8).concat(arr(s.layers, 4)).filter(Boolean);
+      if (its.length >= 2) alt = L.cards(Object.assign({}, s, { items: its, reference: null }), lctx);
+      else if (arr(s.points, 6).length) alt = L.bullets(Object.assign({}, s, { reference: null }), lctx);
+      if (alt && contentCount_(alt) > 0) out = alt;
+    }
     if (['cover', 'agenda', 'closing', 'section', 'statement', 'chart', 'quote'].indexOf(type) === -1 && !out.noBalance &&
         tag !== '66D_LAYOUT_CHART_002' && tag !== '66D_LAYOUT_CASE_STUDY_006') balance(out);
     return out;

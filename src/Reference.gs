@@ -50,8 +50,9 @@ var TYPE_ALIASES = {
    LOADING
 ========================= */
 
+var REF_LIB_ERROR = '';   // why the reference library could not be loaded (shown in setup errors)
 function loadReferenceLibrary(force) {
-  if (!CONFIG.useReferenceLibrary || !CONFIG.refLibraryFileId) return null;
+  if (!CONFIG.useReferenceLibrary || !CONFIG.refLibraryFileId) { REF_LIB_ERROR = 'CONFIG.refLibraryFileId is empty'; return null; }
   if (!force) {
     const cached = readCache(REF.cacheKey);
     if (cached) return cached;
@@ -62,7 +63,8 @@ function loadReferenceLibrary(force) {
     writeCache(REF.cacheKey, lib);
     return lib;
   } catch (e) {
-    Logger.log('Reference library could not be loaded: ' + e.message);
+    REF_LIB_ERROR = e.message;
+    Logger.log('Reference library could not be loaded (' + CONFIG.refLibraryFileId + '): ' + e.message);
     return null;
   }
 }
@@ -221,7 +223,7 @@ function normalizeType_(t) {
 
 function itemCount_(spec) {
   const arrLen = function (a) { return Array.isArray(a) ? a.length : 0; };
-  return arrLen(spec.items) || arrLen(spec.points) || arrLen(spec.results) || arrLen(spec.rows) ||
+  return arrLen(spec.items) || arrLen(spec.people) || arrLen(spec.points) || arrLen(spec.results) || arrLen(spec.rows) ||
     ((spec.left || spec.right) ? 2 : 0) || arrLen(spec.chart && spec.chart.categories);
 }
 
@@ -341,9 +343,17 @@ function referenceForTag_(lib, tag) {
   return ref;
 }
 
+// Designs whose look carries a meaning: only used when the slide is about that (e.g. the "!" warning badges = risks)
+const DESIGN_TOPICS_ = {
+  '66D_LAYOUT_CARDS_024': /\b(risks?|challenges?|issues?|barriers?|pitfalls?|concerns?|threats?|problems?|obstacles?|gaps?|blockers?|hurdles?|warnings?)\b/i
+};
+
 // Template designs the layout engine can draw for a type (Engine.gs VARIANTS), filtered by item count
 function drawableDesigns_(type, n, spec) {
+  const words = spec ? [spec.title, spec.lead, spec.statement].filter(Boolean).join(' ') : '';
   const all = ((typeof ENGINE !== 'undefined' && ENGINE.VARIANTS && ENGINE.VARIANTS[type]) || []).filter(function (v) {
+    // a design with a meaning (warning badges) only for slides about that meaning
+    if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words)) return false;
     // designs that need extra fields (e.g. the client journey needs spec.cases) are only offered when the slide has them
     return !v.needs || designNeedsMet_(v.needs, spec);
   });
@@ -568,6 +578,62 @@ function recolorElement_(el, hex) {
 }
 
 /* =========================
+   REAL TEMPLATE SLIDES (copied as they are: real client logos, the real leadership team, industry expertise)
+   These slides carry approved 66degrees content (logos, photos, names) that must never be generated, so the slide is
+   copied from the template deck. Used only when the request asks for clients, leadership or industries.
+========================= */
+const TEMPLATE_SLIDES_ = {
+  clients: ['66D_LAYOUT_COMPANY_OVERVIEW_006', '66D_LAYOUT_COMPANY_OVERVIEW_007', '66D_LAYOUT_COMPANY_OVERVIEW_008',
+            '66D_LAYOUT_COMPANY_OVERVIEW_009', '66D_LAYOUT_COMPANY_OVERVIEW_010'],
+  leadership: ['66D_LAYOUT_LEADERSHIP_001'],
+  industries: ['66D_LAYOUT_COMPANY_OVERVIEW_005']
+};
+// What each one needs in the request or source material before it may be used
+const TEMPLATE_SLIDE_TRIGGERS_ = {
+  clients: /\b(clients?|customers?|logos?|who we work with|client list|references?)\b/i,
+  leadership: /\b(leadership|leaders|executive team|management team|who we are|our team|about 66degrees|about us)\b/i,
+  industries: /\b(industr(y|ies)|sectors?|verticals?|domain expertise)\b/i
+};
+
+// "client logos" / "logo wall" / "our leadership" -> clients | leadership | industries (null when unknown)
+function templateSlideKey_(spec) {
+  const raw = String((spec && (spec.template || spec.kind || spec.title)) || '').toLowerCase();
+  if (/client|customer|logo/.test(raw)) return 'clients';
+  if (/leader|executive|management/.test(raw)) return 'leadership';
+  if (/industr|sector|vertical|domain/.test(raw)) return 'industries';
+  return null;
+}
+
+// Title of a template slide (from the library), e.g. "Client Logos" -> used for the agenda
+function templateSlideTitle_(lib, tag) {
+  const sl = lib ? (lib.slides || []).filter(function (x) { return x.tag === tag; })[0] : null;
+  return sl ? String(sl.title || '') : '';
+}
+
+// Replaces `placeholder` (a blank slide in the active deck) with a copy of the template slide `tag`. Returns the new slide or null.
+function insertTemplateSlide_(placeholder, tag, ctx) {
+  const rt = ctx.refRuntime;
+  if (!rt || !rt.slides || !rt.slides[tag]) { ctx.log.push('Template slide ' + tag + ' not copied: run "Set up template (harvest)".'); return null; }
+  const deck = openReferenceDeck_(ctx);
+  if (!deck) return null;
+  try {
+    const src = deck.getSlideById(rt.slides[tag]);
+    if (!src) { ctx.log.push('Template slide ' + tag + ' not found in the template deck (run the harvest again).'); return null; }
+    const pres = SlidesApp.getActivePresentation();
+    const id = placeholder.getObjectId();
+    const all = pres.getSlides();
+    let index = all.length;
+    for (let i = 0; i < all.length; i++) { if (all[i].getObjectId() === id) { index = i; break; } }
+    const copy = pres.insertSlide(index, src);
+    placeholder.remove();
+    return copy;
+  } catch (e) {
+    ctx.log.push('Template slide ' + tag + ' could not be copied: ' + e.message);
+    return null;
+  }
+}
+
+/* =========================
    POST-CHECK (deterministic brand validation, reported in the result message)
 ========================= */
 
@@ -605,7 +671,8 @@ function harvestReferenceDeck() {
   const started = Date.now();
   const props = PropertiesService.getScriptProperties();
   const lib = loadReferenceLibrary(true);
-  if (!lib) throw new Error('Reference library not found. Upload 66d_reference_library.json and set CONFIG.refLibraryFileId.');
+  if (!lib) throw new Error('Reference library not found (file ' + CONFIG.refLibraryFileId + '): ' + (REF_LIB_ERROR || 'unknown reason') +
+    '. Check that CONFIG.refLibraryFileId is 1UE7SKEtQ3_FNf7nxyCMxeymA3g2pFtsJ and that your account can open that file.');
   if (!CONFIG.referenceDeckId) throw new Error('Set CONFIG.referenceDeckId to the Google Slides copy of the 2026 template.');
 
   const deck = SlidesApp.openById(CONFIG.referenceDeckId);
@@ -750,6 +817,32 @@ function uploadDriveFile_(blob, mime, parentId, existingId) {
 /* =========================
    STATUS (menu)
 ========================= */
+
+// Run from the Apps Script editor (select checkSetup, click Run, then open the Execution log).
+// Shows which IDs this script is using and whether each file can be opened by the current account.
+function checkSetup() {
+  let who = '(not shown)';
+  try { who = Session.getEffectiveUser().getEmail() || who; } catch (e) {}   // needs userinfo.email scope; optional
+  const lines = ['Account: ' + who];
+  const test = function (label, id, fn) {
+    try { lines.push('OK    ' + label + ' (' + id + '): ' + fn(id)); }
+    catch (e) { lines.push('FAIL  ' + label + ' (' + id + '): ' + e.message); }
+  };
+  test('Brand folder', CONFIG.brandFolderId, function (id) { return DriveApp.getFolderById(id).getName(); });
+  test('Reference library', CONFIG.refLibraryFileId, function (id) {
+    const f = DriveApp.getFileById(id);
+    const json = JSON.parse(f.getBlob().getDataAsString());
+    return f.getName() + ', ' + ((json.slides || []).length) + ' template slides';
+  });
+  test('Template deck', CONFIG.referenceDeckId, function (id) {
+    const d = SlidesApp.openById(id);
+    return d.getName() + ', ' + d.getSlides().length + ' slides';
+  });
+  const msg = lines.join('\n');
+  Logger.log(msg);
+  try { SlidesApp.getUi().alert(msg); } catch (e) {}
+  return msg;
+}
 
 function referenceStatus() {
   const lib = loadReferenceLibrary(true);
