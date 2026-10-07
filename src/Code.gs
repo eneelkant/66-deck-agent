@@ -17,7 +17,14 @@
  *   1. Upload 66d_reference_library.json to Drive and paste its file ID into CONFIG.refLibraryFileId.
  *   2. Upload the 2026 template .pptx to Drive, open it with Google Slides (File → Save as Google Slides)
  *      and paste the Google Slides file ID into CONFIG.referenceDeckId.
- *   3. First install/authorization runs ensureInitialSetup_() (loads the library if present; harvest stays internal).
+ *   3. First install/authorization runs ensureInitialSetup_() (loads the library if present).
+ *   4. Run "Set up template (harvest)" once from the add-on menu (template icons + thumbnails; saved in the brand folder).
+ *
+ * Drive (66degrees shared drive):  66° Deck Agent Assets / 01_Brand_Assets   (CONFIG.brandFolderId)
+ *   01_Logos · 02_Icons/icons (66degrees Icons, Google Icons, Favicons) · 03_Images (Design, Patterns) · 04_Fonts ·
+ *   05_Brand_Guidelines · ★ 66degrees Presentation Template - 2026 (Google Slides, CONFIG.referenceDeckId) ·
+ *   66d_reference_library.json (CONFIG.refLibraryFileId)
+ * The working deck is whichever presentation the add-on is opened from (never hardcoded).
  */
 
 var CONFIG = {
@@ -45,7 +52,7 @@ var CONFIG = {
   useBeautifulAi: false,
   roundedBoxes: true,            // Brand rule: boxes with ~3pt rounded corners (ShapeKit.gs); false = square boxes         // Create mode: false = slides drawn directly in the 66degrees template designs (Beautiful.ai key kept for later)
   refLibraryFileId: '1UE7SKEtQ3_FNf7nxyCMxeymA3g2pFtsJ',          // Drive file ID of 66d_reference_library.json
-  referenceDeckId: '1x8_o6cC5YebkpYLjnco4ke8Mf9nnKN44O3ecl_ueaFk',   // TEMPLATE (Google Slides copy of "66degrees Presentation Template - 2026") — never the working deck
+  referenceDeckId: '1x8_o6cC5YebkpYLjnco4ke8Mf9nnKN44O3ecl_ueaFk',   // Google Slides copy of "66degrees Presentation Template - 2026"
   iconOrder: ['library', 'drive', 'material'],   // library = template icon set (slide 114, vector)
 
   reviewWithGemini: true,        // Gemini looks at every slide image during the brand pass
