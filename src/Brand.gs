@@ -711,8 +711,10 @@ function buildAssetIndex(resume) {
       }
       if (/favicon|award|service cards|products & services|productcard/.test(p)) continue;
 
-      if (/google cloud icons|user & device input/.test(p)) {
-        const key = /google cloud icons/.test(p) ? normalizeName(folder.getName()) : normalizeName(name);
+      // Google product icons: "Google Cloud Icons" (old folder) or "Google Icons" (01_Brand_Assets/02_Icons/icons)
+      if (/google( cloud)? icons|user & device input/.test(p)) {
+        const inProductFolder = /google( cloud)? icons/.test(p) && !/google( cloud)? icons\s*$/.test(p);
+        const key = inProductFolder ? normalizeName(folder.getName()) : normalizeName(name);
         if (key && !index.gcp[key]) index.gcp[key] = f.getId();
         continue;
       }

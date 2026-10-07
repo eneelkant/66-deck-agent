@@ -21,7 +21,7 @@
  */
 
 var CONFIG = {
-  brandFolderId: '1x8kqT9Xz1iM5gg_EVpvutSWGjlyxh0sy',   // "66degrees AI Presentation Generator - TEST"
+  brandFolderId: '1LbKMz0b-VRnOvNnTCCZHRuq0iejaX30Y',   // "66° Deck Agent Assets > 01_Brand_Assets" (66degrees shared drive)
 
   model: 'gemini-2.5-flash',     // pinned to the model with a free-tier quota; the 3.x models are paid-only on this key
   preferProModel: false,
@@ -44,8 +44,8 @@ var CONFIG = {
   useReferenceLibrary: true,
   useBeautifulAi: false,
   roundedBoxes: true,            // Brand rule: boxes with ~3pt rounded corners (ShapeKit.gs); false = square boxes         // Create mode: false = slides drawn directly in the 66degrees template designs (Beautiful.ai key kept for later)
-  refLibraryFileId: '1aZqCYJOykBfvuM58efdNzW5IPkQbjrqL',          // Drive file ID of 66d_reference_library.json
-  referenceDeckId: '1aJPCylMP1AVjsMIZFUYCf_lE0cHCD3ElE2QlYOSZYOA',   // Google Slides copy of "66degrees Presentation Template - 2026"
+  refLibraryFileId: '1UE7SKEtQ3_FNf7nxyCMxeymA3g2pFtsJ',          // Drive file ID of 66d_reference_library.json
+  referenceDeckId: '1x8_o6cC5YebkpYLjnco4ke8Mf9nnKN44O3ecl_ueaFk',   // Google Slides copy of "66degrees Presentation Template - 2026"
   iconOrder: ['library', 'drive', 'material'],   // library = template icon set (slide 114, vector)
 
   reviewWithGemini: true,        // Gemini looks at every slide image during the brand pass
@@ -74,6 +74,7 @@ function buildProductionMenu_() {
     .addSeparator()
     .addItem('Refresh brand kit', 'refreshBrandKit')
     .addItem('Refresh brand assets', 'refreshBrandAssets')
+    .addItem('Set up template (harvest)', 'harvestReferenceDeck')
     .addToUi();
 }
 

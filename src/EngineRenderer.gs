@@ -237,6 +237,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
           const type = e.t === 'ellipse' ? 'ELLIPSE' : 'RECTANGLE';
           sh = insertShapeSafe_(slide, type, box.x, box.y, box.w, box.h);
         }
+        if (e.rot) { try { sh.setRotation(((finiteNumber_(e.rot, 0) % 360) + 360) % 360); } catch (err) {} }
         sh.getFill().setSolidFill(e.fill);
         if (e.line) {
           sh.getBorder().setWeight(Math.max(0.5, finiteNumber_(e.line.width, 1) * s));
@@ -252,6 +253,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
       } else if (e.t === 'shape') {
         const box = safeBox_(e.x * s, e.y * s, e.w * s, e.h * s);
         const sh = insertShapeSafe_(slide, e.shape, box.x, box.y, box.w, box.h);
+        if (e.rot) { try { sh.setRotation(((finiteNumber_(e.rot, 0) % 360) + 360) % 360); } catch (err) {} }
         sh.getFill().setSolidFill(e.fill);
         if (e.line) {
           sh.getBorder().setWeight(Math.max(0.5, finiteNumber_(e.line.width, 1) * s));
@@ -279,6 +281,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
       } else if (e.t === 'text') {
         // Autofit off BEFORE the text goes in: otherwise Slides shrinks the font (e.g. 11pt -> 10pt) and keeps it
         const box = insertTextBoxSafe_(slide, '', e.x * s, e.y * s, e.w * s, e.h * s);
+        if (e.rot) { try { box.setRotation(((finiteNumber_(e.rot, 0) % 360) + 360) % 360); } catch (err) {} }
         try { box.getAutofit().disableAutofit(); } catch (err) {}
         if (!hasTextFrame_(box)) return;
         const tr = box.getText();
@@ -322,7 +325,7 @@ function setSpeakerNotesSafe_(slide, notes) {
   } catch (e) {}
 }
 
-// Engine asset key -> Drive file id (design images in 02_Brand_Assets/03_Images/Design)
+// Engine asset key -> Drive file id (design images in 01_Brand_Assets/03_Images/Design)
 function engineAssetId(asset, ctx) {
   const d = (ctx.assets && ctx.assets.design) || {};
   const logos = (ctx.assets && ctx.assets.logos) || {};
