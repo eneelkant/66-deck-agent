@@ -692,6 +692,10 @@ ${ctx.brand.rules.map(function (r) { return '- ' + r; }).join('\n')}
   "Trillions") and never a range ("4% to 100%": write "100%" with the label "of calls reviewed, up from 4%").
 - bullets: write each point as "Short label: explanation" (the label is shown in Medium).
 - case_study (one client): "solution" is a list of 3-4 separate steps, never one paragraph.
+- The client in a case study must fit the topic and the department: the same industry or the same kind of work
+  (e.g. data platform, analytics or EDW cost savings for a finance deck). Never use an unrelated client result (e.g. contract
+  review or a service desk for a finance planning deck). If no approved client fact fits, use a stats slide of 66degrees
+  credentials instead of a case study.
 - The agenda lists every body slide (the code fills it from the slide titles).
 - Never use "section" divider slides: every body slide carries content.
 - "comparison" at most once (twice in a deck of 14+ slides).
@@ -740,7 +744,8 @@ ${ctx.brand.rules.map(function (r) { return '- ' + r; }).join('\n')}
 FACTS
 - Statements about ${ctx.brand.name} may ONLY use the APPROVED FACTS below (or the user's source material).
 - Topic/market/client numbers must come from the request or source material. If you need a number you do not have,
-  write it as a target ("Target: 30% faster") and add "Illustrative figure – validate before sharing." to that slide's notes.
+  write it as a target: the "value" is the number only (e.g. "30%" or "3-5 days") and the "label" starts with "Target:"
+  (e.g. "Target: faster month-end close"); add "Illustrative figure – validate before sharing." to that slide's notes.
 - "facts_note": one short sentence naming illustrative figures, or "".
 
 APPROVED FACTS${facts.usable.length ? ' (from the 66degrees 2026 template; the [tag] after each fact is its ID)' : ''}
@@ -778,6 +783,11 @@ SLIDE TYPES (use exactly these field names)
   Use approved client facts only; value_headline is the key result (e.g. "$3M+ in annual savings").
 - bullets: title, points[] (3-6, each "Label: explanation"), callout{label, title, text} (callout text 25-45 words)
 - next_steps: title, items[{title, text, timing}] (3-5), cta
+- team: title, lead, people[{name, title, location, text}] (3-12). ONLY when the request or the source material names the people:
+  copy their names and titles exactly. Never invent people, names or titles.
+- template: title, template ("clients" | "leadership" | "industries"). The real 66degrees template slide is copied as it is
+  (real client logos, the real leadership team, industry expertise). ONLY when the request asks for clients or client logos,
+  the 66degrees leadership team, or the industries 66degrees serves. At most one of each.
 - quote: quote, attribution
 - section: title, lead
 - closing: title, subtitle
@@ -800,8 +810,9 @@ Every body slide also has "design": the tag of the template design from the DESI
   gets a process design; a journey gets the staircase; a from/to comparison gets the cross/tick design; capabilities around one
   platform get the hub-and-spoke diagram; parts of a whole get the half donut. Never use the same design twice in a deck, and
   write the content in the shape the chosen design needs (its item count, fields and word counts).
-- Make the deck visually rich: use at least ${Math.max(2, Math.round(n / 6))} different diagram or photo designs (diagram types,
-  dark photo bands, statement photo slides) among the body slides, spread through the deck, never two dark slides in a row.
+- Make the deck visually rich: use at least ${Math.max(2, Math.round(n / 6))} different diagram designs among the body slides,
+  spread through the deck. Dark or photo designs (dark photo bands, photo strips, statement photo slides): at most ${n >= 8 ? 2 : 1}
+  in the whole deck, never two in a row.
 
 STORY SHAPES (pick the one that suits the request best; do not always use the same one):
 - Problem-led: why now -> what is broken -> what good looks like -> how to get there -> proof -> how to measure.
@@ -836,6 +847,7 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
   const plan = callGeminiJSON(parts, ctx.apiKey, 0.5);
   if (!plan || !Array.isArray(plan.slides) || !plan.slides.length) throw new Error('Gemini returned no slide content.');
   plan.slides = plan.slides.map(function (sp) { return ENGINE.cleanSpec(sp); });   // strip stray color codes
+  plan.slides = normalizeSpecialSlides_(plan.slides, userPrompt, sources, ctx);    // real template slides, real people only
   plan.slides.forEach(function (sp) { removeHypeWords_(sp); });                // brand voice: no hype words, enforced in code
   plan.slides = plan.slides.map(function (sp) { return realChartOrStats_(sp); }); // charts only with real multi-point data
   plan.slides.forEach(function (sp) { dropRepeatedHighlights_(sp); sentenceCaseHeadings_(sp); });
@@ -855,13 +867,62 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
   plan.slides = limitRepeatedTypes_(plan.slides);                                 // statement / bullets at most once
   replaceDuplicateSlides_(plan, ctx);                                             // no two slides with the same content                  // "24.69%" -> "25%" 
   plan.slides.forEach(function (sp) {                                            // brand rule: sentence-case titles
-    if (sp.title && String(sp.type).toLowerCase() !== 'closing') sp.title = sentenceCase_(sp.title);
+    const tt = String(sp.type).toLowerCase();
+    if (sp.title && tt !== 'closing' && tt !== 'template') sp.title = sentenceCase_(sp.title, 2);
     if (sp.statement) sp.statement = sentenceCase_(sp.statement);
   });
   plan.slides = enforceDeckStructure_(plan.slides, n, plan.deck_title);          // cover, agenda, body, closing — exactly n
   syncAgendaToSlides_(plan.slides);                                             // agenda lists exactly the slides that exist
   if (!plan.deck_title) plan.deck_title = plan.slides[0].title || 'Presentation';
   return plan;
+}
+
+/* ---------- Special slides: real template slides and real people only ---------- */
+
+// "template" slides (client logos, leadership, industries) are kept only when the request or source material asks for
+// them, at most one of each, and get the real template slide's tag and title. "team" slides are kept only when the
+// people's names really come from the request or the source material (never invented people).
+function normalizeSpecialSlides_(slides, userPrompt, sources, ctx) {
+  const asked = String(userPrompt || '') + ' ' + String((sources && sources.text) || '');
+  const askedLc = asked.toLowerCase();
+  const seen = {};
+  const history = loadDesignUsage_();
+  const out = [];
+  slides.forEach(function (sp) {
+    if (!sp) return;
+    let t = String(sp.type || '').toLowerCase();
+    if (t === 'leadership' && Array.isArray(sp.people) && sp.people.length) t = sp.type = 'team';
+    if (['template', 'clients', 'logos', 'client_logos', 'industries', 'leadership'].indexOf(t) !== -1) {
+      const key = templateSlideKey_(Object.assign({ template: t === 'template' ? sp.template : t }, sp)) || templateSlideKey_(sp);
+      if (!key || seen[key] || !TEMPLATE_SLIDE_TRIGGERS_[key].test(asked)) {
+        ctx.log.push('Left out a ' + (key || 'template') + ' slide the request did not ask for.');
+        return;
+      }
+      seen[key] = true;
+      // the least recently used version (the client logo slides rotate between decks)
+      const tags = TEMPLATE_SLIDES_[key].slice().sort(function (a, b) { return recencyScore_(history, b) - recencyScore_(history, a); });
+      const tag = tags[0];
+      try { saveDesignUsage_([tag]); } catch (e) {}
+      out.push({ type: 'template', template: key, tag: tag, title: templateSlideTitle_(ctx.lib, tag) || sp.title || '',
+        notes: sp.notes || '', fact_tags: sp.fact_tags || [], reference: { tag: tag, fallback: false } });
+      return;
+    }
+    if (t === 'team') {
+      const people = (Array.isArray(sp.people) ? sp.people : []).filter(function (p) { return p && (p.name || typeof p === 'string'); });
+      const real = people.filter(function (p) {
+        const name = String(typeof p === 'string' ? p : p.name).trim().toLowerCase();
+        const last = name.split(/\s+/).pop();
+        return name && (askedLc.indexOf(name) !== -1 || (last.length > 2 && askedLc.indexOf(last) !== -1));
+      });
+      if (people.length < 1 || real.length < Math.ceil(people.length * 0.8)) {
+        ctx.log.push('Left out a team slide: the people\'s names were not in the request or the source material.');
+        return;
+      }
+      sp.people = people.slice(0, 12);
+    }
+    out.push(sp);
+  });
+  return out;
 }
 
 /* ---------- Deck structure and agenda sync (Create mode) ---------- */
@@ -1445,6 +1506,13 @@ function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
     checkCancel_(ctx);
     progressSlide_(ctx, i, 'active');
     try {
+      // Real template slides (client logos, leadership, industries) are copied from the template as they are
+      const sp = specs[i] || {};
+      if (String(sp.type || '').toLowerCase() === 'template' && sp.tag && insertTemplateSlide_(slide, sp.tag, ctx)) {
+        stats.redrawn++;
+        progressSlide_(ctx, i, 'done');
+        return;
+      }
       renderEngineSlide(slide, specs[i], i + 1, ctx, pageW, pageH, dateLabel);
       stats.redrawn++;
     } catch (e) {
@@ -1550,6 +1618,7 @@ function fitContentToDesigns_(plan, ctx, started) {
     plan.slides.forEach(function (sp, i) {
       const t = String(sp.type || '').toLowerCase();
       // Titles stay on one line; agenda descriptions stay on one line
+      if (t === 'template') return;
       if (['cover', 'closing', 'agenda'].indexOf(t) === -1 && sp.title && !ENGINE.titleFits(sp.title)) {
         issues.push({ slide: i, path: ['title'], current: sp.title, action: 'shorten', min_chars: 32, max_chars: ENGINE.titleMaxChars(sp.title) });
       }
@@ -1617,7 +1686,7 @@ function fitContentToDesigns_(plan, ctx, started) {
   // what still does not fit is handled by the engine (one notch smaller type for that slide)
   plan.slides.forEach(function (sp) {
     const t = String(sp.type || '').toLowerCase();
-    if (['cover', 'closing', 'section'].indexOf(t) !== -1) return;
+    if (['cover', 'closing', 'section', 'template'].indexOf(t) !== -1) return;
     res.left += ENGINE.measure(sp, { tokens: ctx.tokens || null }).overflow.length;
   });
   syncAgendaToSlides_(plan.slides);
@@ -1701,7 +1770,7 @@ function chooseDesignsByContent_(plan, ctx) {
   let prevTag = null;
   const history = loadDesignUsage_();                                  // designs used in earlier decks (all users)
   let prevDark = false, darkUsed = 0;
-  const darkTarget = Math.max(1, Math.round(plan.slides.length / 6));     // a dark / photo slide every ~6 slides
+  const darkMax = plan.slides.length >= 8 ? 2 : 1;                       // dark / photo designs: at most 2 per deck
   plan.slides.forEach(function (sp) {
     const type = normalizeType_(sp.type);
     const designs = drawableDesigns_(type, itemCount_(sp), sp);
@@ -1724,7 +1793,7 @@ function chooseDesignsByContent_(plan, ctx) {
     const light = pool.filter(function (d) {
       return !ENGINE.measure(Object.assign({}, sp, { reference: Object.assign({}, sp.reference || {}, { tag: d.tag }) }), { tokens: ctx.tokens || null }).dark;
     });
-    if ((prevDark || darkUsed >= darkTarget + 1) && light.length) pool = light;
+    if ((prevDark || darkUsed >= darkMax) && light.length) pool = light;
     pool.forEach(function (d) {
       const trial = Object.assign({}, sp, { reference: Object.assign({}, sp.reference || {}, { tag: d.tag }) });
       const m = ENGINE.measure(trial, { tokens: ctx.tokens || null });
@@ -1735,7 +1804,7 @@ function chooseDesignsByContent_(plan, ctx) {
       if (d.tag === prevTag) score -= 15;                           // not the same design twice in a row
       score -= 25 * (used[d.tag] || 0);                             // a design is used once per deck when there is another that fits
       score += recencyScore_(history, d.tag);                         // designs not used in recent decks first
-      if (m.dark) score += prevDark ? -30 : (darkUsed < darkTarget ? 8 : -15);   // rhythm: dark slides spread out, never back to back
+      if (m.dark) score += prevDark ? -30 : (darkUsed < darkMax ? 6 : -40);   // rhythm: at most 2 dark slides, never back to back
       if (!best || score > best.score) best = { tag: d.tag, score: score };
     });
     if (best && best.tag !== current) {
@@ -1931,6 +2000,7 @@ function verifyStatNumbers_(slides, corpus) {
   slides.forEach(function (sp) {
     if (String(sp.type || '').toLowerCase() !== 'stats' || !Array.isArray(sp.items)) return;
     const ok = sp.items.filter(function (it) {
+      if (it && (/^\s*(targets?|goal)\b/i.test(String(it.value || '')) || /^\s*targets?\b/i.test(String(it.label || '')))) return true;   // targets are goals, not findings
       const nums = numsIn(it && it.value);
       return !nums.length || nums.every(found);
     });
@@ -1967,6 +2037,14 @@ function roundOddPrecision_(obj) {
 function splitRangeValues_(sp) {
   const fix = function (o) {
     if (!o || typeof o.value !== 'string') return;
+    // "Target: 15-20%" -> value "15-20%", label "Target: improved forecast accuracy" (the big number stays a number)
+    const tg = o.value.match(/^\s*(targets?|goal|aim|objective)\s*[:\-–]?\s*(.+?)\s*$/i);
+    if (tg && /\d/.test(tg[2])) {
+      o.value = tg[2];
+      const lbl = String(o.label || '').trim();
+      if (!/^target/i.test(lbl)) o.label = 'Target: ' + (/^[A-Z][a-z]/.test(lbl) ? lbl.charAt(0).toLowerCase() + lbl.slice(1) : lbl);
+      if (o.value.length <= 9) return;                     // a short target range ("15-20%", "3-5 days") stays as it is
+    }
     const q = o.value.match(/^\s*(nearly|almost|about|around|approximately|approx\.?|roughly|over|more than|above)\s+(.+?)\s*$/i);
     if (q) o.value = /^(over|more than|above)$/i.test(q[1]) ? q[2].replace(/\+?$/, '+') : '~' + q[2];
     const r = o.value.match(/^\s*(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(%|x|pp)?\s*$/i);
@@ -2055,7 +2133,7 @@ function overlap_(a, b) {
 // Two body slides with (nearly) the same content: the later one is replaced by a new slide on a topic the deck does
 // not cover yet (one Gemini call). If that fails, the duplicate is removed.
 function replaceDuplicateSlides_(plan, ctx) {
-  const skip = { cover: 1, agenda: 1, closing: 1 };
+  const skip = { cover: 1, agenda: 1, closing: 1, template: 1, team: 1 };
   const dupIdx = [];
   const words = plan.slides.map(function (sp) { return skip[String(sp.type || '').toLowerCase()] ? null : slideWords_(sp); });
   for (let i = 0; i < plan.slides.length; i++) {
@@ -2186,7 +2264,7 @@ function dedupeStatValues_(slides) {
 // Gemini reads the slide list and names slides that repeat a topic already covered or split one topic over several
 // slides. Returns their indexes (the later slide of each repeat). Empty when the check is not possible.
 function topicRepeats_(plan, ctx) {
-  const skip = { cover: 1, agenda: 1, closing: 1 };
+  const skip = { cover: 1, agenda: 1, closing: 1, template: 1, team: 1 };
   const list = [];
   plan.slides.forEach(function (sp, i) {
     if (skip[String(sp.type || '').toLowerCase()]) return;

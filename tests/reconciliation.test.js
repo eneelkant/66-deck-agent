@@ -211,14 +211,28 @@ test("every ENGINE layout and metrics alias keeps positive dimensions", () => {
   }
 });
 
-test("unknown architecture/flowchart/diagram types fall back to bullets", () => {
+test("architecture/flowchart/diagram render as diagrams with content; unknown types fall back to bullets", () => {
   const { ENGINE } = loadEngine();
-  for (const type of ["architecture", "flowchart", "diagram", "unknown_widget"]) {
+  for (const type of ["architecture", "flowchart", "diagram"]) {
     const out = ENGINE.render({
-      slides: [{ type, title: type, items: SAMPLE_ITEMS }]
+      slides: [{ type, title: type, center: "Core", items: SAMPLE_ITEMS }]
     })[0];
-    assert.equal(out.type, "bullets");
+    assert.equal(out.type, "diagram");
+    const content = out.els.filter((e) => e.t !== "image" && (e.t === "line" ? Math.min(e.y1, e.y2) : e.y) >= 64);
+    assert.ok(content.length > 0, `${type} slide has no content below the title`);
     assertPositiveEls(out.els, type);
+  }
+  const unknown = ENGINE.render({ slides: [{ type: "unknown_widget", title: "x", items: SAMPLE_ITEMS }] })[0];
+  assert.equal(unknown.type, "bullets");
+  assertPositiveEls(unknown.els, "unknown_widget");
+});
+
+test("no content slide is ever drawn empty below the title", () => {
+  const { ENGINE } = loadEngine();
+  for (const type of ["diagram", "cards", "process", "timeline", "stats", "bullets"]) {
+    const out = ENGINE.render({ slides: [{ type, title: type, layers: [{ title: "A", text: "a" }, { title: "B", text: "b" }], items: SAMPLE_ITEMS }] })[0];
+    const content = out.els.filter((e) => e.t !== "image" && (e.t === "line" ? Math.min(e.y1, e.y2) : e.y) >= 64);
+    assert.ok(content.length > 0, `${type} slide is empty`);
   }
 });
 
