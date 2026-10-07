@@ -97,10 +97,14 @@ function loadReferenceRuntime(force) {
   if (!id) { REF_RUNTIME_ERROR = 'no harvest saved yet (Script property ' + REF.runtimePropKey + ' is empty)'; return null; }
   if (!force) {
     const cached = readCache(REF.runtimeCacheKey);
-    if (cached) return cached;
+    if (cached && (!cached.deckId || cached.deckId === CONFIG.referenceDeckId)) return cached;
   }
   try {
     const rt = JSON.parse(DriveApp.getFileById(id).getBlob().getDataAsString());
+    if (rt && rt.deckId && rt.deckId !== CONFIG.referenceDeckId) {
+      REF_RUNTIME_ERROR = 'harvest is from a different template deck; run "Set up template (harvest)"';
+      return null;
+    }
     writeCache(REF.runtimeCacheKey, rt);
     return rt;
   } catch (e) {
@@ -611,6 +615,7 @@ function harvestReferenceDeck() {
 
   let state = null;
   try { state = JSON.parse(props.getProperty(REF.harvestStateKey) || 'null'); } catch (e) {}
+  if (state && state.runtime && state.runtime.deckId !== CONFIG.referenceDeckId) state = null;
   if (!state) state = { runtime: { deckId: CONFIG.referenceDeckId, slides: {}, icons: {}, thumbs: {}, iconSlideId: null }, nextThumb: 0 };
   const rt = state.runtime;
 
@@ -646,6 +651,7 @@ function harvestReferenceDeck() {
   rt.harvestedAt = new Date().toISOString();
   rt.iconCount = Object.keys(rt.icons).length;
   if (done) {
+    rt.deckId = CONFIG.referenceDeckId;
     const json = Utilities.newBlob(JSON.stringify(rt), 'application/json', '66d_reference_runtime.json');
     const id = uploadDriveFile_(json, 'application/json', null, props.getProperty(REF.runtimePropKey));
     props.setProperty(REF.runtimePropKey, id);
