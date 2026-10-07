@@ -727,6 +727,12 @@ var ENGINE = (function () {
     var els = [];
     var top = header(els, s) + 4;
     var side = s.callout && (s.callout.title || s.callout.text);
+    // No points: the side panel would sit alone on the right with an empty left half. The callout becomes the
+    // slide's statement instead (full width, nothing empty).
+    if (!asList(s.points).length) {
+      if (!side) return { bg: T.white, els: els };
+      var so = L.statement({ title: s.title, statement: s.callout.title || s.callout.label || s.title, text: s.callout.text || '', notes: s.notes }, ctx); so.noBalance = true; return so;
+    }
     var lw = side ? 400 : CW;
     var listH = bulletList(els, CX, top, lw, BOTTOM - top, s.points, { max: TSZ.body + 0.5, min: TSZ.body + 0.5, gap: 12 });
     if (side) {
@@ -790,6 +796,12 @@ var ENGINE = (function () {
     var ch = s.chart || {};
     var cats = arr(ch.categories, 8);
     var series = arr(ch.series, 2).map(function (se) { return { name: se.name || '', values: arr(se.values, 8).map(Number) }; });
+    // No real data: never an empty plot with a lonely insight panel - the insight becomes the slide's statement
+    var hasData = cats.length >= 2 && series.some(function (se) { return se.values.some(function (v) { return isFinite(v) && v > 0; }); });
+    if (!hasData) {
+      if (s.insight && (s.insight.title || s.insight.text)) { var si = L.statement({ title: s.title, statement: s.insight.title || s.title, text: s.insight.text || '', notes: s.notes }, ctx); si.noBalance = true; return si; }
+      return { bg: T.white, els: els };
+    }
     var top = header(els, s);                       // chart always starts below the title, however long it is
     var hasInsight = !!(s.insight && (s.insight.title || s.insight.text));
     var cx = CX, cw = hasInsight ? 420 : CW;
@@ -948,6 +960,88 @@ var ENGINE = (function () {
     return { bg: T.white, els: els, noFooter: true };
   };
 
+  /* ---------------- Cover and closing variations (rotated between decks) ----------------
+   * Built only from the template's own parts: the 66° Blue band, the band / strip / cover patterns, the logo, the
+   * white 66° mark and the isometric cube. Light backgrounds only (they never count as dark slides). */
+  var COVER_VARIANTS_ = {};
+  // Blue panel on the left with the white 66° mark and the date; the title on the right
+  COVER_VARIANTS_.ENGINE_COVER_PANEL = function (s, ctx) {
+    var els = [], pw = 236;
+    rect(els, 0, 0, pw, H, T.blue);
+    els[els.length - 1].square = true;
+    image(els, 'mark-white', 28, 30, 55, 36.7);
+    image(els, 'band-pattern', 0, H - 56, 94, 56);
+    text(els, 28, 300, pw - 50, 16, '>> ' + (ctx.dateLabel || ''), { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
+    image(els, 'logo-dark', W - 32 - 68.8, 28, 68.8, 16.2);
+    text(els, pw + 40, 110, W - pw - 80, 116, s.title, { weight: 600, max: 28, min: 22, maxLines: 3, color: T.title || T.ink, valign: 'bottom' });
+    rect(els, pw + 42, 236, 72, 3, T.blue);
+    text(els, pw + 40, 250, W - pw - 90, 40, s.subtitle || s.lead, { weight: 500, max: 12, min: 10, maxLines: 2, color: T.body });
+    image(els, 'cover-pattern', W - 124, H - 96, 92, 72);
+    return { bg: T.white, els: els, noFooter: true };
+  };
+  // Title block with the isometric cube on the right and a slim blue band with the date at the bottom
+  COVER_VARIANTS_.ENGINE_COVER_CUBE = function (s, ctx) {
+    var els = [];
+    image(els, 'logo-dark', 32, 28, 68.8, 16.2);
+    text(els, 32, 92, 430, 128, s.title, { weight: 600, max: 28, min: 22, maxLines: 3, color: T.title || T.ink, valign: 'bottom' });
+    rect(els, 34, 230, 96, 3, T.blue);
+    text(els, 32, 244, 410, 40, s.subtitle || s.lead, { weight: 500, max: 12, min: 10, maxLines: 2, color: T.body });
+    image(els, 'cube', 500, 96, 170, 188);
+    rect(els, 0, H - 40, W, 40, T.blue);
+    els[els.length - 1].square = true;
+    image(els, 'strip-pattern', W - 238, H - 40, 238, 40);
+    text(els, 32, H - 28, 220, 16, '>> ' + (ctx.dateLabel || ''), { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
+    return { bg: T.white, els: els, noFooter: true };
+  };
+
+  var CLOSING_VARIANTS_ = {};
+  function contactRows_(els, x, y, gap) {
+    [['web', 'www.66degrees.com'], ['at', '@66degrees'], ['mail', 'hello@66degrees.com']].forEach(function (c, i) {
+      contactIcon(els, c[0], x + 4, y + i * gap + 2, 14);
+      text(els, x + 30, y + i * gap, 200, 18, c[1], { weight: 400, max: 11, min: 11, maxLines: 1, color: T.ink });
+    });
+  }
+  function closingSub_(s) {
+    var sub = s.subtitle || s.lead || s.title || '';
+    return sub && sub.toLowerCase().indexOf('thank') === -1 ? sub : '';
+  }
+  // Blue panel on the left with "Thank You!" in white; contacts on the right
+  CLOSING_VARIANTS_.ENGINE_CLOSING_PANEL = function (s) {
+    var els = [], pw = 400;
+    rect(els, 0, 0, pw, H, T.blue);
+    els[els.length - 1].square = true;
+    image(els, 'mark-white', 40, 36, 42, 28);
+    text(els, 40, 128, pw - 70, 80, 'Thank You!', { weight: 500, max: 52, min: 40, maxLines: 1, color: T.white, valign: 'bottom' });
+    rect(els, 42, 216, 96, 3, T.white);
+    var sub = closingSub_(s);
+    if (sub) text(els, 42, 230, pw - 80, 60, sub, { weight: 400, max: 13, min: 11, maxLines: 3, color: T.white });
+    image(els, 'band-pattern', pw - 94, H - 56, 94, 56);
+    image(els, 'logo-dark', W - 40 - 82, 40, 82, 19.4);
+    text(els, pw + 40, 140, 240, 24, 'Stay Connected', { weight: 500, max: 16, min: 14, maxLines: 1, color: T.ink });
+    rect(els, pw + 40, 170, 48, 2, T.blue);
+    contactRows_(els, pw + 36, 192, 30);
+    return { bg: T.white, els: els, noFooter: true };
+  };
+  // Centred "Thank You!", contacts in one row, full blue band at the bottom
+  CLOSING_VARIANTS_.ENGINE_CLOSING_CENTER = function (s) {
+    var els = [];
+    image(els, 'logo-dark', (W - 82) / 2, 40, 82, 19.4);
+    text(els, 110, 100, W - 220, 74, 'Thank You!', { weight: 500, max: 56, min: 42, maxLines: 1, align: 'center', color: T.ink, valign: 'bottom' });
+    rect(els, (W - 96) / 2, 184, 96, 3, T.blue);
+    var sub = closingSub_(s);
+    if (sub) text(els, 140, 198, W - 280, 40, sub, { weight: 400, max: 13, min: 11, maxLines: 2, align: 'center', color: T.ink });
+    var cx = [130, 300, 450];
+    [['web', 'www.66degrees.com'], ['at', '@66degrees'], ['mail', 'hello@66degrees.com']].forEach(function (c, i) {
+      contactIcon(els, c[0], cx[i], 268, 14);
+      text(els, cx[i] + 22, 266, 150, 18, c[1], { weight: 400, max: 11, min: 11, maxLines: 1, color: T.ink });
+    });
+    rect(els, 0, 349, W, 56, T.blue);
+    els[els.length - 1].square = true;
+    image(els, 'strip-pattern', W - 238, 349, 238, 56);
+    image(els, 'mark-white', 22.3, 368, 28.2, 18.8);
+    return { bg: T.white, els: els, noFooter: true };
+  };
+
   // Contact icons drawn from simple shapes in 66° Blue: they always look right (no lookup in the icon sheet)
   function contactIcon(els, kind, x, y, sz) {
     var c = T.blue, bg = T.bgLight;
@@ -973,6 +1067,8 @@ var ENGINE = (function () {
    * does not suit it; the slide is then drawn with the type's default layout.
    * ================================================================================================ */
   var V = {};
+  Object.keys(COVER_VARIANTS_).forEach(function (k) { V[k] = function (s, ctx) { return COVER_VARIANTS_[k](s, ctx || {}); }; });
+  Object.keys(CLOSING_VARIANTS_).forEach(function (k) { V[k] = function (s, ctx) { return CLOSING_VARIANTS_[k](s, ctx || {}); }; });
 
   function shape(els, kind, x, y, w, h, fill, ln) { els.push({ t: 'shape', shape: kind, x: x, y: y, w: w, h: h, fill: fill, line: ln || null }); }
   function ring(els, x, y, d, fill, color, width) { els.push({ t: 'ellipse', x: x, y: y, w: d, h: d, fill: fill, line: { color: color, width: width } }); }
@@ -1029,6 +1125,28 @@ var ENGINE = (function () {
       if (it.text && rowH >= 30) text(els, X0 + 18, y + t.height + 2, listW - 20, 14, it.text, { weight: 400, max: dSize, min: dSize, maxLines: 1, color: T.body });
     });
     image(els, 'cube', 556, 190, 136, 150);
+    agendaBand(els);
+    return { bg: T.white, els: els, noFooter: true };
+  };
+
+  // Agenda as numbered tiles (3 or 4 columns): a second design for long decks, so the agenda changes between decks
+  V.ENGINE_AGENDA_TILES = function (s) {
+    var items = agendaItems(s), n = items.length;
+    if (n < 6 || n > 16) return null;
+    var els = [];
+    text(els, X0, 24, 520, 30, s.title || 'Agenda', { weight: 600, max: 20, min: 16, maxLines: 1, color: T.title || T.ink });
+    var cols = n > 12 ? 4 : n > 8 ? 4 : 3, rows = Math.ceil(n / cols), gap = 10;
+    var top = 66, cw = (W - 2 * X0 - gap * (cols - 1)) / cols, ch = Math.min(84, (338 - top - gap * (rows - 1)) / rows);
+    var tw = cw - 24;
+    var fitsAt = function (sz) { return items.every(function (it) { return wrap(String(it.title), tw, 'sans', 500, sz).length <= 2; }); };
+    var tS = TSZ.heading;
+    while (tS > 10 && !fitsAt(tS)) tS -= 0.5;
+    items.forEach(function (it, i) {
+      var c = i % cols, r = Math.floor(i / cols), x = X0 + c * (cw + gap), y = top + r * (ch + gap);
+      rect(els, x, y, cw, ch, T.bgLight);
+      text(els, x + 12, y + 8, 40, 16, pad2(i + 1), { font: 'mono', weight: 500, max: 11, min: 10, maxLines: 1, color: T.blue });
+      text(els, x + 12, y + 26, tw, ch - 32, it.title, { weight: 500, max: tS, min: tS, maxLines: 2, color: T.ink });
+    });
     agendaBand(els);
     return { bg: T.white, els: els, noFooter: true };
   };
@@ -3305,7 +3423,7 @@ var ENGINE = (function () {
   function peopleRows_(s, rowsSpec, bg, tileMax) {
     var total = rowsSpec.reduce(function (a, b) { return a + b; }, 0);
     var ppl = people_(s, total);
-    var minN = rowsSpec.length > 1 ? total - rowsSpec[rowsSpec.length - 1] + 1 : total;
+    var minN = rowsSpec.length > 1 ? total - rowsSpec[rowsSpec.length - 1] + 1 : Math.min(total, s.__minPeople || total);
     if (ppl.length < minN || ppl.length > total) return null;
     var els = [];
     var top = header(els, s);
@@ -3327,7 +3445,33 @@ var ENGINE = (function () {
     });
     return { bg: bg, els: els, center: true };
   }
-  V['66D_LAYOUT_LEADERSHIP_003'] = function (s) { return peopleRows_(s, [5], T.white, 110); };
+  // One row of large tiles: 2 to 5 people (a second look for small groups next to the white cards)
+  V['66D_LAYOUT_LEADERSHIP_003'] = function (s) {
+    var n = people_(s, 5).length;
+    if (n < 2 || n > 5 || arr(s.people, 99).length > 5) return null;
+    return peopleRows_(Object.assign({}, s, { __minPeople: 2 }), [n], T.white, 110);
+  };
+  // List rows: initials tile, name in blue, title and location, and the person's short text on the right (2-6 people)
+  V.ENGINE_TEAM_LIST = function (s) {
+    var ppl = people_(s, 6);
+    if (ppl.length < 2 || arr(s.people, 99).length > 6) return null;
+    var els = [];
+    var top = header(els, s);
+    var n = ppl.length, gap = 8, rowH = Math.min(70, (BOTTOM - top - gap * (n - 1)) / n), av = Math.min(46, rowH - 12);
+    var nameW = 230;
+    ppl.forEach(function (p, i) {
+      var y = top + i * (rowH + gap);
+      rect(els, CX, y, CW, rowH, T.white, { color: T.cardLine, width: 0.75 });
+      rect(els, CX, y, 4, rowH, T.blue);
+      avatar_(els, CX + 16, y + (rowH - av) / 2, av, p.name);
+      var tx = CX + 16 + av + 14;
+      var t1 = text(els, tx, y + 8, nameW - av - 30, 18, p.name || '', { weight: 500, max: 12, min: 10, maxLines: 1, color: T.blue });
+      text(els, tx, y + 10 + t1.height, nameW - av - 30, rowH - t1.height - 14, [p.title, p.location].filter(Boolean).join(', '),
+        { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, color: T.ink });
+      if (p.text) text(els, CX + nameW + 16, y + 8, CW - nameW - 32, rowH - 16, p.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3, valign: 'middle', color: T.body });
+    });
+    return { bg: T.bgLight, els: els };
+  };
   V['66D_LAYOUT_TEAM_002'] = function (s) { return peopleRows_(s, [5, 4], T.white, 74); };
   V['66D_LAYOUT_TEAM_003'] = function (s) { return peopleRows_(s, [6, 6], T.bgLight, 66); };
   L.team = function (s, ctx) {
@@ -3351,7 +3495,17 @@ var ENGINE = (function () {
     agenda: [
       { tag: '66D_LAYOUT_AGENDA_002', min: 1, max: 8, desc: 'numbered rows with square badges; the classic agenda' },
       { tag: '66D_LAYOUT_AGENDA_001', min: 2, max: 9, desc: 'clean bulleted list with descriptions' },
-      { tag: '66D_LAYOUT_AGENDA_003', min: 3, max: 5, desc: 'ring graphic with topic pills on an arc; most visual, only for 3-5 short topics' }],
+      { tag: '66D_LAYOUT_AGENDA_003', min: 3, max: 5, desc: 'ring graphic with topic pills on an arc; most visual, only for 3-5 short topics' },
+      { tag: 'ENGINE_AGENDA_COLUMNS', min: 9, max: 16, desc: 'two columns of numbered topics; a long deck' },
+      { tag: 'ENGINE_AGENDA_TILES', min: 6, max: 16, desc: 'numbered tiles in 3-4 columns; a long deck' }],
+    cover: [
+      { tag: '66D_LAYOUT_COVER_001', min: 0, max: 99, desc: 'template cover: title left, blue band with the date and the 66 badge' },
+      { tag: 'ENGINE_COVER_PANEL', min: 0, max: 99, desc: 'blue panel on the left with the 66 mark and date, title on the right' },
+      { tag: 'ENGINE_COVER_CUBE', min: 0, max: 99, desc: 'title with the isometric cube on the right, slim blue band with the date' }],
+    closing: [
+      { tag: '66D_LAYOUT_CLOSING_001', min: 0, max: 99, desc: 'template closing: Thank You, Stay Connected card, blue band' },
+      { tag: 'ENGINE_CLOSING_PANEL', min: 0, max: 99, desc: 'blue panel with Thank You in white, contacts on the right' },
+      { tag: 'ENGINE_CLOSING_CENTER', min: 0, max: 99, desc: 'centred Thank You with the contacts in one row and a full blue band' }],
     cards: [
       { tag: '66D_LAYOUT_CARDS_007', min: 2, max: 6, desc: 'grid of panel cards with numbers or icons; general purpose', words: '35-55' },
       { tag: '66D_LAYOUT_CARDS_001', min: 3, max: 6, desc: 'big numbered panels with a divider; values, principles, pillars', words: '30-50' },
@@ -3436,7 +3590,8 @@ var ENGINE = (function () {
     team: [
       { tag: '66D_LAYOUT_LEADERSHIP_004', min: 3, max: 3, desc: 'three white cards: initials tile, name in blue, title, location, one-line text; a small leadership group', words: 'text 8-16' },
       { tag: '66D_LAYOUT_LEADERSHIP_002', min: 4, max: 4, desc: 'four white cards: initials tile, name in blue, title, location; leadership team', words: 'text 6-12' },
-      { tag: '66D_LAYOUT_LEADERSHIP_003', min: 5, max: 5, desc: 'five large bordered tiles in a row with name and title; leadership team', words: 'titles 2-6' },
+      { tag: '66D_LAYOUT_LEADERSHIP_003', min: 2, max: 5, desc: 'one row of large bordered tiles with name and title; leadership team', words: 'titles 2-6' },
+      { tag: 'ENGINE_TEAM_LIST', min: 2, max: 6, desc: 'one row per person: initials tile, name, title and location, short text on the right', words: 'text 10-20' },
       { tag: '66D_LAYOUT_TEAM_002', min: 6, max: 9, desc: 'tiles staggered 5 + 4 with name and title; key contributors', words: 'titles 2-6' },
       { tag: '66D_LAYOUT_TEAM_003', min: 10, max: 12, desc: 'two rows of six tiles with name and title; a project team', words: 'titles 2-6' }],
     diagram: [
@@ -3557,6 +3712,27 @@ var ENGINE = (function () {
     });
   }
 
+  // Visual family of a drawn slide, e.g. "light|grey|lbar|icons": two designs with the same family look alike to
+  // the audience (grey icon cards, a dark band on top, numbered tiles...) even when they are different template slides.
+  function lookOf_(lay, type) {
+    var els = lay.els || [];
+    var big = els.filter(function (e) { return (e.t === 'rect' || e.t === 'roundrect') && e.w >= 60 && e.h >= 40 && e.y >= 40; });
+    var fills = {};
+    big.forEach(function (e) {
+      var f = e.fill === T.bgLight ? 'grey' : e.fill === T.white ? (e.line ? 'outline' : 'white') : e.fill === T.blue ? 'blue' : e.fill === T.ink ? 'ink' : 'other';
+      fills[f] = (fills[f] || 0) + 1;
+    });
+    var main = Object.keys(fills).sort(function (a, b) { return fills[b] - fills[a]; })[0] || 'none';
+    var has = function (f) { return els.some(f); };
+    var accent = has(function (e) { return e.t === 'arc' || e.t === 'shape'; }) ? 'shape'
+      : has(function (e) { return e.t === 'rect' && e.h >= 18 && e.h <= 46 && e.w >= 60 && (e.fill === T.blue || e.fill === T.ink) && e.y >= 60; }) ? 'hdr'
+      : has(function (e) { return e.t === 'rect' && e.w <= 6 && e.h >= 24 && e.y >= 40; }) ? 'lbar'
+      : has(function (e) { return e.t === 'rect' && e.h <= 4 && e.w >= 40 && e.y >= 40; }) ? 'tbar'
+      : els.filter(function (e) { return e.t === 'ellipse'; }).length >= 3 ? 'dots' : 'plain';
+    var icons = has(function (e) { return e.t === 'icon'; }) ? 'icons' : 'noicons';
+    return [(lay.dark || lay.bgImage) ? 'dark' : 'light', main, accent, icons].join('|');
+  }
+
   // Fit check for one planned slide at the standard type sizes: which texts do not fit, which boxes are mostly empty.
   function measure(spec, ctx) {
     ctx = ctx || {};
@@ -3573,6 +3749,7 @@ var ENGINE = (function () {
     var boxes = res.filter(function (a) { return a.body; });
     var fill = boxes.length ? boxes.reduce(function (t, a) { return t + Math.min(a.fill, 1); }, 0) / boxes.length : 0.8;
     return {
+      look: lay ? lookOf_(lay, type) : type,                            // visual family (designs that look alike share it)
       dark: !!(lay && (lay.dark || lay.bgImage)),                       // photo or dark design (for the deck rhythm)
       content: lay ? contentCount_(lay) : 0,                            // 0 = the design shows nothing under the title
       fill: fill,
