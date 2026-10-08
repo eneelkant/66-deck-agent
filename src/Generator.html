@@ -1043,7 +1043,7 @@
         <div data-only="flowchart">
           <div class="flow-info">
             <strong>Build a flowchart slide</strong>
-            Describe the steps, or upload a sketch, screenshot or diagram file. You get one editable slide in the 66degrees style.
+            Describe the steps, or upload a sketch, screenshot, PDF, PowerPoint or diagram file. Each diagram becomes an editable slide in the 66degrees style, drawn with diagram-design rules.
           </div>
 
           <div class="field" id="flowField">
@@ -1066,9 +1066,9 @@
                 </svg>
               </div>
               <strong>Drop a file or <span>choose a file</span></strong>
-              <small>Whiteboard photo, screenshot (PNG, JPG), Mermaid, draw.io, Excalidraw or SVG · up to 20 MB</small>
+              <small>Whiteboard photo, screenshot (PNG, JPG), PDF, PowerPoint (.pptx), Mermaid, draw.io, Excalidraw or SVG · up to 20 MB</small>
             </div>
-            <input id="flowFileInput" type="file" accept=".png,.jpg,.jpeg,.webp,.svg,.mmd,.mermaid,.drawio,.dio,.excalidraw,.txt,image/*" hidden />
+            <input id="flowFileInput" type="file" accept=".png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,.pptx,.mmd,.mermaid,.drawio,.dio,.excalidraw,.txt" hidden />
             <ul class="file-list" id="flowFileList"></ul>
           </div>
 
@@ -1081,10 +1081,12 @@
               <button type="button" data-type="swimlane">Swimlane</button>
               <button type="button" data-type="architecture">Architecture</button>
               <button type="button" data-type="org-chart">Org chart</button>
+              <button type="button" data-type="layers">Layers</button>
+              <button type="button" data-type="loop">Loop</button>
             </div>
           </div>
 
-          <div class="hint" style="margin-top:-6px">The flowchart is added as a new slide right after the slide you are on, laid out and aligned automatically.</div>
+          <div class="hint" style="margin-top:-6px">The flowchart is added as a new slide right after the slide you are on, laid out and aligned automatically. A busy picture becomes an overview slide plus detail slides.</div>
         </div>
 
         <div class="form" data-only="create">
@@ -1904,8 +1906,13 @@
         $("flowField").classList.remove("invalid");
       }
 
+      var FLOW_EXT = /\.(png|jpe?g|webp|gif|svg|pdf|pptx|mmd|mermaid|drawio|dio|excalidraw|txt)$/i;
       function setFlowFile(file) {
         if (!file) return;
+        if (!FLOW_EXT.test(file.name || "")) {
+          setError("flowField", "flowErr", file.name + " can't be used for a flowchart. Use a picture, PDF, PowerPoint (.pptx), Mermaid, draw.io, Excalidraw or SVG file.");
+          return;
+        }
         if (file.size > MAX_TOTAL_BYTES) {
           setError("flowField", "flowErr", file.name + " is over the 20 MB limit.");
           return;

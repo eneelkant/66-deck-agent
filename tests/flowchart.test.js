@@ -107,13 +107,14 @@ test("the sidebar has a Flowchart tab without direction or placement choices", (
   assert.match(html, /runFlowchartGeneration\(payload\)/);
 });
 
-function loadCode(slides, currentIndex) {
+function loadCode(slides, currentIndex, gemini) {
   const inserted = [];
   const rendered = [];
+  const calls = [];
   const pres = {
     getSlides: () => slides,
     getSelection: () => ({ getCurrentPage: () => (currentIndex == null ? null : slides[currentIndex]) }),
-    insertSlide(i) { const s = { getObjectId: () => "new", selectAsCurrentPage() { s.selected = true; } }; inserted.push({ i, s }); slides.splice(i, 0, s); return s; },
+    insertSlide(i) { const s = { getObjectId: () => "new" + inserted.length, selectAsCurrentPage() { s.selected = true; } }; inserted.push({ i, s }); slides.splice(i, 0, s); return s; },
     getPageWidth: () => 720, getPageHeight: () => 405
   };
   const sandbox = {
@@ -122,15 +123,21 @@ function loadCode(slides, currentIndex) {
     Utilities: { formatDate: () => "Oct 8, 2026" }, Session: { getScriptTimeZone: () => "UTC" }
   };
   vm.createContext(sandbox);
-  vm.runInContext(read("src/Code.gs"), sandbox, { filename: "src/Code.gs" });
-  vm.runInContext(read("src/Diagram.gs"), sandbox, { filename: "src/Diagram.gs" });
+  ["src/Code.gs", "src/Diagram.gs", "src/DiagramDesignKit.gs", "src/DiagramDesign.gs"].forEach((f) => vm.runInContext(read(f), sandbox, { filename: f }));
+  // Vertex AI stand-in: 1st call = diagram-design type selection, 2nd = the diagram spec
+  const spec = { title: "Ticket triage", lead: "", type: "flowchart", nodes: SAMPLES.branch.nodes.map((n) => ({ id: n.id, label: n.label, kind: n.type === "terminator" ? "start" : n.type === "process" ? "step" : n.type })),
+    edges: SAMPLES.branch.edges };
   Object.assign(sandbox, {
-    loadRunContext_(ctx) { ctx.tokens = null; },
-    flowchartIrFromText_: () => ({ title: "Ticket triage", lead: "", ir: SAMPLES.branch }),
+    loadRunContext_(ctx) { ctx.tokens = null; ctx.brand = { name: "66degrees" }; },
+    callGeminiJSON(parts) {
+      calls.push(parts);
+      if (gemini) return gemini(parts, calls.length);
+      return /Return ONLY JSON: \{"is_diagram"/.test(parts[0].text) ? { is_diagram: true, type: "flowchart", slides: [{ title: "Ticket triage", type: "flowchart" }] } : { diagrams: [spec] };
+    },
     renderEngineSlide(slide, spec) { rendered.push(spec); },
     generationResult_: (msg, t, n) => ({ message: msg, count: n })
   });
-  return { sandbox, inserted, rendered };
+  return { sandbox, inserted, rendered, calls };
 }
 
 test("runFlowchartGeneration always adds a new slide right after the current slide", () => {
