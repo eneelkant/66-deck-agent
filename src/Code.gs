@@ -517,6 +517,12 @@ const PROGRESS_STAGES = {
   rebrand: [
     ['review', 'Reviewing every slide'],
     ['brand', 'Applying the 66degrees brand']
+  ],
+  flowchart: [
+    ['flow_read', 'Reading your description or sketch'],
+    ['flow_structure', 'Working out the steps and decisions'],
+    ['flow_layout', 'Laying out boxes and arrows'],
+    ['flow_insert', 'Adding the slide to your deck']
   ]
 };
 
@@ -3321,6 +3327,113 @@ function rebrandStep_(ctx, target, st, t0) {
   progressFinish_(ctx, 'done', sum.slides + ' slides rebranded');
   Logger.log(rmsg);
   return generationResult_(rmsg, target, sum.slides);
+}
+
+/* =========================
+   FLOWCHART TAB
+   One editable, on-brand flowchart slide from a description and/or a sketch or diagram file (photo, screenshot,
+   Mermaid, draw.io, Excalidraw, SVG). Always added as a new slide right after the slide the user is on; the layout
+   (direction, alignment, spacing) is chosen automatically (Diagram.gs flowchart layout).
+========================= */
+const FLOW_NODE_TYPES_ = ['start', 'end', 'process', 'decision', 'data'];
+
+// Gemini turns the description into the flowchart structure. With a diagram read from an upload, the description
+// corrects or adds to it (the upload is the starting point).
+function flowchartIrFromText_(text, baseIr, wantedType, ctx) {
+  const prompt = [
+    'You turn a process description into a clean flowchart for a ' + ctx.brand.name + ' slide.',
+    text ? 'DESCRIPTION: "' + String(text).slice(0, 3000) + '"' : 'No description: use the diagram below as it is.',
+    baseIr ? 'DIAGRAM READ FROM THE UPLOADED FILE (start from this; apply the description as corrections or additions):\n' +
+      JSON.stringify({ type: baseIr.type, nodes: baseIr.nodes.map(function (n) { return { id: n.id, type: n.type, label: n.label }; }), edges: baseIr.edges }) : '',
+    'DIAGRAM TYPE: ' + (wantedType || 'choose the best: flowchart, process, swimlane, architecture or org-chart') + '.',
+    'RULES:',
+    '- 3 to 16 nodes. Node "type": start, end, process, decision or data. A flowchart begins with one "start" and ends with "end" node(s).',
+    '- Labels are short (2-6 words), sentence case, no full stop. A decision label is a question ("Urgent?").',
+    '- Edges from a decision carry a short label ("Yes" / "No"). Other edges have no label unless the description names one.',
+    '- Keep the order of the description. Never add steps the description or the diagram does not imply.',
+    '- "title": the slide title, the key message in sentence case, max 58 characters. "lead": one sentence (max 110 characters) or "".',
+    'Return ONLY JSON: {"title":"","lead":"","type":"flowchart","nodes":[{"id":"n1","type":"start","label":""}],"edges":[{"from":"n1","to":"n2","label":""}]}'
+  ].filter(Boolean).join('\n');
+  const raw = callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.2) || {};
+  (raw.nodes || []).forEach(function (n) {
+    if (!n) return;
+    n.type = FLOW_NODE_TYPES_.indexOf(String(n.type || '').toLowerCase()) !== -1 ? String(n.type).toLowerCase() : 'process';
+    n.label = sentenceCase_(String(n.label || '').replace(/\.$/, ''), 1);
+    if (n.type === 'start' || n.type === 'end') n.type = 'terminator';
+  });
+  raw.type = wantedType && DIAGRAM_TYPES.indexOf(wantedType) !== -1 ? wantedType : (DIAGRAM_TYPES.indexOf(String(raw.type)) !== -1 ? raw.type : 'flowchart');
+  raw.source = baseIr ? 'upload+text' : 'text';
+  const ir = normalizeDiagramIr_(raw);
+  return { ir: ir, title: String(raw.title || ''), lead: String(raw.lead || '') };
+}
+
+function runFlowchartGeneration(data) {
+  data = data || {};
+  const t0 = Date.now();
+  const ctx = { runId: data.runId ? String(data.runId).slice(0, 60) : null, progress: null, blobCache: {}, generatedIcons: 0, log: [] };
+  try {
+    loadRunContext_(ctx);
+    progressInit_(ctx, 'flowchart');
+    progressStage_(ctx, 'flow_read', 'active');
+    const target = SlidesApp.getActivePresentation();
+    const text = String(data.prompt || '').trim();
+    const file = (Array.isArray(data.files) ? data.files : []).filter(function (f) { return f && f.data; })[0];
+    if (!text && !file) throw new Error('Describe the steps, or upload a sketch or diagram file.');
+    const wanted = data.diagramType && data.diagramType !== 'auto' ? String(data.diagramType) : '';
+
+    // 1. The uploaded sketch or diagram file (if any) becomes the starting structure
+    let baseIr = null;
+    if (file) {
+      const sources = { text: '', pdfs: [], images: [] };
+      const got = ingestUploadedDiagram_(file, sources, ctx);
+      if (got && got.ok) baseIr = got.ir;
+      else if (!text) throw new Error('No diagram could be read from ' + (file.name || 'the file') + '. Add a short description of the steps.');
+      else ctx.log.push('The upload could not be read as a diagram; the description was used.');
+    }
+    progressStage_(ctx, 'flow_read', 'done');
+    checkCancel_(ctx);
+
+    // 2. Structure (steps, decisions, arrows) and the slide title
+    progressStage_(ctx, 'flow_structure', 'active');
+    const made = flowchartIrFromText_(text, baseIr, wanted, ctx);
+    const check = validateDiagramIr_(made.ir);
+    if (!check.ok) throw new Error('A flowchart could not be built from that (' + check.errors.join('; ') + '). Try one step per line.');
+    progressStage_(ctx, 'flow_structure', 'done', made.ir.nodes.length + ' steps');
+    checkCancel_(ctx);
+    progressStage_(ctx, 'flow_layout', 'active');
+
+    // 3. A new slide right after the slide the user is on
+    let index = target.getSlides().length;
+    try {
+      const page = target.getSelection().getCurrentPage();
+      if (page) {
+        const id = page.getObjectId();
+        target.getSlides().forEach(function (sl, i) { if (sl.getObjectId() === id) index = i + 1; });
+      }
+    } catch (e) {}
+    progressStage_(ctx, 'flow_layout', 'done');
+    progressStage_(ctx, 'flow_insert', 'active');
+    const slide = target.insertSlide(index, SlidesApp.PredefinedLayout.BLANK);
+    const title = sentenceCase_(made.title || (text ? text.split(/[\n.→>-]/)[0] : 'Process overview'), 2).slice(0, 80);
+    const spec = {
+      type: 'diagram', title: title, lead: made.lead || '', diagram: made.ir,
+      items: made.ir.nodes.slice(0, 8).map(function (n) { return { title: n.label, text: n.label }; }),
+      notes: 'Flowchart built by the 66° Deck Agent' + (file ? ' from ' + file.name : '') + '. Every box and arrow is an editable shape.'
+    };
+    const dateLabel = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, yyyy');
+    renderEngineSlide(slide, spec, index + 1, ctx, target.getPageWidth(), target.getPageHeight(), dateLabel);
+    try { slide.selectAsCurrentPage(); } catch (e) {}
+    progressStage_(ctx, 'flow_insert', 'done', 'Slide ' + (index + 1));
+    if (ctx.progress) { ctx.progress.state = 'done'; progressSave_(ctx); }
+
+    const msg = 'SUCCESS: flowchart added as slide ' + (index + 1) + ' (' + made.ir.nodes.length + ' steps).' + (ctx.log.length ? '\n' + ctx.log.join('\n') : '');
+    const res = generationResult_(msg, target, 1);
+    res.elapsedMs = Date.now() - t0;
+    return res;
+  } catch (e) {
+    if (e && e.cancelled) return generationResult_('CANCELLED: Stopped at your request. Nothing was added.', null, 0);
+    throw e;
+  }
 }
 
 function getPipelineStages() {
