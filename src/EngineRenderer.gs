@@ -39,7 +39,9 @@ var VALID_SHAPE_TYPE_KEYS = {
   HEXAGON: true,
   FLOW_CHART_PROCESS: true,
   FLOW_CHART_DECISION: true,
-  FLOW_CHART_TERMINATOR: true
+  FLOW_CHART_TERMINATOR: true,
+  FLOW_CHART_INPUT_OUTPUT: true,
+  FLOW_CHART_MAGNETIC_DISK: true
 };
 
 var SHAPE_TYPE_ALIASES = {
@@ -290,6 +292,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
         ln.getLineFill().setSolidFill(e.color);
         if (e.arrow) { try { ln.setEndArrow(SlidesApp.ArrowStyle.FILL_ARROW); } catch (err) {} }   // flowchart connectors
         if (e.dash) { try { ln.setDashStyle(SlidesApp.DashStyle.DASH); } catch (err) {} }          // optional / return flows
+        if (e.startArrow) { try { ln.setStartArrow(SlidesApp.ArrowStyle.FILL_ARROW); } catch (err) {} }   // two-way relationship
       } else if (e.t === 'image') {
         const id = engineAssetId(e.asset, ctx);
         if (id) {
