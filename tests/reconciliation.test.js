@@ -211,20 +211,29 @@ test("every ENGINE layout and metrics alias keeps positive dimensions", () => {
   }
 });
 
-test("architecture/flowchart alias to diagram; unknown types fall back to bullets", () => {
+test("architecture/flowchart/diagram render as diagrams with content; unknown types fall back to bullets", () => {
   const { ENGINE } = loadEngine();
   for (const type of ["architecture", "flowchart", "diagram"]) {
     const out = ENGINE.render({
-      slides: [{ type, title: type, items: SAMPLE_ITEMS }]
+      slides: [{ type, title: type, center: "Core", items: SAMPLE_ITEMS }]
     })[0];
     assert.equal(out.type, "diagram");
+    const content = out.els.filter((e) => e.t !== "image" && (e.t === "line" ? Math.min(e.y1, e.y2) : e.y) >= 64);
+    assert.ok(content.length > 0, `${type} slide has no content below the title`);
     assertPositiveEls(out.els, type);
   }
-  const unknown = ENGINE.render({
-    slides: [{ type: "unknown_widget", title: "x", items: SAMPLE_ITEMS }]
-  })[0];
+  const unknown = ENGINE.render({ slides: [{ type: "unknown_widget", title: "x", items: SAMPLE_ITEMS }] })[0];
   assert.equal(unknown.type, "bullets");
   assertPositiveEls(unknown.els, "unknown_widget");
+});
+
+test("no content slide is ever drawn empty below the title", () => {
+  const { ENGINE } = loadEngine();
+  for (const type of ["diagram", "cards", "process", "timeline", "stats", "bullets"]) {
+    const out = ENGINE.render({ slides: [{ type, title: type, layers: [{ title: "A", text: "a" }, { title: "B", text: "b" }], items: SAMPLE_ITEMS }] })[0];
+    const content = out.els.filter((e) => e.t !== "image" && (e.t === "line" ? Math.min(e.y1, e.y2) : e.y) >= 64);
+    assert.ok(content.length > 0, `${type} slide is empty`);
+  }
 });
 
 test("metrics alias renders as stats", () => {
@@ -310,12 +319,13 @@ test("default Create path never calls SlidesApp.create", () => {
 
 test("sidebar completion uses the returned active presentation URL", () => {
   const html = read("src/Generator.html");
-  assert.match(html, /generatePresentation/);
+  const code = read("src/Code.gs");
+  assert.match(html, /runDeckGeneration/);
   assert.match(html, /Open presentation/);
-  assert.match(html, /if \(msg\.presentationId\) currentPresentation\.id = msg\.presentationId/);
-  assert.match(html, /if \(msg\.url\) currentPresentation\.url = msg\.url/);
-  assert.match(html, /setOpenLink\(url\)/);
+  assert.match(html, /var url = String\(result\.url \|\| ""\)/);
+  assert.match(html, /\$\("openBtn"\)\.setAttribute\("href", url\)/);
   assert.match(html, /getGeneratorBootstrap/);
+  assert.match(code, /url: pres \? pres\.getUrl\(\) : ''/);
 });
 
 test("pipeline stages stay in the V1_17 create order", () => {

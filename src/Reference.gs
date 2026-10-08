@@ -4,8 +4,8 @@
  *
  * Data (see CONFIG in Code.gs):
  *   refLibraryFileId  -> 66d_reference_library.json (full model, uploaded to Drive)
- *   referenceDeckId   -> the template imported as native Google Slides (icons + thumbnails)
- *   Runtime file      -> 66d_reference_runtime.json, CREATED by harvestReferenceDeck() (objectIds + thumbnail ids)
+ *   referenceDeckId   -> the template imported as native Google Slides (icons + thumbnails) — never the working deck
+ *   Runtime file      -> 66d_reference_runtime.json, CREATED by harvestReferenceDeck() in the brand folder (objectIds + thumbnail ids)
  *
  * Everything here degrades gracefully: when the library can't be loaded, the pipeline runs exactly as before.
  */
@@ -50,8 +50,9 @@ var TYPE_ALIASES = {
    LOADING
 ========================= */
 
+var REF_LIB_ERROR = '';   // why the reference library could not be loaded (shown in setup errors)
 function loadReferenceLibrary(force) {
-  if (!CONFIG.useReferenceLibrary || !CONFIG.refLibraryFileId) return null;
+  if (!CONFIG.useReferenceLibrary || !CONFIG.refLibraryFileId) { REF_LIB_ERROR = 'CONFIG.refLibraryFileId is empty'; return null; }
   if (!force) {
     const cached = readCache(REF.cacheKey);
     if (cached) return cached;
@@ -62,7 +63,8 @@ function loadReferenceLibrary(force) {
     writeCache(REF.cacheKey, lib);
     return lib;
   } catch (e) {
-    Logger.log('Reference library could not be loaded: ' + e.message);
+    REF_LIB_ERROR = e.message;
+    Logger.log('Reference library could not be loaded (' + CONFIG.refLibraryFileId + '): ' + e.message);
     return null;
   }
 }
@@ -97,10 +99,15 @@ function loadReferenceRuntime(force) {
   if (!id) { REF_RUNTIME_ERROR = 'no harvest saved yet (Script property ' + REF.runtimePropKey + ' is empty)'; return null; }
   if (!force) {
     const cached = readCache(REF.runtimeCacheKey);
-    if (cached) return cached;
+    if (cached && (!cached.deckId || cached.deckId === CONFIG.referenceDeckId)) return cached;
   }
   try {
     const rt = JSON.parse(DriveApp.getFileById(id).getBlob().getDataAsString());
+    // A harvest made from another template copy (e.g. after the deck/script was copied) has the wrong objectIds
+    if (rt && rt.deckId && rt.deckId !== CONFIG.referenceDeckId) {
+      REF_RUNTIME_ERROR = 'harvest is from a different template deck; run "Set up template (harvest)"';
+      return null;
+    }
     writeCache(REF.runtimeCacheKey, rt);
     return rt;
   } catch (e) {
@@ -216,7 +223,7 @@ function normalizeType_(t) {
 
 function itemCount_(spec) {
   const arrLen = function (a) { return Array.isArray(a) ? a.length : 0; };
-  return arrLen(spec.items) || arrLen(spec.points) || arrLen(spec.results) || arrLen(spec.rows) ||
+  return arrLen(spec.items) || arrLen(spec.people) || arrLen(spec.points) || arrLen(spec.results) || arrLen(spec.rows) ||
     ((spec.left || spec.right) ? 2 : 0) || arrLen(spec.chart && spec.chart.categories);
 }
 
@@ -336,9 +343,17 @@ function referenceForTag_(lib, tag) {
   return ref;
 }
 
+// Designs whose look carries a meaning: only used when the slide is about that (e.g. the "!" warning badges = risks)
+const DESIGN_TOPICS_ = {
+  '66D_LAYOUT_CARDS_024': /\b(risks?|challenges?|issues?|barriers?|pitfalls?|concerns?|threats?|problems?|obstacles?|gaps?|blockers?|hurdles?|warnings?)\b/i
+};
+
 // Template designs the layout engine can draw for a type (Engine.gs VARIANTS), filtered by item count
 function drawableDesigns_(type, n, spec) {
+  const words = spec ? [spec.title, spec.lead, spec.statement].filter(Boolean).join(' ') : '';
   const all = ((typeof ENGINE !== 'undefined' && ENGINE.VARIANTS && ENGINE.VARIANTS[type]) || []).filter(function (v) {
+    // a design with a meaning (warning badges) only for slides about that meaning
+    if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words)) return false;
     // designs that need extra fields (e.g. the client journey needs spec.cases) are only offered when the slide has them
     return !v.needs || designNeedsMet_(v.needs, spec);
   });
@@ -509,14 +524,14 @@ function openReferenceDeck_(ctx) {
 function insertLibraryIcon(slide, iconTag, left, top, size, onDark, ctx, color) {
   const rt = ctx.refRuntime;
   ctx.iconAttempts = (ctx.iconAttempts || 0) + 1;
-  if (!rt || !rt.icons || !rt.iconSlideId) { ctx.iconIssue = ctx.iconIssue || 'harvest data not loaded (run Harvest reference deck again)'; return false; }
+  if (!rt || !rt.icons || !rt.iconSlideId) { ctx.iconIssue = ctx.iconIssue || 'harvest data not loaded (run "Set up template (harvest)")'; return false; }
   if (!iconTag || !rt.icons[iconTag]) return false;
   const deck = openReferenceDeck_(ctx);
   if (!deck) return false;
   const inserted = [];   // PageElements on the target slide (for cleanup)
   try {
     const src = deck.getSlideById(rt.iconSlideId);
-    if (!src) { ctx.iconIssue = ctx.iconIssue || 'icon slide not found in the reference deck (run Harvest reference deck again)'; return false; }
+    if (!src) { ctx.iconIssue = ctx.iconIssue || 'icon slide not found in the reference deck (run "Set up template (harvest)" again)'; return false; }
     rt.icons[iconTag].forEach(function (objectId) {
       const el = src.getPageElementById(objectId);
       if (!el) return;
@@ -563,6 +578,68 @@ function recolorElement_(el, hex) {
 }
 
 /* =========================
+   REAL TEMPLATE SLIDES (copied as they are: real client logos, the real leadership team, industry expertise)
+   These slides carry approved 66degrees content (logos, photos, names) that must never be generated, so the slide is
+   copied from the template deck. Used only when the request asks for clients, leadership or industries.
+========================= */
+const TEMPLATE_SLIDES_ = {
+  clients: ['66D_LAYOUT_COMPANY_OVERVIEW_006', '66D_LAYOUT_COMPANY_OVERVIEW_007', '66D_LAYOUT_COMPANY_OVERVIEW_008',
+            '66D_LAYOUT_COMPANY_OVERVIEW_009', '66D_LAYOUT_COMPANY_OVERVIEW_010'],
+  leadership: ['66D_LAYOUT_LEADERSHIP_001'],
+  industries: ['66D_LAYOUT_COMPANY_OVERVIEW_005']
+};
+// What each one needs in the request or source material before it may be used
+const TEMPLATE_SLIDE_TRIGGERS_ = {
+  clients: /\b(clients?|customers?|logos?|who we work with|client list|references?)\b/i,
+  leadership: /\b(leadership|leaders|executive team|management team|who we are|our team|about 66degrees|about us)\b/i,
+  industries: /\b(industr(y|ies)|sectors?|verticals?|domain expertise)\b/i
+};
+
+// "client logos" / "logo wall" / "our leadership" -> clients | leadership | industries (null when unknown)
+function templateSlideKey_(spec) {
+  const raw = String((spec && (spec.template || spec.kind || spec.title)) || '').toLowerCase();
+  if (/client|customer|logo/.test(raw)) return 'clients';
+  if (/leader|executive|management/.test(raw)) return 'leadership';
+  if (/industr|sector|vertical|domain/.test(raw)) return 'industries';
+  return null;
+}
+
+// Title of a template slide (from the library), e.g. "Client Logos" -> used for the agenda
+function templateSlideTitle_(lib, tag) {
+  const sl = lib ? (lib.slides || []).filter(function (x) { return x.tag === tag; })[0] : null;
+  return sl ? String(sl.title || '') : '';
+}
+
+// Replaces `placeholder` (a blank slide in the active deck) with a copy of the template slide `tag`. Returns the new slide or null.
+function insertTemplateSlide_(placeholder, tag, ctx) {
+  const rt = ctx.refRuntime;
+  if (!rt || !rt.slides || !rt.slides[tag]) { ctx.log.push('Template slide ' + tag + ' not copied: run "Set up template (harvest)".'); return null; }
+  const deck = openReferenceDeck_(ctx);
+  if (!deck) return null;
+  try {
+    const src = deck.getSlideById(rt.slides[tag]);
+    if (!src) { ctx.log.push('Template slide ' + tag + ' not found in the template deck (run the harvest again).'); return null; }
+    const pres = SlidesApp.getActivePresentation();
+    const id = placeholder.getObjectId();
+    const all = pres.getSlides();
+    let index = all.length;
+    for (let i = 0; i < all.length; i++) { if (all[i].getObjectId() === id) { index = i; break; } }
+    const copy = pres.insertSlide(index, src);
+    placeholder.remove();
+    // Brand rule: sentence-case titles ("Client Logos" -> "Client logos") on the copied slide as well
+    try {
+      const original = templateSlideTitle_(ctx.lib, tag);
+      const fixed = typeof sentenceCase_ === 'function' ? sentenceCase_(original, 2) : original;
+      if (original && fixed && fixed !== original) copy.replaceAllText(original, fixed, true);
+    } catch (e) {}
+    return copy;
+  } catch (e) {
+    ctx.log.push('Template slide ' + tag + ' could not be copied: ' + e.message);
+    return null;
+  }
+}
+
+/* =========================
    POST-CHECK (deterministic brand validation, reported in the result message)
 ========================= */
 
@@ -600,7 +677,8 @@ function harvestReferenceDeck() {
   const started = Date.now();
   const props = PropertiesService.getScriptProperties();
   const lib = loadReferenceLibrary(true);
-  if (!lib) throw new Error('Reference library not found. Upload 66d_reference_library.json and set CONFIG.refLibraryFileId.');
+  if (!lib) throw new Error('Reference library not found (file ' + CONFIG.refLibraryFileId + '): ' + (REF_LIB_ERROR || 'unknown reason') +
+    '. Check that CONFIG.refLibraryFileId is 1UE7SKEtQ3_FNf7nxyCMxeymA3g2pFtsJ and that your account can open that file.');
   if (!CONFIG.referenceDeckId) throw new Error('Set CONFIG.referenceDeckId to the Google Slides copy of the 2026 template.');
 
   const deck = SlidesApp.openById(CONFIG.referenceDeckId);
@@ -611,6 +689,7 @@ function harvestReferenceDeck() {
 
   let state = null;
   try { state = JSON.parse(props.getProperty(REF.harvestStateKey) || 'null'); } catch (e) {}
+  if (state && state.runtime && state.runtime.deckId !== CONFIG.referenceDeckId) state = null;   // paused harvest of another template
   if (!state) state = { runtime: { deckId: CONFIG.referenceDeckId, slides: {}, icons: {}, thumbs: {}, iconSlideId: null }, nextThumb: 0 };
   const rt = state.runtime;
 
@@ -646,8 +725,10 @@ function harvestReferenceDeck() {
   rt.harvestedAt = new Date().toISOString();
   rt.iconCount = Object.keys(rt.icons).length;
   if (done) {
+    rt.deckId = CONFIG.referenceDeckId;
     const json = Utilities.newBlob(JSON.stringify(rt), 'application/json', '66d_reference_runtime.json');
-    const id = uploadDriveFile_(json, 'application/json', null, props.getProperty(REF.runtimePropKey));
+    // Saved next to the brand assets (66degrees shared drive) so every user of the add-on can read it
+    const id = uploadDriveFile_(json, 'application/json', sharedAssetFolderId_(), props.getProperty(REF.runtimePropKey));
     props.setProperty(REF.runtimePropKey, id);
     props.deleteProperty(REF.harvestStateKey);
     clearCache(REF.runtimeCacheKey);
@@ -657,7 +738,7 @@ function harvestReferenceDeck() {
 
   const msg = done
     ? 'Reference deck harvested: ' + Object.keys(rt.slides).length + ' slides, ' + rt.iconCount + ' icons, ' + Object.keys(rt.thumbs).length + ' thumbnails.'
-    : 'Harvest paused at thumbnail ' + state.nextThumb + ' of ' + targets.length + ' (time limit). Run "Harvest reference deck" again to continue.';
+    : 'Harvest paused at thumbnail ' + state.nextThumb + ' of ' + targets.length + ' (time limit). Run "Set up template (harvest)" again to continue.';
   try { SlidesApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
   return msg;
 }
@@ -710,9 +791,19 @@ function ensureThumbFolder_() {
     try { DriveApp.getFolderById(existing); return existing; } catch (e) {}
   }
   // DriveApp only — never UrlFetchApp to drive.googleapis.com (runtime API enablement).
-  const id = DriveApp.createFolder('66degrees Reference Thumbnails').getId();
+  // Created inside the brand folder (66degrees shared drive) so every user can read the thumbnails;
+  // buildAssetIndex() skips folders named "reference thumbnails".
+  const parentId = sharedAssetFolderId_();
+  const parent = parentId ? DriveApp.getFolderById(parentId) : DriveApp.getRootFolder();
+  const id = parent.createFolder('66degrees Reference Thumbnails').getId();
   props.setProperty(REF.thumbFolderPropKey, id);
   return id;
+}
+
+// Folder for files the harvest creates: the brand folder when it is reachable, otherwise My Drive (null).
+function sharedAssetFolderId_() {
+  if (!CONFIG.brandFolderId) return null;
+  try { DriveApp.getFolderById(CONFIG.brandFolderId); return CONFIG.brandFolderId; } catch (e) { return null; }
 }
 
 // Creates (or replaces) a Drive file with DriveApp. No Drive REST / no runtime API enablement.
@@ -733,12 +824,38 @@ function uploadDriveFile_(blob, mime, parentId, existingId) {
    STATUS (menu)
 ========================= */
 
+// Run from the Apps Script editor (select checkSetup, click Run, then open the Execution log).
+// Shows which IDs this script is using and whether each file can be opened by the current account.
+function checkSetup() {
+  let who = '(not shown)';
+  try { who = Session.getEffectiveUser().getEmail() || who; } catch (e) {}   // needs userinfo.email scope; optional
+  const lines = ['Account: ' + who];
+  const test = function (label, id, fn) {
+    try { lines.push('OK    ' + label + ' (' + id + '): ' + fn(id)); }
+    catch (e) { lines.push('FAIL  ' + label + ' (' + id + '): ' + e.message); }
+  };
+  test('Brand folder', CONFIG.brandFolderId, function (id) { return DriveApp.getFolderById(id).getName(); });
+  test('Reference library', CONFIG.refLibraryFileId, function (id) {
+    const f = DriveApp.getFileById(id);
+    const json = JSON.parse(f.getBlob().getDataAsString());
+    return f.getName() + ', ' + ((json.slides || []).length) + ' template slides';
+  });
+  test('Template deck', CONFIG.referenceDeckId, function (id) {
+    const d = SlidesApp.openById(id);
+    return d.getName() + ', ' + d.getSlides().length + ' slides';
+  });
+  const msg = lines.join('\n');
+  Logger.log(msg);
+  try { SlidesApp.getUi().alert(msg); } catch (e) {}
+  return msg;
+}
+
 function referenceStatus() {
   const lib = loadReferenceLibrary(true);
   const rt = loadReferenceRuntime(true);
   const msg = 'Reference library: ' + (lib ? lib.slides.length + ' slides, ' + lib.icons.length + ' icons, ' + lib.companyFacts.length + ' facts' : 'NOT LOADED (check CONFIG.refLibraryFileId)') + '\n' +
     'Reference deck: ' + (CONFIG.referenceDeckId ? 'set' : 'NOT SET (CONFIG.referenceDeckId)') + '\n' +
-    'Harvest: ' + (rt ? Object.keys(rt.slides || {}).length + ' slides, ' + Object.keys(rt.icons || {}).length + ' icons, ' + Object.keys(rt.thumbs || {}).length + ' thumbnails (' + rt.harvestedAt + ')' : 'not run yet — use "Harvest reference deck"');
+    'Harvest: ' + (rt ? Object.keys(rt.slides || {}).length + ' slides, ' + Object.keys(rt.icons || {}).length + ' icons, ' + Object.keys(rt.thumbs || {}).length + ' thumbnails (' + rt.harvestedAt + ')' : 'not run yet — use "Set up template (harvest)"');
   try { SlidesApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
   return msg;
 }
@@ -752,7 +869,7 @@ function iconCheck() {
   const ui = SlidesApp.getUi();
   const lib = loadReferenceLibrary(false);
   const rt = loadReferenceRuntime(true);
-  if (!lib || !rt || !rt.icons) { ui.alert('Icon check', 'Reference library or harvest data not found. Run Harvest reference deck first.', ui.ButtonSet.OK); return; }
+  if (!lib || !rt || !rt.icons) { ui.alert('Icon check', 'Reference library or harvest data not found. Run "Set up template (harvest)" first.', ui.ButtonSet.OK); return; }
   const props = PropertiesService.getScriptProperties();
   let state = {};
   try { state = JSON.parse(props.getProperty('ICON_CHECK_STATE') || '{}'); } catch (e) { state = {}; }

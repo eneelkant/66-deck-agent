@@ -67,43 +67,59 @@ test("outer sidebar chrome is not titled 66° Deck Agent; inner heading remains"
   assert.doesNotMatch(show, /\.setTitle\(\s*['"]66° Deck Agent['"]\s*\)/);
   assert.match(show, /createHtmlOutputFromFile\('Generator'\)/);
   assert.match(show, /showSidebar/);
-  assert.match(html, /<h2>\s*66° Deck Agent\s*<\/h2>/);
+  assert.match(html, /<h1>\s*Deck Agent\s*<\/h1>/);
+  assert.match(html, /class="logo"[^>]*>66<span class="deg">/);
 });
 
-test("Generator data contains presentationType, department, and slideCount", () => {
+test("Generator payload carries mode, presentationType, department, slideCount, prompt, source and files", () => {
   const html = read("src/Generator.html");
-  assert.match(html, /generatePresentation\(\{/);
-  assert.match(html, /presentationType:\s*presentationType/);
-  assert.match(html, /department:\s*department/);
-  assert.match(html, /slideCount:\s*slides/);
-  assert.match(html, /type:\s*presentationType/);
-  assert.match(html, /slides:\s*slides/);
-  assert.match(html, /mode:\s*m/);
-  assert.match(html, /prompt:\s*prompt/);
-  assert.match(html, /sourceUrl:\s*source/);
-  assert.match(html, /upload:\s*upload/);
+  assert.match(html, /\.runDeckGeneration\(payload\)/);
+  assert.match(html, /mode:\s*state\.mode/);
+  assert.match(html, /presentationType:\s*\$\("presentationType"\)\.value/);
+  assert.match(html, /department:\s*\$\("department"\)\.value/);
+  assert.match(html, /slideCount:\s*Number\(\$\("slideCount"\)\.value\)/);
+  assert.match(html, /prompt:\s*\$\("prompt"\)\.value\.trim\(\)/);
+  assert.match(html, /sourceUrl:\s*\$\("sourceUrl"\)\.value\.trim\(\)/);
+  assert.match(html, /files:\s*state\.files\.map/);
+  assert.match(html, /\.cancelDeckGeneration\(runId\)/);
 });
 
-test("presentation type and department options match the backend catalogs", () => {
+test("presentation type and department options come from the backend catalogs", () => {
   const html = read("src/Generator.html");
   const sandbox = loadPipeline();
-  assert.deepEqual(htmlOptions(html, "presentationType"), Array.from(sandbox.PRESENTATION_TYPES));
-  assert.deepEqual(htmlOptions(html, "department"), Array.from(sandbox.DEPARTMENTS));
+  assert.match(html, /fillSelect\(\$\("presentationType"\), data\.presentationTypes\)/);
+  assert.match(html, /fillSelect\(\$\("department"\), data\.departments\)/);
+  const boot = sandbox.getGeneratorBootstrap();
+  assert.deepEqual(Array.from(boot.presentationTypes), Array.from(sandbox.PRESENTATION_TYPES));
+  assert.deepEqual(Array.from(boot.departments), Array.from(sandbox.DEPARTMENTS));
   assert.ok(sandbox.PRESENTATION_TYPES.includes("Pitch"));
   assert.ok(sandbox.DEPARTMENTS.includes("Sales"));
 });
 
-test("slide count validation clamps to 3–20", () => {
+test("slide count validation clamps to 3–200", () => {
   const sandbox = loadPipeline();
   assert.equal(sandbox.clampSlideCount_(8), 8);
   assert.equal(sandbox.clampSlideCount_(2), 3);
-  assert.equal(sandbox.clampSlideCount_(100), 20);
+  assert.equal(sandbox.clampSlideCount_(100), 100);
+  assert.equal(sandbox.clampSlideCount_(500), 200);
   assert.equal(sandbox.clampSlideCount_(""), 8);
   assert.equal(sandbox.clampSlideCount_(NaN), 8);
   const html = read("src/Generator.html");
   assert.match(html, /min="3"/);
-  assert.match(html, /max="20"/);
-  assert.match(html, /const MIN_SLIDES = 3, MAX_SLIDES = 20/);
+  assert.match(html, /max="200"/);
+  assert.match(html, /var MIN_SLIDES = 3;/);
+  assert.match(html, /var MAX_SLIDES = 200;/);
+});
+
+test("server accepts the panel's payload: capitalised modes, several files, cancel alias, elapsed time", () => {
+  const code = read("src/Code.gs");
+  assert.match(code, /String\(data\.mode \|\| 'create'\)\.toLowerCase\(\) === 'rebrand'/);
+  assert.match(code, /Array\.isArray\(data\.files\)/);
+  assert.match(code, /function cancelDeckGeneration\(runId\)/);
+  assert.match(code, /res\.elapsedMs = Date\.now\(\) - t0/);
+  const sandbox = loadPipeline();
+  assert.equal(typeof sandbox.cancelDeckGeneration, "function");
+  assert.equal(typeof sandbox.runDeckGeneration, "function");
 });
 
 test("presentationType and department normalize and reach the planner", () => {
@@ -131,7 +147,7 @@ test("bootstrap exposes type, department, and slide bounds for the same presenta
   assert.deepEqual(Array.from(boot.presentationTypes), Array.from(sandbox.PRESENTATION_TYPES));
   assert.deepEqual(Array.from(boot.departments), Array.from(sandbox.DEPARTMENTS));
   assert.equal(boot.minSlides, 3);
-  assert.equal(boot.maxSlides, 20);
+  assert.equal(boot.maxSlides, 200);
 });
 
 test("department filter keeps general slides and falls back when nothing matches", () => {
@@ -170,5 +186,5 @@ test("Create pipeline still draws into the active presentation", () => {
   assert.match(code, /const target = SlidesApp\.getActivePresentation\(\)/);
   assert.match(html, /getGeneratorBootstrap/);
   assert.match(html, /Open presentation/);
-  assert.match(html, /if \(msg\.presentationId\) currentPresentation\.id = msg\.presentationId/);
+  assert.match(html, /var url = String\(result\.url \|\| ""\)/);
 });

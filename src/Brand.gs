@@ -470,6 +470,13 @@ function readSourceDocument(url, sources) {
     sources.pdfs.push(Utilities.base64Encode(blob.getBytes()));
     return;
   }
+  if (/^image\/(png|jpe?g|webp|gif)$/.test(mime)) {
+    const img = file.getBlob();
+    if (img.getBytes().length > 18 * 1024 * 1024) throw new Error('The source image is larger than 18 MB.');
+    sources.images = sources.images || [];
+    sources.images.push({ mime: mime, data: Utilities.base64Encode(img.getBytes()) });
+    return;
+  }
 
   let text = '';
   try {
@@ -714,8 +721,10 @@ function buildAssetIndex(resume) {
       }
       if (/favicon|award|service cards|products & services|productcard/.test(p)) continue;
 
-      if (/google cloud icons|user & device input/.test(p)) {
-        const key = /google cloud icons/.test(p) ? normalizeName(folder.getName()) : normalizeName(name);
+      // Google product icons: "Google Cloud Icons" (old folder) or "Google Icons" (01_Brand_Assets/02_Icons/icons)
+      if (/google( cloud)? icons|user & device input/.test(p)) {
+        const inProductFolder = /google( cloud)? icons/.test(p) && !/google( cloud)? icons\s*$/.test(p);
+        const key = inProductFolder ? normalizeName(folder.getName()) : normalizeName(name);
         if (key && !index.gcp[key]) index.gcp[key] = f.getId();
         continue;
       }

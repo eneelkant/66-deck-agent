@@ -144,6 +144,10 @@ function loadCreateStack(options) {
           getFolders() {
             return { hasNext() { return false; }, next() { return null; } };
           },
+          createFolder(name) {
+            driveCalls.push(["createFolder", name, id]);
+            return { getId() { return "new-folder"; } };
+          },
           createFile(blob) {
             driveCalls.push(["createFile", blob && blob.getName && blob.getName()]);
             return { getId() { return "created-file"; } };
@@ -156,6 +160,10 @@ function loadCreateStack(options) {
       },
       getRootFolder() {
         return {
+          createFolder(name) {
+            driveCalls.push(["rootCreateFolder", name]);
+            return { getId() { return "new-folder"; } };
+          },
           createFile(blob) {
             driveCalls.push(["rootCreateFile", blob && blob.getName && blob.getName()]);
             return { getId() { return "root-file"; } };

@@ -1,556 +1,1680 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <base target="_top">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
       :root {
-        --ink: #040A1B;
-        --body: #333;
-        --muted: #7B8D99;
-        --blue: #0052FF;
-        --blue-hover: #0044D6;
-        --bg: #FFFFFF;
-        --card: #FFFFFF;
-        --line: #DCDDE1;
-        --tile: #F2F3F0;
-        --panel: #F2F7FB;
-        --green: #2BA24C;
-        --red: #D93025;
+        --blue: #0052ff;
+        --blue-hover: #0046dc;
+        --blue-50: #eef3ff;
+        --blue-100: #dbe6ff;
+        --ink: #040a1b;
+        --panel: #f2f7fb;
+        --line: #d1dbdf;
+        --line-soft: #e6edf1;
+        --title: #000000;
+        --body: #333333;
+        --muted: #667085;
+        --white: #ffffff;
+        --danger: #b42318;
+        --danger-50: #fff1f0;
+        --success: #0b7a45;
+        --success-hover: #096a3c;
+        --success-50: #ecfdf3;
+        --warn: #b54708;
+        --warn-50: #fffaeb;
+        --radius: 10px;
       }
-      * { box-sizing: border-box; }
-      body { font-family: 'Plus Jakarta Sans', -apple-system, Arial, sans-serif; padding: 18px 20px 22px; margin: 0;
-        color: var(--ink); background: var(--bg); }
 
-      .hero { display: flex; gap: 12px; align-items: stretch; margin-bottom: 18px; }
-      .accent { width: 4px; flex: 0 0 4px; background: var(--blue); border-radius: 2px; }
-      .hero h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.45px; line-height: 1.15; color: var(--ink); }
-      .sub { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
-
-      label.field { display: block; margin: 14px 0 6px; font-family: 'IBM Plex Mono', monospace;
-        font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.6px; color: var(--body); }
-
-      textarea, select, input[type="number"], input[type="text"] {
-        width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px;
-        font-size: 13px; font-family: inherit; background: var(--card); color: var(--ink);
+      * {
+        box-sizing: border-box;
       }
-      textarea { height: 86px; resize: vertical; line-height: 1.4; }
-      textarea:focus, select:focus, input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,82,255,0.08); }
-      textarea:disabled, select:disabled, input:disabled { background: #F7F8F9; color: var(--muted); }
 
-      .mode-row { display: flex; gap: 8px; }
-      .mode-btn { flex: 1; margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 13px; font-weight: 600;
-        font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
-      .mode-btn.off { background: #FFFFFF; color: var(--ink); border: 1px solid var(--line); }
-      .mode-btn.on { background: var(--blue); color: #FFFFFF; border: 1px solid var(--blue); }
-      .mode-btn.off:hover { border-color: var(--blue); color: var(--blue); }
-      .mode-row.locked { pointer-events: none; opacity: 0.6; }
+      [hidden] {
+        display: none !important;
+      }
 
-      .rebrand-info { padding: 14px 16px; background: var(--panel); border-left: 3px solid var(--blue);
-        border-radius: 6px; font-size: 13px; color: var(--body); margin-top: 14px; line-height: 1.5; }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
 
-      .row { display: flex; gap: 10px; }
-      .row > div { flex: 1; min-width: 0; }
-      .hint { margin-top: 5px; font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+      body {
+        font-family: "Plus Jakarta Sans", "Google Sans", Arial, sans-serif;
+        font-size: 13px;
+        color: var(--body);
+        background: var(--white);
+        -webkit-font-smoothing: antialiased;
+      }
 
-      .actions { display: flex; gap: 8px; margin-top: 20px; }
-      button { padding: 13px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; font-family: inherit;
-        cursor: pointer; transition: background 0.2s; letter-spacing: 0.2px; }
-      #goButton { flex: 1; background: var(--blue); color: white; }
-      #goButton:hover:not(:disabled) { background: var(--blue-hover); }
-      #goButton:disabled { background: #B3C5D0; cursor: default; }
-      #goButton.success { background: var(--green); }
-      #goButton.error { background: var(--red); }
-      #cancelButton { background: white; color: var(--body); border: 1px solid var(--line); padding: 13px 18px; }
-      #cancelButton:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
-      #cancelButton:disabled { color: var(--muted); cursor: default; }
+      .app {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
 
-      #progress { margin-top: 16px; padding: 14px 16px; background: var(--panel); border-radius: 8px; }
-      .p-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-      .p-title { font-size: 13px; font-weight: 600; }
-      .p-time { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--body); }
-      .bar { height: 6px; background: #DCE3EA; border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
-      .bar > div { height: 100%; width: 0; background: var(--blue); border-radius: 3px; transition: width 0.6s ease; }
-      .bar.error > div { background: var(--red); }
-      .bar.done > div { background: var(--green); }
+      /* ---------- Header ---------- */
+      .top {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+        background: var(--white);
+        border-bottom: 1px solid var(--line-soft);
+      }
 
-      ul.steps, ul.slides { list-style: none; margin: 0; padding: 0; }
-      ul.steps > li { display: flex; gap: 9px; padding: 4px 0; font-size: 12.5px; line-height: 1.4; }
-      .ico { width: 16px; flex: 0 0 16px; text-align: center; font-weight: 700; }
-      .pending .ico { color: #B3C5D0; }
-      .pending .lbl { color: var(--muted); }
-      .active .ico { color: var(--blue); }
-      .active .lbl { font-weight: 600; }
-      .done .ico { color: var(--green); }
-      .error .ico { color: var(--red); }
-      .error .lbl { color: var(--red); font-weight: 600; }
-      .detail { display: block; font-size: 11.5px; color: var(--muted); }
-      .error .detail { color: var(--red); }
+      .logo {
+        width: 38px;
+        height: 34px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9px;
+        background: var(--ink);
+        color: var(--white);
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: -0.03em;
+        line-height: 1;
+      }
 
-      ul.slides { margin: 4px 0 2px 25px; }
-      ul.slides li { display: flex; gap: 8px; font-size: 12px; padding: 2px 0; }
-      ul.slides .num { font-family: 'IBM Plex Mono', monospace; width: 18px; color: var(--muted); text-align: right; }
-      ul.slides .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
-      ul.slides li.more { color: var(--muted); font-style: italic; }
+      /* Degree ring sits at the top of the second "6" */
+      .logo .deg {
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        margin-left: 1px;
+        border: 1.5px solid var(--blue);
+        border-radius: 50%;
+        position: relative;
+        top: -5px;
+      }
 
-      .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid #C9D6FF; border-top-color: var(--blue);
-        border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -1px; }
-      @keyframes spin { to { transform: rotate(360deg); } }
+      .top h1 {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.2;
+        font-weight: 700;
+        color: var(--title);
+        letter-spacing: -0.01em;
+      }
 
-      #status { margin-top: 12px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; color: var(--body); }
-      #status.error { color: var(--red); }
-      #status.success { color: var(--green); }
+      .top p {
+        margin: 2px 0 0;
+        font-size: 11px;
+        color: var(--muted);
+      }
 
-      .hidden { display: none; }
+      .pill {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+        white-space: nowrap;
+        background: var(--panel);
+        color: var(--muted);
+      }
 
-      .upload { display: flex; align-items: center; gap: 10px; border: 1px dashed var(--line); border-radius: 8px;
-        padding: 9px 12px; cursor: pointer; background: white; }
-      .upload:hover { border-color: var(--blue); }
-      .upload input[type="file"] { display: none; }
-      .upload-btn { font-size: 12px; font-weight: 600; color: var(--blue); white-space: nowrap; }
-      .upload-name { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-      .upload-name.chosen { color: var(--ink); }
-      .upload-clear { font-size: 12px; color: var(--muted); padding: 0 4px; }
-      .upload-clear:hover { color: var(--red); }
-      .upload.locked { pointer-events: none; opacity: 0.6; }
-      #openLink { margin-top: 10px; font-size: 13px; }
-      #openLink a { color: var(--blue); font-weight: 600; text-decoration: none; }
-      #openLink a:hover { text-decoration: underline; }
+      .pill i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
 
-      .powered { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line);
-        text-align: center; font-size: 12px; font-weight: 600; color: #000000; letter-spacing: 0.2px; }
+      .pill.ok {
+        background: var(--success-50);
+        color: var(--success);
+      }
+
+      .pill.warn {
+        background: var(--warn-50);
+        color: var(--warn);
+      }
+
+      .pill.bad {
+        background: var(--danger-50);
+        color: var(--danger);
+      }
+
+      /* ---------- Views ---------- */
+      .view {
+        flex: 1;
+        padding: 16px;
+      }
+
+      /* ---------- Notice (e.g. after cancel) ---------- */
+      .notice {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+        padding: 9px 12px;
+        border-radius: var(--radius);
+        background: var(--warn-50);
+        border: 1px solid #fedf89;
+        color: var(--warn);
+        font-size: 12px;
+      }
+
+      .notice button {
+        margin-left: auto;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font-size: 15px;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      /* ---------- Mode switch ---------- */
+      .modes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        padding: 4px;
+        margin-bottom: 18px;
+        border-radius: 12px;
+        background: var(--panel);
+      }
+
+      .modes button {
+        border: 0;
+        border-radius: 9px;
+        padding: 9px 10px;
+        background: transparent;
+        font: inherit;
+        text-align: left;
+        color: var(--muted);
+        cursor: pointer;
+        transition: background 0.15s, box-shadow 0.15s;
+      }
+
+      .modes button strong {
+        display: block;
+        font-size: 13px;
+        color: var(--ink);
+      }
+
+      .modes button small {
+        display: block;
+        margin-top: 1px;
+        font-size: 10.5px;
+        line-height: 1.3;
+      }
+
+      .modes button.active {
+        background: var(--white);
+        box-shadow: 0 1px 2px rgba(4, 10, 27, 0.08), 0 0 0 1px var(--line-soft);
+      }
+
+      .modes button.active strong {
+        color: var(--blue);
+      }
+
+      /* ---------- Form & field order ---------- */
+      .form {
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Create: Topic → Source doc → Files → Type/Department → Slides */
+      #promptField { order: 1; }
+      #sourceField { order: 2; }
+      #filesField  { order: 3; }
+      #metaRow     { order: 4; }
+      #slidesField { order: 5; }
+
+      /* Rebrand has no inputs, only this info card */
+      .rebrand-info {
+        padding: 14px 16px;
+        border-left: 3px solid var(--blue);
+        border-radius: var(--radius);
+        background: var(--panel);
+        font-size: 12.5px;
+        line-height: 1.55;
+        color: var(--body);
+      }
+
+      .rebrand-info strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+        color: var(--ink);
+      }
+
+      body.is-rebrand [data-only="create"],
+      body:not(.is-rebrand) [data-only="rebrand"] {
+        display: none !important;
+      }
+
+      .field {
+        margin-bottom: 16px;
+      }
+
+      .field > label,
+      .field > .label {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+        margin-bottom: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .opt {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--muted);
+      }
+
+      input[type="text"],
+      input[type="url"],
+      input[type="number"],
+      select,
+      textarea {
+        width: 100%;
+        padding: 9px 11px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--white);
+        font: inherit;
+        color: var(--title);
+        outline: none;
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
+
+      select {
+        appearance: none;
+        -webkit-appearance: none;
+        padding-right: 30px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23667085' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 11px center;
+        text-overflow: ellipsis;
+      }
+
+      textarea {
+        min-height: 72px;
+        resize: vertical;
+        line-height: 1.5;
+      }
+
+      input::placeholder,
+      textarea::placeholder {
+        color: #98a2b3;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(0, 82, 255, 0.12);
+      }
+
+      .field.invalid input,
+      .field.invalid textarea,
+      .field.invalid .drop {
+        border-color: var(--danger);
+        box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.1);
+      }
+
+      .err {
+        display: none;
+        margin-top: 5px;
+        font-size: 11px;
+        color: var(--danger);
+      }
+
+      .field.invalid .err {
+        display: block;
+      }
+
+      .hint {
+        margin-top: 5px;
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--muted);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      @media (max-width: 340px) {
+        .row {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+      }
+
+      /* ---------- File upload (medium, centered) ---------- */
+      .drop {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        width: 100%;
+        padding: 12px 12px;
+        border: 1.5px dashed var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        text-align: center;
+        cursor: pointer;
+        outline: none;
+        transition: border-color 0.15s, background 0.15s;
+      }
+
+      .drop:hover,
+      .drop:focus-visible,
+      .drop.over {
+        border-color: var(--blue);
+        background: var(--blue-50);
+      }
+
+      .drop-icon {
+        width: 26px;
+        height: 26px;
+        margin-bottom: 2px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--white);
+        color: var(--blue);
+        box-shadow: 0 1px 2px rgba(4, 10, 27, 0.08);
+      }
+
+      .drop strong {
+        display: block;
+        font-size: 12px;
+        color: var(--ink);
+      }
+
+      .drop strong span {
+        color: var(--blue);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .drop small {
+        display: block;
+        max-width: 250px;
+        font-size: 10px;
+        line-height: 1.4;
+        color: var(--muted);
+      }
+
+      .file-list {
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+      }
+
+      .file-list li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        margin-top: 6px;
+        border: 1px solid var(--line-soft);
+        border-radius: 8px;
+        background: var(--white);
+        font-size: 12px;
+      }
+
+      .file-ext,
+      .file-thumb {
+        flex: none;
+        width: 34px;
+        height: 28px;
+        border-radius: 5px;
+      }
+
+      .file-ext {
+        display: grid;
+        place-items: center;
+        background: var(--blue-50);
+        color: var(--blue);
+        font-size: 9.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .file-thumb {
+        object-fit: cover;
+        border: 1px solid var(--line-soft);
+        background: var(--panel);
+      }
+
+      .file-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        color: var(--ink);
+      }
+
+      .file-size {
+        flex: none;
+        font-size: 10.5px;
+        color: var(--muted);
+      }
+
+      .file-remove {
+        flex: none;
+        width: 22px;
+        height: 22px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .file-remove:hover {
+        background: var(--danger-50);
+        color: var(--danger);
+      }
+
+      /* ---------- Slide count ---------- */
+      .slider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .slider input[type="range"] {
+        flex: 1;
+        accent-color: var(--blue);
+      }
+
+      .slider input[type="number"] {
+        width: 64px;
+        flex: none;
+        padding: 7px 6px;
+        text-align: center;
+        font-weight: 700;
+        color: var(--blue);
+        background: var(--blue-50);
+        border-color: var(--blue-100);
+      }
+
+      /* ---------- Bottom bar ---------- */
+      .bottom {
+        position: sticky;
+        bottom: 0;
+        padding: 12px 16px 10px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, #fff 30%);
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .powered {
+        margin-top: 10px;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--title);
+        letter-spacing: 0.01em;
+      }
+
+      .powered .deg {
+        display: inline-block;
+        width: 4px;
+        height: 4px;
+        margin-left: 1px;
+        border: 1.2px solid var(--title);
+        border-radius: 50%;
+        position: relative;
+        top: -4px;
+      }
+
+      /* ---------- Buttons ---------- */
+      .btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        border: 0;
+        border-radius: var(--radius);
+        padding: 12px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s, box-shadow 0.2s, border-color 0.2s;
+      }
+
+      .btn + .btn {
+        margin-top: 8px;
+      }
+
+      .actions .btn + .btn {
+        margin-top: 0;
+      }
+
+      .btn-primary {
+        background: var(--blue);
+        color: var(--white);
+        box-shadow: 0 4px 12px rgba(0, 82, 255, 0.25);
+      }
+
+      .btn-primary:hover {
+        background: var(--blue-hover);
+      }
+
+      .btn-primary:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+
+      .btn-ghost {
+        background: var(--panel);
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      .btn-ghost:hover {
+        background: #e8f0f6;
+      }
+
+      .btn-cancel {
+        flex: none;
+        width: auto;
+        padding: 12px 16px;
+        background: var(--white);
+        color: var(--danger);
+        border: 1px solid #ffcdc9;
+      }
+
+      .btn-cancel:hover {
+        background: var(--danger-50);
+      }
+
+      .btn-cancel:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      /* Generate button states: idle (blue) → running (mode-tab blue tint) → done (green) */
+      #generateBtn {
+        position: relative;
+        overflow: hidden;
+        flex: 1;
+      }
+
+      #generateBtn > span {
+        position: relative;
+        z-index: 1;
+      }
+
+      #generateBtn .btn-fill {
+        position: absolute;
+        z-index: 0;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 0;
+        background: var(--blue-100);
+        transition: width 0.6s ease;
+      }
+
+      #generateBtn .btn-spin {
+        display: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid var(--blue-100);
+        border-top-color: var(--blue);
+        animation: spin 0.9s linear infinite;
+      }
+
+      #generateBtn.is-running {
+        background: var(--blue-50);
+        color: var(--blue);
+        border: 1px solid var(--blue-100);
+        box-shadow: none;
+        cursor: default;
+        opacity: 1;
+      }
+
+      #generateBtn.is-running .btn-spin {
+        display: inline-block;
+      }
+
+      #generateBtn.is-running .kbd,
+      #generateBtn.is-done .kbd {
+        display: none;
+      }
+
+      #generateBtn.is-done {
+        background: var(--success);
+        color: var(--white);
+        border: 1px solid var(--success);
+        box-shadow: 0 4px 12px rgba(11, 122, 69, 0.25);
+        cursor: default;
+        opacity: 1;
+      }
+
+      #generateBtn.is-done .btn-fill {
+        display: none;
+      }
+
+      .kbd {
+        font-size: 10px;
+        font-weight: 500;
+        opacity: 0.75;
+      }
+
+      /* ---------- Running ---------- */
+      .run-head {
+        padding: 12px 0 0;
+        text-align: center;
+      }
+
+      .spinner {
+        width: 44px;
+        height: 44px;
+        margin: 0 auto 12px;
+        border-radius: 50%;
+        border: 3px solid var(--blue-100);
+        border-top-color: var(--blue);
+        animation: spin 0.9s linear infinite;
+      }
+
+      .spinner.done {
+        animation: none;
+        border-color: var(--success);
+        background: var(--success-50);
+        position: relative;
+      }
+
+      .spinner.done::after {
+        content: "✓";
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: var(--success);
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .run-head h2,
+      .result h2 {
+        margin: 0;
+        font-size: 16px;
+        color: var(--title);
+      }
+
+      .run-head p {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .bar {
+        height: 4px;
+        margin: 16px 0 12px;
+        border-radius: 999px;
+        background: var(--line-soft);
+        overflow: hidden;
+      }
+
+      .bar span {
+        display: block;
+        width: 0;
+        height: 100%;
+        background: var(--blue);
+        transition: width 0.6s ease, background 0.3s;
+      }
+
+      .bar.done span {
+        background: var(--success);
+      }
+
+      .steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .steps li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .steps .ic {
+        width: 18px;
+        height: 18px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        border: 1.5px solid var(--line);
+        border-radius: 50%;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .steps li.done {
+        color: var(--ink);
+      }
+
+      .steps li.done .ic {
+        background: var(--success);
+        border-color: var(--success);
+        color: var(--white);
+      }
+
+      .steps li.current {
+        color: var(--blue);
+        font-weight: 600;
+      }
+
+      .steps li.current .ic {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px var(--blue-100);
+      }
+
+      .steps li.failed {
+        color: var(--danger);
+        font-weight: 600;
+      }
+
+      .steps li.failed .ic {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: var(--white);
+      }
+
+      .run-note {
+        margin-top: 14px;
+        font-size: 11px;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      /* ---------- Result ---------- */
+      .result {
+        padding: 24px 0 8px;
+        text-align: center;
+      }
+
+      .badge {
+        width: 52px;
+        height: 52px;
+        margin: 0 auto 12px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      .badge.ok {
+        background: var(--success-50);
+        color: var(--success);
+      }
+
+      .badge.err {
+        background: var(--danger-50);
+        color: var(--danger);
+      }
+
+      .result p {
+        margin: 6px 0 18px;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--muted);
+        word-break: break-word;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .stats div {
+        padding: 10px;
+        border-radius: var(--radius);
+        background: var(--panel);
+        font-size: 11px;
+        text-align: left;
+        color: var(--muted);
+      }
+
+      .stats strong {
+        display: block;
+        font-size: 16px;
+        color: var(--title);
+      }
     </style>
   </head>
   <body>
-    <div class="hero">
-      <div class="accent" aria-hidden="true"></div>
-      <div>
-        <h2>66° Deck Agent</h2>
-        <p class="sub">Prompt + docs → structured, on-brand Google Slides.</p>
-      </div>
-    </div>
-
-    <label class="field">Mode</label>
-    <div class="mode-row" id="modeToggle" role="tablist">
-      <button type="button" id="modeCreate" class="mode-btn on" onclick="setMode('create')">Create</button>
-      <button type="button" id="modeRebrand" class="mode-btn off" onclick="setMode('rebrand')">Rebrand</button>
-    </div>
-
-    <div id="createBlock">
-      <label class="field" for="prompt">Prompt</label>
-      <textarea id="prompt" placeholder="Example: Create a presentation on AI adoption for our leadership team"></textarea>
-
-      <div class="row">
+    <div class="app">
+      <!-- Header -->
+      <header class="top">
+        <div class="logo" aria-label="66 degrees">66<span class="deg"></span></div>
         <div>
-          <label class="field" for="presentationType">Presentation type</label>
-          <select id="presentationType">
-            <option value="Pitch" selected>Pitch</option>
-            <option value="Strategy">Strategy</option>
-            <option value="Proposal">Proposal</option>
-            <option value="Sales">Sales</option>
-            <option value="Case Study">Case Study</option>
-            <option value="Report">Report</option>
-            <option value="Custom">Custom</option>
-          </select>
+          <h1>Deck Agent</h1>
+          <p>On-brand Google Slides in minutes</p>
         </div>
-        <div>
-          <label class="field" for="department">Department</label>
-          <select id="department">
-            <option value="Sales" selected>Sales</option>
-            <option value="Marketing">Marketing</option>
-            <option value="Technology">Technology</option>
-            <option value="Finance">Finance</option>
-            <option value="Operations">Operations</option>
-            <option value="HR">HR</option>
-            <option value="Leadership">Leadership</option>
-            <option value="Other">Other</option>
-          </select>
+        <span class="pill" id="aiStatus"><i></i>Checking</span>
+      </header>
+
+      <!-- Form -->
+      <main class="view" id="formView">
+        <div class="notice" id="notice" hidden>
+          <span id="noticeText"></span>
+          <button type="button" id="noticeClose" aria-label="Dismiss">×</button>
         </div>
-      </div>
 
-      <label class="field" for="slides">Slide count (3–20)</label>
-      <input id="slides" type="number" min="3" max="20" value="8">
-      <div class="hint">3–20 slides, includes cover and Thank You</div>
+        <div class="modes" id="modeGroup" role="tablist">
+          <button type="button" class="active" data-mode="Create" role="tab">
+            <strong>Create</strong>
+            <small>New deck from a topic</small>
+          </button>
+          <button type="button" data-mode="Rebrand" role="tab">
+            <strong>Rebrand</strong>
+            <small>Restyle an existing deck</small>
+          </button>
+        </div>
 
-      <label class="field" for="source">Source link · optional</label>
-      <input id="source" type="text" placeholder="Google Doc, Slides, Sheet or PDF link">
+        <!-- Rebrand: no options, just an explanation -->
+        <div class="rebrand-info" data-only="rebrand">
+          <strong>Rebrand this presentation</strong>
+          The slides in this presentation will be restyled to the 66degrees template: colors, fonts, logo and footer are applied automatically. No content is added or removed.
+        </div>
 
-      <label class="field" for="file">Upload file · optional</label>
-      <label class="upload" id="uploadBox">
-        <input id="file" type="file" onchange="fileChosen()"
-          accept=".pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.ods,.csv,.tsv,.ppt,.pptx,.odp,.txt,.md,.json,.png,.jpg,.jpeg,.webp">
-        <span class="upload-btn">Choose file</span>
-        <span class="upload-name" id="fileName">PDF, Word, Excel, CSV, PowerPoint, text or image · max 20 MB</span>
-        <span class="upload-clear hidden" id="fileClear" onclick="clearFile(event)">✕</span>
-      </label>
+        <div class="form" data-only="create">
+          <!-- Topic -->
+          <div class="field" id="promptField">
+            <label for="prompt">Presentation topic</label>
+            <textarea id="prompt" placeholder="e.g. Google Cloud migration roadmap for retail"></textarea>
+            <div class="err" id="promptErr"></div>
+          </div>
+
+          <!-- Source document URL -->
+          <div class="field" id="sourceField">
+            <label for="sourceUrl">
+              <span>Source document <span class="opt">(Optional)</span></span>
+            </label>
+            <input id="sourceUrl" type="url" placeholder="Doc, Sheet, Slides, PDF or image link" />
+            <div class="err" id="sourceErr"></div>
+            <div class="hint">Link a Google Doc, Sheet, Slides, PDF or image (JPG, PNG) to pull content from.</div>
+          </div>
+
+          <!-- File upload -->
+          <div class="field" id="filesField">
+            <div class="label">
+              <span>Upload files <span class="opt">(Optional)</span></span>
+              <span class="opt" id="filesTotal"></span>
+            </div>
+            <div class="drop" id="dropZone" role="button" tabindex="0" aria-label="Upload files">
+              <div class="drop-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+                </svg>
+              </div>
+              <strong>Drop files here or <span>choose files</span></strong>
+              <small>PDF, DOC/DOCX, XLS/XLSX, CSV, PPT/PPTX, TXT, JPG, PNG and more · up to 20 MB</small>
+            </div>
+            <input id="fileInput" type="file" multiple hidden />
+            <ul class="file-list" id="fileList"></ul>
+            <div class="err" id="filesErr"></div>
+          </div>
+
+          <!-- Type & Department -->
+          <div class="row" id="metaRow" data-only="create">
+            <div class="field">
+              <label for="presentationType">Type</label>
+              <select id="presentationType"></select>
+            </div>
+            <div class="field">
+              <label for="department">Department</label>
+              <select id="department"></select>
+            </div>
+          </div>
+
+          <!-- Slide count -->
+          <div class="field" id="slidesField">
+            <label for="slideCountInput">Slides <span class="opt">(3–200)</span></label>
+            <div class="slider">
+              <input id="slideCount" type="range" min="3" max="200" value="8" aria-label="Slide count slider" />
+              <input id="slideCountInput" type="number" min="3" max="200" step="1" value="8" />
+            </div>
+            <div class="hint">Includes cover and Thank You slides.</div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Running -->
+      <main class="view" id="runView" hidden>
+        <div class="run-head">
+          <div class="spinner" id="runSpinner"></div>
+          <h2 id="runTitle">Building your deck</h2>
+          <p id="runSub">Starting…</p>
+        </div>
+        <div class="bar" id="runBar"><span id="barFill"></span></div>
+        <ul class="steps" id="stageList"></ul>
+        <div class="run-note">This can take a minute or two. Keep this panel open.</div>
+      </main>
+
+      <!-- Result -->
+      <main class="view" id="resultView" hidden>
+        <div class="result">
+          <div class="badge" id="resultBadge"></div>
+          <h2 id="resultTitle"></h2>
+          <p id="resultText"></p>
+        </div>
+        <div class="stats" id="resultStats">
+          <div>Slides<strong id="statSlides">0</strong></div>
+          <div>Time<strong id="statTime">0s</strong></div>
+        </div>
+        <a class="btn btn-primary" id="openBtn" href="#" target="_blank" rel="noopener">Open presentation ↗</a>
+        <button class="btn btn-primary" id="retryBtn" type="button">Try again</button>
+        <button class="btn btn-ghost" id="backBtn" type="button">Create another</button>
+      </main>
+
+      <!-- Bottom: action + cancel + credit -->
+      <footer class="bottom">
+        <div class="actions" id="actions">
+          <button class="btn btn-primary" id="generateBtn" type="button">
+            <span class="btn-fill" id="btnFill"></span>
+            <span class="btn-spin"></span>
+            <span id="generateLabel">Generate</span>
+          </button>
+          <button class="btn btn-cancel" id="cancelBtn" type="button" hidden>Cancel</button>
+        </div>
+        <div class="powered">Powered by Marketing Team 66°</div>
+      </footer>
     </div>
-
-    <div id="rebrandBlock" class="rebrand-info hidden">
-      The slides currently in this file will be rebranded to the 66degrees 2026 template — colors, fonts, cards, logo and footer applied automatically. Nothing is added or removed.
-    </div>
-
-    <div class="actions">
-      <button id="goButton" onclick="run()">Create Presentation</button>
-      <button id="cancelButton" class="hidden" onclick="cancelRunClick()">Cancel</button>
-    </div>
-
-    <div id="progress" class="hidden">
-      <div class="p-head">
-        <span class="p-title" id="pTitle">Starting…</span>
-        <span class="p-time" id="pTime">0:00</span>
-      </div>
-      <div class="bar" id="bar"><div id="barFill"></div></div>
-      <ul class="steps" id="steps"></ul>
-    </div>
-
-    <div id="status"></div>
-    <div id="openLink" class="hidden"></div>
-
-    <div class="powered">Powered by Marketing Team 66°</div>
 
     <script>
-      const WEIGHTS = {
-        create: { research: 12, write: 28, diagram: 10, match: 2, fit: 10, icons: 8, design: 30, import: 8, review: 15, brand: 36, insert: 10 },
-        rebrand: { review: 40, brand: 60 }
+      var FALLBACK_STAGES = [
+        "input_validation",
+        "source_ingestion",
+        "outline_planning",
+        "content_generation",
+        "layout_selection",
+        "slide_rendering",
+        "brand_qa",
+        "final_presentation"
+      ];
+
+      var MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+      var MIN_SLIDES = 3;
+      var MAX_SLIDES = 200;  // decks over 20 slides (and large rebrands) are built in parts, one Apps Script run per part
+
+      var state = {
+        mode: "Create",
+        phase: "idle", // idle | running | done
+        stages: FALLBACK_STAGES.slice(),
+        files: [], // { name, mimeType, size, data (base64), preview }
+        reading: 0,
+        cur: 0,
+        anim: null,
+        timer: null,
+        startedAt: 0,
+        runId: null,
+        lastPayload: null
       };
-      const EXPECTED_SECS = { research: 25, write: 50, diagram: 20, match: 1, fit: 20, icons: 12, design: 60, import: 12, review: 30, brand: 60, insert: 15 };
-      const FALLBACK_STAGES = {
-        create: ['Research', 'Writing the content', 'Analyzing diagram', 'Choosing a 66degrees template design for each slide', 'Fitting the text to each design', 'Selecting icons', 'Drawing the slides',
-                 'Adding slides to your deck'],
-        rebrand: ['Reviewing every slide', 'Applying the 66degrees brand']
+
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      // Readable names for the server's stage ids (research, write, diagram, match, fit, icons, brand, insert)
+      var STAGE_LABELS = {
+        research: "Research",
+        write: "Writing the content",
+        diagram: "Analyzing diagram",
+        match: "Choosing a 66degrees design for each slide",
+        fit: "Fitting the text to each design",
+        icons: "Selecting icons",
+        brand: "Drawing the slides",
+        insert: "Adding the slides to your deck",
+        review: "Reviewing every slide"
       };
-      const MIN_SLIDES = 3, MAX_SLIDES = 20;
 
-      let timer = null, poller = null, polling = false;
-      let runId = null, runMode = 'create', started = 0, finished = false;
-      let currentMode = 'create';
-      let currentPresentation = { id: '', url: '', title: '' };
-      const stageSeenAt = {};
-
-      function mode() { return currentMode; }
-
-      function setMode(next) {
-        currentMode = next === 'rebrand' ? 'rebrand' : 'create';
-        document.getElementById('modeCreate').className = 'mode-btn ' + (currentMode === 'create' ? 'on' : 'off');
-        document.getElementById('modeRebrand').className = 'mode-btn ' + (currentMode === 'rebrand' ? 'on' : 'off');
-        document.getElementById('createBlock').classList.toggle('hidden', currentMode !== 'create');
-        document.getElementById('rebrandBlock').classList.toggle('hidden', currentMode !== 'rebrand');
-        const btn = document.getElementById('goButton');
-        btn.className = '';
-        btn.disabled = false;
-        btn.innerText = currentMode === 'create' ? 'Create Presentation' : 'Rebrand This Deck';
-        document.getElementById('progress').classList.add('hidden');
-        setStatus('', '');
+      function label(s) {
+        if (STAGE_LABELS[s]) return STAGE_LABELS[s];
+        s = String(s || "").replace(/_/g, " ");
+        return s.charAt(0).toUpperCase() + s.slice(1);
       }
 
-      function setStatus(text, kind) {
-        const el = document.getElementById('status');
-        el.textContent = text || '';
-        el.className = kind || '';
+      function formatBytes(n) {
+        if (n < 1024) return n + " B";
+        if (n < 1024 * 1024) return (n / 1024).toFixed(0) + " KB";
+        return (n / (1024 * 1024)).toFixed(1) + " MB";
       }
 
-      function setOpenLink(url) {
-        const el = document.getElementById('openLink');
-        if (!url) { el.className = 'hidden'; el.innerHTML = ''; return; }
-        el.className = '';
-        el.innerHTML = '<a href="' + esc(url) + '" target="_blank" rel="noopener">Open presentation</a>';
+      function newRunId() {
+        return "run_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
       }
 
-      function pad(n) { return n < 10 ? '0' + n : '' + n; }
-      function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+      // Uses the real Apps Script bridge when present; otherwise a mock so the
+      // file can be previewed in a normal browser.
+      function server() {
+        if (window.google && google.script && google.script.run) {
+          return google.script.run;
+        }
+        var ok = function () {};
+        var fail = function () {};
+        var api = {
+          withSuccessHandler: function (f) { ok = f; return api; },
+          withFailureHandler: function (f) { fail = f; return api; },
+          getGeneratorBootstrap: function () {
+            setTimeout(function () {
+              ok({
+                stages: FALLBACK_STAGES,
+                departments: ["Marketing", "Sales", "Delivery", "Leadership"],
+                presentationTypes: ["Customer pitch", "QBR", "Internal update", "Workshop"],
+                hasVertexConfig: true
+              });
+            }, 300);
+          },
+          runDeckGeneration: function (p) {
+            setTimeout(function () {
+              ok({
+                ok: true,
+                url: "https://docs.google.com/presentation/",
+                slideCount: p.slideCount,
+                elapsedMs: 10000
+              });
+            }, 10000);
+          },
+          continueDeckGeneration: function () {
+            setTimeout(function () { ok({ ok: true, url: "https://docs.google.com/presentation/", slideCount: 30, elapsedMs: 20000 }); }, 2000);
+          },
+          cancelDeckGeneration: function () {
+            setTimeout(function () { ok(true); }, 100);
+          }
+        };
+        return api;
+      }
 
-      function lockInputs(locked) {
-        ['prompt', 'source', 'slides', 'presentationType', 'department'].forEach(function (id) {
-          document.getElementById(id).disabled = locked;
+      /* ---------- Views ---------- */
+      function showView(name) {
+        ["formView", "runView", "resultView"].forEach(function (v) {
+          $(v).hidden = v !== name;
         });
-        document.getElementById('uploadBox').classList.toggle('locked', locked);
-        document.getElementById('modeToggle').classList.toggle('locked', locked);
+        $("actions").hidden = name === "resultView";
+        $("cancelBtn").hidden = name !== "runView";
+        window.scrollTo(0, 0);
       }
 
+      function showNotice(text) {
+        $("noticeText").textContent = text;
+        $("notice").hidden = false;
+      }
+
+      function hideNotice() {
+        $("notice").hidden = true;
+      }
+
+      /* ---------- Mode ---------- */
+      function setMode(mode) {
+        state.mode = mode;
+        document.body.classList.toggle("is-rebrand", mode === "Rebrand");
+        document.querySelectorAll("#modeGroup button").forEach(function (b) {
+          var active = b.getAttribute("data-mode") === mode;
+          b.classList.toggle("active", active);
+          b.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        clearErrors();
+        updateGenerateBtn();
+      }
+
+      /* ---------- Generate button states ---------- */
+      function idleLabel() {
+        return "Generate";
+      }
+
+      function setButtonPhase(phase) {
+        state.phase = phase;
+        var btn = $("generateBtn");
+        btn.classList.toggle("is-running", phase === "running");
+        btn.classList.toggle("is-done", phase === "done");
+        if (phase === "running") {
+          btn.disabled = true;
+          $("generateLabel").textContent = "Processing…";
+        } else if (phase === "done") {
+          btn.disabled = true;
+          $("btnFill").style.width = "0";
+          $("generateLabel").textContent = "✓ Presentation ready";
+        } else {
+          $("btnFill").style.width = "0";
+          updateGenerateBtn();
+        }
+      }
+
+      function updateGenerateBtn() {
+        if (state.phase !== "idle") return;
+        var busy = state.reading > 0;
+        $("generateBtn").disabled = busy;
+        $("generateLabel").textContent = busy ? "Reading files…" : idleLabel();
+      }
+
+      /* ---------- Slide count (slider + editable box) ---------- */
       function clampSlides(v) {
         v = parseInt(v, 10);
         if (isNaN(v)) v = 8;
         return Math.max(MIN_SLIDES, Math.min(MAX_SLIDES, v));
       }
 
-      document.getElementById('slides').addEventListener('blur', function () {
-        this.value = clampSlides(this.value);
-      });
-
-      const MAX_UPLOAD = 20 * 1024 * 1024;
-      function fileChosen() {
-        const f = document.getElementById('file').files[0];
-        const nameEl = document.getElementById('fileName');
-        if (!f) { clearFile(); return; }
-        if (f.size > MAX_UPLOAD) { setStatus('That file is larger than 20 MB.', 'error'); clearFile(); return; }
-        nameEl.textContent = f.name + ' · ' + Math.max(1, Math.round(f.size / 1024)) + ' KB';
-        nameEl.classList.add('chosen');
-        document.getElementById('fileClear').classList.remove('hidden');
-        setStatus('', '');
-      }
-      function clearFile(ev) {
-        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
-        document.getElementById('file').value = '';
-        const nameEl = document.getElementById('fileName');
-        nameEl.textContent = 'PDF, Word, Excel, CSV, PowerPoint, text or image · max 20 MB';
-        nameEl.classList.remove('chosen');
-        document.getElementById('fileClear').classList.add('hidden');
+      function setSlides(v) {
+        v = clampSlides(v);
+        $("slideCount").value = v;
+        $("slideCountInput").value = v;
       }
 
-      function run() {
-        const m = mode();
-        const f = m === 'create' ? document.getElementById('file').files[0] : null;
-        if (!f) { start(null); return; }
-        const reader = new FileReader();
-        document.getElementById('goButton').disabled = true;
-        setStatus('Reading ' + f.name + '…', '');
-        reader.onload = function () {
-          const data = String(reader.result).replace(/^data:[^,]*,/, '');
-          start({ name: f.name, mimeType: f.type || '', data: data });
+      /* ---------- Files ---------- */
+      function totalBytes() {
+        return state.files.reduce(function (sum, f) { return sum + f.size; }, 0);
+      }
+
+      function renderFiles() {
+        var list = $("fileList");
+        list.innerHTML = "";
+        state.files.forEach(function (f, i) {
+          var li = document.createElement("li");
+
+          var badge;
+          if (f.preview) {
+            badge = document.createElement("img");
+            badge.className = "file-thumb";
+            badge.src = f.preview;
+            badge.alt = "";
+          } else {
+            badge = document.createElement("span");
+            badge.className = "file-ext";
+            var dot = f.name.lastIndexOf(".");
+            badge.textContent = dot > -1 ? f.name.slice(dot + 1).slice(0, 4) : "file";
+          }
+
+          var name = document.createElement("span");
+          name.className = "file-name";
+          name.textContent = f.name;
+          name.title = f.name;
+
+          var size = document.createElement("span");
+          size.className = "file-size";
+          size.textContent = formatBytes(f.size);
+
+          var rm = document.createElement("button");
+          rm.type = "button";
+          rm.className = "file-remove";
+          rm.setAttribute("aria-label", "Remove " + f.name);
+          rm.textContent = "×";
+          rm.addEventListener("click", function () {
+            state.files.splice(i, 1);
+            renderFiles();
+          });
+
+          li.appendChild(badge);
+          li.appendChild(name);
+          li.appendChild(size);
+          li.appendChild(rm);
+          list.appendChild(li);
+        });
+        $("filesTotal").textContent = state.files.length
+          ? state.files.length + " file" + (state.files.length > 1 ? "s" : "") + " · " + formatBytes(totalBytes())
+          : "";
+        $("filesField").classList.remove("invalid");
+        if (state.files.length) $("sourceField").classList.remove("invalid");
+      }
+
+      function addFiles(fileList) {
+        var incoming = Array.prototype.slice.call(fileList || []);
+        var budget = MAX_TOTAL_BYTES - totalBytes();
+        var skipped = [];
+
+        incoming.forEach(function (file) {
+          var dup = state.files.some(function (f) {
+            return f.name === file.name && f.size === file.size;
+          });
+          if (dup) return;
+          if (file.size > budget) {
+            skipped.push(file.name);
+            return;
+          }
+          budget -= file.size;
+          state.reading += 1;
+          updateGenerateBtn();
+
+          var reader = new FileReader();
+          reader.onload = function () {
+            var result = String(reader.result || "");
+            var isImage = /^image\//.test(file.type);
+            state.files.push({
+              name: file.name,
+              mimeType: file.type || "application/octet-stream",
+              size: file.size,
+              data: result.slice(result.indexOf(",") + 1),
+              preview: isImage ? result : null
+            });
+            state.reading -= 1;
+            updateGenerateBtn();
+            renderFiles();
+          };
+          reader.onerror = function () {
+            state.reading -= 1;
+            updateGenerateBtn();
+            setError("filesField", "filesErr", "Couldn't read " + file.name + ".");
+          };
+          reader.readAsDataURL(file);
+        });
+
+        if (skipped.length) {
+          setError(
+            "filesField",
+            "filesErr",
+            "Over the 20 MB limit, not added: " + skipped.join(", ")
+          );
+        }
+      }
+
+      /* ---------- Validation ---------- */
+      function setError(fieldId, errId, msg) {
+        $(fieldId).classList.add("invalid");
+        $(errId).textContent = msg;
+      }
+
+      function clearErrors() {
+        ["promptField", "sourceField", "filesField"].forEach(function (id) {
+          $(id).classList.remove("invalid");
+        });
+      }
+
+      function validate() {
+        clearErrors();
+        var firstBad = null;
+        var prompt = $("prompt").value.trim();
+        var url = $("sourceUrl").value.trim();
+
+        if (state.mode === "Create" && prompt.length < 3) {
+          setError("promptField", "promptErr", "Enter a presentation topic.");
+          firstBad = firstBad || $("prompt");
+        }
+
+        // Rebrand has no inputs to check.
+        if (state.mode === "Rebrand") return true;
+
+        if (url && !/^https:\/\//.test(url)) {
+          setError("sourceField", "sourceErr", "Use a full https:// link.");
+          firstBad = firstBad || $("sourceUrl");
+        }
+
+        if (firstBad) firstBad.focus();
+        return !firstBad;
+      }
+
+      /* ---------- Progress ---------- */
+      function renderSteps(failedIdx) {
+        var list = $("stageList");
+        list.innerHTML = "";
+        state.stages.forEach(function (stage, i) {
+          var li = document.createElement("li");
+          var ic = document.createElement("span");
+          ic.className = "ic";
+          if (failedIdx === i) {
+            li.className = "failed";
+            ic.textContent = "!";
+          } else if (i < state.cur) {
+            li.className = "done";
+            ic.textContent = "✓";
+          } else if (i === state.cur && failedIdx == null) {
+            li.className = "current";
+          }
+          li.appendChild(ic);
+          li.appendChild(document.createTextNode(label(stage)));
+          list.appendChild(li);
+        });
+        var pct = Math.min(100, (state.cur / state.stages.length) * 100);
+        $("barFill").style.width = pct + "%";
+        if (state.phase === "running") {
+          $("btnFill").style.width = pct + "%";
+        }
+      }
+
+      function updateSub() {
+        var secs = Math.floor((Date.now() - state.startedAt) / 1000);
+        var stage = state.stages[Math.min(state.cur, state.stages.length - 1)];
+        $("runSub").textContent = (state.partNote ? state.partNote + " · " : "") + label(stage) + " · " + secs + "s";
+      }
+
+      function startProgress() {
+        state.cur = 0;
+        state.startedAt = Date.now();
+        $("runSpinner").classList.remove("done");
+        $("runBar").classList.remove("done");
+        renderSteps();
+        updateSub();
+        stopProgress();
+        state.timer = setInterval(updateSub, 500);
+        // Optimistic pacing — never marks the last two stages done until the
+        // server actually returns.
+        state.anim = setInterval(function () {
+          if (state.cur < state.stages.length - 2) {
+            state.cur += 1;
+            renderSteps();
+          }
+        }, 2400);
+      }
+
+      function stopProgress() {
+        if (state.anim) clearInterval(state.anim);
+        if (state.timer) clearInterval(state.timer);
+        state.anim = null;
+        state.timer = null;
+      }
+
+      /* ---------- Results ---------- */
+      function showSuccess(result) {
+        $("resultBadge").className = "badge ok";
+        $("resultBadge").textContent = "✓";
+        $("resultTitle").textContent = "Your presentation is ready";
+        $("resultText").textContent = "Review the slides and tweak anything before sharing.";
+        $("statSlides").textContent = result.slideCount || 0;
+        $("statTime").textContent = Math.round((result.elapsedMs || 0) / 1000) + "s";
+        $("resultStats").hidden = false;
+
+        var url = String(result.url || "");
+        $("openBtn").hidden = !/^https:\/\//.test(url);
+        $("openBtn").setAttribute("href", url);
+        $("retryBtn").hidden = true;
+        $("backBtn").textContent = state.mode === "Rebrand" ? "Rebrand another" : "Create another";
+        showView("resultView");
+      }
+
+      function showFailure(stage, message) {
+        setButtonPhase("idle");
+        $("resultBadge").className = "badge err";
+        $("resultBadge").textContent = "!";
+        $("resultTitle").textContent = "Generation failed";
+        $("resultText").textContent =
+          (stage ? "Stopped at " + label(stage) + ". " : "") + (message || "Something went wrong.");
+        $("resultStats").hidden = true;
+        $("openBtn").hidden = true;
+        $("retryBtn").hidden = false;
+        $("backBtn").textContent = "Edit inputs";
+        showView("resultView");
+      }
+
+      /* ---------- Run & cancel ---------- */
+      function run(payload) {
+        var runId = newRunId();
+        payload.runId = runId;
+        state.runId = runId;
+        state.partNote = "";
+        state.lastPayload = payload;
+
+        hideNotice();
+        $("cancelBtn").disabled = false;
+        $("runTitle").textContent =
+          payload.mode === "Rebrand" ? "Rebranding your deck" : "Building your deck";
+        setButtonPhase("running");
+        showView("runView");
+        startProgress();
+
+        var onResult = function (result) {
+            if (state.runId !== runId) return; // cancelled — ignore late result
+            // Long deck or large rebrand: the server finished one part; ask for the next part
+            if (result && result.continue) {
+              state.partNote = result.done + " of " + result.total + " slides done";
+              updateSub();
+              server()
+                .withSuccessHandler(onResult)
+                .withFailureHandler(onFail)
+                .continueDeckGeneration(runId);
+              return;
+            }
+            stopProgress();
+            if (!result || !result.ok) {
+              var err = (result && result.error) || {};
+              var idx = state.stages.indexOf(err.stage);
+              if (idx !== -1) state.cur = idx;
+              renderSteps(idx !== -1 ? idx : null);
+              setTimeout(function () {
+                showFailure(err.stage, err.message || "Generation failed.");
+              }, 700);
+              return;
+            }
+
+            // Completed: everything turns green, then show the result screen.
+            state.cur = state.stages.length;
+            renderSteps();
+            setButtonPhase("done");
+            $("cancelBtn").hidden = true;
+            $("runSpinner").classList.add("done");
+            $("runBar").classList.add("done");
+            $("runTitle").textContent = "Presentation ready";
+            $("runSub").textContent =
+              "Finished in " + Math.round((Date.now() - state.startedAt) / 1000) + "s";
+
+            setTimeout(function () {
+              showSuccess(result);
+            }, 1400);
         };
-        reader.onerror = function () {
-          document.getElementById('goButton').disabled = false;
-          setStatus('Could not read that file.', 'error');
+        var onFail = function (err) {
+            if (state.runId !== runId) return;
+            stopProgress();
+            showFailure(null, (err && err.message) || String(err));
         };
-        reader.readAsDataURL(f);
+        server()
+          .withSuccessHandler(onResult)
+          .withFailureHandler(onFail)
+          .runDeckGeneration(payload);
       }
 
-      function start(upload) {
-        const m = mode();
-        const prompt = document.getElementById('prompt').value.trim();
-        const source = document.getElementById('source').value.trim();
-        const presentationType = document.getElementById('presentationType').value;
-        const department = document.getElementById('department').value;
-        let slides = clampSlides(document.getElementById('slides').value);
-        document.getElementById('slides').value = slides;
+      function cancelRun() {
+        var runId = state.runId;
+        if (!runId || state.phase !== "running") return;
+        state.runId = null; // any result that arrives later is ignored
+        stopProgress();
+        $("cancelBtn").disabled = true;
 
-        if (m === 'create' && !prompt && !source && !upload) {
-          document.getElementById('goButton').disabled = false;
-          setStatus('Type a topic, paste a source link or upload a file.', 'error');
+        // Ask the server to stop at its next stage check (optional on the server side).
+        try {
+          server()
+            .withSuccessHandler(function () {})
+            .withFailureHandler(function () {})
+            .cancelDeckGeneration(runId);
+        } catch (e) {
+          // cancelDeckGeneration not defined on the server — UI cancel still works.
+        }
+
+        setButtonPhase("idle");
+        showView("formView");
+        showNotice("Generation cancelled. Your inputs are kept.");
+      }
+
+      function generate() {
+        if (state.phase !== "idle" || state.reading > 0) return;
+        if (!validate()) return;
+        // Rebrand works on the open presentation and sends no options.
+        if (state.mode === "Rebrand") {
+          run({ mode: "Rebrand" });
           return;
         }
-
-        runId = 'r' + Date.now() + Math.floor(Math.random() * 1e6);
-        runMode = m;
-        started = Date.now();
-        finished = false;
-        Object.keys(stageSeenAt).forEach(function (k) { delete stageSeenAt[k]; });
-
-        const btn = document.getElementById('goButton');
-        btn.disabled = true;
-        btn.className = '';
-        btn.innerText = m === 'create' ? 'Creating…' : 'Rebranding…';
-        const cancel = document.getElementById('cancelButton');
-        cancel.classList.remove('hidden');
-        cancel.disabled = false;
-        cancel.innerText = 'Cancel';
-        lockInputs(true);
-        setStatus('', '');
-        setOpenLink('');
-
-        document.getElementById('progress').classList.remove('hidden');
-        document.getElementById('bar').className = 'bar';
-        document.getElementById('pTitle').textContent = m === 'create' ? 'Creating your presentation' : 'Rebranding this deck';
-        renderProgress(null);
-
-        timer = setInterval(tickClock, 1000);
-        tickClock();
-        poller = setInterval(poll, 2000);
-
-        google.script.run
-          .withSuccessHandler(onDone)
-          .withFailureHandler(onFail)
-          .withUserObject(runId)
-          .generatePresentation({
-            mode: m,
-            prompt: prompt,
-            sourceUrl: source,
-            upload: upload,
-            slides: slides,
-            slideCount: slides,
-            presentationType: presentationType,
-            type: presentationType,
-            department: department,
-            runId: runId
-          });
-      }
-
-      function tickClock() {
-        const secs = Math.round((Date.now() - started) / 1000);
-        document.getElementById('pTime').textContent = Math.floor(secs / 60) + ':' + pad(secs % 60);
-      }
-
-      function poll() {
-        if (polling || finished) return;
-        polling = true;
-        google.script.run
-          .withSuccessHandler(function (p) { polling = false; if (!finished) renderProgress(p); })
-          .withFailureHandler(function () { polling = false; })
-          .getProgress(runId);
-      }
-
-      const stoppedRuns = {};
-      function cancelRunClick() {
-        if (!runId || finished) return;
-        stoppedRuns[runId] = true;
-        google.script.run.cancelRun(runId);
-        finishUi();
-        const btn = document.getElementById('goButton');
-        btn.disabled = false;
-        btn.className = '';
-        btn.innerText = runMode === 'create' ? 'Create Presentation' : 'Rebrand This Deck';
-        document.getElementById('pTitle').textContent = 'Stopped';
-        document.getElementById('bar').className = 'bar';
-        document.querySelectorAll('#steps .spin').forEach(function (e) { e.outerHTML = '–'; });
-        setStatus('Stopped. Nothing was added to your deck. You can start again right away.', '');
-        setOpenLink('');
-      }
-
-      function stopTimers() {
-        if (timer) { clearInterval(timer); timer = null; }
-        if (poller) { clearInterval(poller); poller = null; }
-      }
-
-      function finishUi() {
-        finished = true;
-        stopTimers();
-        lockInputs(false);
-        document.getElementById('cancelButton').classList.add('hidden');
-      }
-
-      function onDone(msg, id) {
-        if (id && (stoppedRuns[id] || id !== runId)) return;
-        let text = '';
-        let url = currentPresentation.url;
-        if (msg && typeof msg === 'object') {
-          text = String(msg.message || 'Done.');
-          if (msg.url) url = msg.url;
-          if (msg.presentationId) currentPresentation.id = msg.presentationId;
-          if (msg.url) currentPresentation.url = msg.url;
-        } else {
-          text = String(msg || 'Done.');
-        }
-        google.script.run.withSuccessHandler(function (p) { renderProgress(p, true); }).getProgress(runId);
-        finishUi();
-        const btn = document.getElementById('goButton');
-        btn.disabled = false;
-        if (text.indexOf('SUCCESS') === 0) {
-          btn.className = 'success';
-          btn.innerText = runMode === 'create' ? '✓ Presentation Created' : '✓ Deck Rebranded';
-          document.getElementById('pTitle').textContent = runMode === 'create' ? 'Presentation created' : 'Deck rebranded';
-          document.getElementById('bar').className = 'bar done';
-          document.getElementById('barFill').style.width = '100%';
-          setStatus(text.replace(/^SUCCESS:\s*/, ''), 'success');
-          setOpenLink(url);
-        } else if (text.indexOf('CANCELLED') === 0) {
-          btn.className = '';
-          btn.innerText = runMode === 'create' ? 'Create Presentation' : 'Rebrand This Deck';
-          document.getElementById('pTitle').textContent = 'Stopped';
-          setStatus(text.replace(/^CANCELLED:\s*/, ''), '');
-          setOpenLink('');
-        } else {
-          btn.className = '';
-          btn.innerText = runMode === 'create' ? 'Create Presentation' : 'Rebrand This Deck';
-          setStatus(text, '');
-        }
-      }
-
-      function onFail(err, id) {
-        if (id && (stoppedRuns[id] || id !== runId)) return;
-        const msg = err && err.message ? err.message : String(err);
-        google.script.run.withSuccessHandler(function (p) { renderProgress(p, true); }).getProgress(runId);
-        finishUi();
-        const btn = document.getElementById('goButton');
-        btn.disabled = false;
-        btn.className = 'error';
-        btn.innerText = 'Try Again';
-        document.getElementById('pTitle').textContent = 'Something went wrong';
-        document.getElementById('bar').className = 'bar error';
-        setStatus(msg, 'error');
-      }
-
-      function icon(status) {
-        if (status === 'done') return '✓';
-        if (status === 'error') return '✕';
-        if (status === 'active') return '<span class="spin"></span>';
-        return '○';
-      }
-
-      function renderProgress(p, final) {
-        const stages = p && p.stages ? p.stages : FALLBACK_STAGES[runMode].map(function (label, i) {
-          return { id: 's' + i, label: label, status: i === 0 ? 'active' : 'pending', detail: i === 0 ? 'Starting…' : '' };
+        setSlides($("slideCountInput").value);
+        run({
+          mode: state.mode,
+          department: $("department").value,
+          presentationType: $("presentationType").value,
+          slideCount: Number($("slideCount").value),
+          prompt: $("prompt").value.trim(),
+          sourceUrl: $("sourceUrl").value.trim(),
+          files: state.files.map(function (f) {
+            return { name: f.name, mimeType: f.mimeType, size: f.size, data: f.data };
+          })
         });
-        const slides = p && p.slides ? p.slides : [];
-        const html = stages.map(function (st) {
-          let li = '<li class="' + st.status + '"><span class="ico">' + icon(st.status) + '</span><span class="lbl">' +
-            esc(st.label) + (st.detail ? '<span class="detail">' + esc(st.detail) + '</span>' : '') + '</span></li>';
-          const brandStarted = stages.some(function (x) { return x.id === 'brand' && x.status !== 'pending'; });
-          const showUnder = slides.length && ((st.id === 'brand' && brandStarted) || (st.id === 'write' && !brandStarted));
-          if (showUnder) li += '<li style="display:block;padding:0">' + slideList(slides, st.id === 'write') + '</li>';
-          return li;
-        }).join('');
-        document.getElementById('steps').innerHTML = html;
-        if (!final) document.getElementById('barFill').style.width = percent(stages, slides) + '%';
       }
 
-      function slideList(slides, planOnly) {
-        let items = slides;
-        let before = 0, after = 0;
-        if (slides.length > 9) {
-          let focus = slides.findIndex(function (s) { return s.status === 'active'; });
-          if (focus === -1) focus = slides.filter(function (s) { return s.status === 'done'; }).length;
-          const start = Math.max(0, Math.min(focus - 3, slides.length - 8));
-          items = slides.slice(start, start + 8);
-          before = start;
-          after = slides.length - start - items.length;
+      /* ---------- Bootstrap ---------- */
+      function fillSelect(el, items) {
+        el.innerHTML = "";
+        (items || []).forEach(function (v) {
+          var opt = document.createElement("option");
+          opt.value = v;
+          opt.textContent = v;
+          el.appendChild(opt);
+        });
+      }
+
+      function bootstrap() {
+        server()
+          .withSuccessHandler(function (data) {
+            data = data || {};
+            if (data.stages && data.stages.length) state.stages = data.stages;
+            fillSelect($("department"), data.departments);
+            fillSelect($("presentationType"), data.presentationTypes);
+            var pill = $("aiStatus");
+            pill.className = "pill " + (data.hasVertexConfig ? "ok" : "warn");
+            pill.innerHTML = "<i></i>";
+            pill.appendChild(
+              document.createTextNode(data.hasVertexConfig ? "Vertex AI" : "Fallback")
+            );
+            pill.title = data.hasVertexConfig
+              ? "Vertex AI planner configured"
+              : "Vertex AI not configured — using the fallback planner";
+          })
+          .withFailureHandler(function (err) {
+            var pill = $("aiStatus");
+            pill.className = "pill bad";
+            pill.innerHTML = "<i></i>Offline";
+            pill.title = "Bootstrap failed: " + ((err && err.message) || err);
+          })
+          .getGeneratorBootstrap();
+      }
+
+      /* ---------- Events ---------- */
+      document.querySelectorAll("#modeGroup button").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          setMode(btn.getAttribute("data-mode"));
+        });
+      });
+
+      $("prompt").addEventListener("input", function () {
+        $("promptField").classList.remove("invalid");
+      });
+
+      $("sourceUrl").addEventListener("input", function () {
+        $("sourceField").classList.remove("invalid");
+      });
+
+      $("slideCount").addEventListener("input", function () {
+        $("slideCountInput").value = this.value;
+      });
+
+      $("slideCountInput").addEventListener("input", function () {
+        var v = parseInt(this.value, 10);
+        if (!isNaN(v) && v >= MIN_SLIDES && v <= MAX_SLIDES) {
+          $("slideCount").value = v;
         }
-        let out = '<ul class="slides">';
-        if (before) out += '<li class="more">✓ ' + before + ' earlier slide' + (before > 1 ? 's' : '') + '</li>';
-        items.forEach(function (s) {
-          const st = planOnly ? 'pending' : s.status;
-          out += '<li class="' + st + '"><span class="ico">' + (planOnly ? '•' : icon(st)) + '</span><span class="num">' + s.n +
-            '</span><span class="t">' + esc(s.title) + '</span></li>';
+      });
+
+      $("slideCountInput").addEventListener("blur", function () {
+        setSlides(this.value);
+      });
+
+      $("fileInput").addEventListener("change", function () {
+        addFiles(this.files);
+        this.value = "";
+      });
+
+      var drop = $("dropZone");
+      drop.addEventListener("click", function () {
+        $("fileInput").click();
+      });
+      drop.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          $("fileInput").click();
+        }
+      });
+      ["dragenter", "dragover"].forEach(function (evt) {
+        drop.addEventListener(evt, function (e) {
+          e.preventDefault();
+          drop.classList.add("over");
         });
-        if (after) out += '<li class="more">… ' + after + ' more slide' + (after > 1 ? 's' : '') + '</li>';
-        return out + '</ul>';
-      }
-
-      function percent(stages, slides) {
-        const w = WEIGHTS[runMode];
-        let total = 0, done = 0;
-        stages.forEach(function (st) {
-          const weight = w[st.id] || 0;
-          total += weight;
-          if (st.status === 'done') { done += weight; return; }
-          if (st.status !== 'active') return;
-          if (!stageSeenAt[st.id]) stageSeenAt[st.id] = Date.now();
-          let part;
-          if (st.id === 'brand' && slides.length) {
-            const finishedSlides = slides.filter(function (s) { return s.status === 'done'; }).length;
-            part = 0.25 + 0.75 * finishedSlides / slides.length;
-          } else {
-            const secs = (Date.now() - stageSeenAt[st.id]) / 1000;
-            part = Math.min(0.9, secs / (EXPECTED_SECS[st.id] || 20));
-          }
-          done += weight * part;
+      });
+      ["dragleave", "drop"].forEach(function (evt) {
+        drop.addEventListener(evt, function (e) {
+          e.preventDefault();
+          drop.classList.remove("over");
         });
-        return total ? Math.max(2, Math.min(99, Math.round(done / total * 100))) : 2;
-      }
+      });
+      drop.addEventListener("drop", function (e) {
+        addFiles(e.dataTransfer && e.dataTransfer.files);
+      });
 
-      google.script.run
-        .withSuccessHandler(function (data) {
-          if (!data) return;
-          currentPresentation = {
-            id: data.presentationId || '',
-            url: data.url || '',
-            title: data.title || ''
-          };
-        })
-        .getGeneratorBootstrap();
+      document.addEventListener("keydown", function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !$("formView").hidden) {
+          e.preventDefault();
+          generate();
+        }
+        if (e.key === "Escape" && !$("runView").hidden) {
+          cancelRun();
+        }
+      });
 
-      clearFile();
-      setMode('create');
+      $("generateBtn").addEventListener("click", generate);
+      $("cancelBtn").addEventListener("click", cancelRun);
+      $("noticeClose").addEventListener("click", hideNotice);
+      $("retryBtn").addEventListener("click", function () {
+        if (state.lastPayload) run(state.lastPayload);
+      });
+      $("backBtn").addEventListener("click", function () {
+        setButtonPhase("idle");
+        showView("formView");
+      });
+
+      setMode("Create");
+      bootstrap();
     </script>
   </body>
 </html>

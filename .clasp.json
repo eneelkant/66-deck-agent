@@ -1,9 +1,19 @@
 {
-  "scriptId": "REPLACE_WITH_APPS_SCRIPT_ID",
+  "scriptId": "1SQTYgh3wYvs62mINiPtWuR31FRxEZJPCrDvyfUxJ9dngZTQo-W4sd0fN",
+  "parentId": [
+    "1YOOnRXODUisuqDZCZJdeXXKkAmZt4FMiFbvxOaY5xVs"
+  ],
   "rootDir": "src",
-  "scriptExtensions": [".js", ".gs"],
-  "htmlExtensions": [".html"],
-  "jsonExtensions": [".json"],
+  "scriptExtensions": [
+    ".js",
+    ".gs"
+  ],
+  "htmlExtensions": [
+    ".html"
+  ],
+  "jsonExtensions": [
+    ".json"
+  ],
   "filePushOrder": [
     "Brand.gs",
     "ShapeKit.gs",

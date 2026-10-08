@@ -18,6 +18,29 @@ var SHAPE_KIT = {
 };
 
 // Opens (or creates once) the kit and returns its shapes, ordered like SHAPE_KIT.adj. Cached per run in ctx.
+// Kit decks are Google Slides files made once from the kit PowerPoint files (File > Save as Google Slides).
+// They are looked up by name: in the brand folder (CONFIG.brandFolderId) first, then anywhere in Drive.
+function findKitDeck_(names) {
+  const pick = function (it) {
+    while (it.hasNext()) {
+      const f = it.next();
+      try { if (f.getMimeType() === MimeType.GOOGLE_SLIDES && !f.isTrashed()) return f.getId(); } catch (e) {}
+    }
+    return null;
+  };
+  let id = null;
+  try {
+    if (CONFIG.brandFolderId) {
+      const folder = DriveApp.getFolderById(CONFIG.brandFolderId);
+      names.forEach(function (n) { if (!id) id = pick(folder.getFilesByName(n)); });
+    }
+  } catch (e) {}
+  try { names.forEach(function (n) { if (!id) id = pick(DriveApp.getFilesByName(n)); }); } catch (e) {}
+  return id;
+}
+var SHAPE_KIT_NAMES_ = ['66degrees shape kit v2 (do not delete)', '66d_shape_kit'];
+var ARC_KIT_NAMES_ = ['66degrees arc kit (do not delete)', '66d_arc_kit'];
+
 function shapeKit_(ctx) {
   if (ctx.shapeKit !== undefined) return ctx.shapeKit;
   ctx.shapeKit = null;
@@ -27,6 +50,10 @@ function shapeKit_(ctx) {
   let deck = null;
   if (id) { try { deck = SlidesApp.openById(id); } catch (e) { deck = null; } }
   if (!deck) {
+    const found = findKitDeck_(SHAPE_KIT_NAMES_);
+    if (found) { try { deck = SlidesApp.openById(found); props.setProperty(SHAPE_KIT.propKey, found); } catch (e) { deck = null; } }
+  }
+  if (!deck) {
     try {
       const blob = Utilities.newBlob(Utilities.base64Decode(SHAPE_KIT.b64),
         'application/vnd.openxmlformats-officedocument.presentationml.presentation', '66d_shape_kit.pptx');
@@ -34,7 +61,7 @@ function shapeKit_(ctx) {
       props.setProperty(SHAPE_KIT.propKey, id);
       deck = SlidesApp.openById(id);
     } catch (e) {
-      ctx.roundIssue = 'shape kit could not be created: ' + e.message;
+      ctx.roundIssue = 'shape kit not found: put "66d_shape_kit" (Google Slides) in the brand folder (' + e.message + ')';
       return null;
     }
   }
@@ -93,6 +120,10 @@ function arcKit_(ctx) {
   let deck = null;
   if (id) { try { deck = SlidesApp.openById(id); } catch (e) { deck = null; } }
   if (!deck) {
+    const found = findKitDeck_(ARC_KIT_NAMES_);
+    if (found) { try { deck = SlidesApp.openById(found); props.setProperty(ARC_KIT.propKey, found); } catch (e) { deck = null; } }
+  }
+  if (!deck) {
     try {
       const blob = Utilities.newBlob(Utilities.base64Decode(ARC_KIT.b64),
         'application/vnd.openxmlformats-officedocument.presentationml.presentation', '66d_arc_kit.pptx');
@@ -100,7 +131,7 @@ function arcKit_(ctx) {
       props.setProperty(ARC_KIT.propKey, id);
       deck = SlidesApp.openById(id);
     } catch (e) {
-      ctx.arcIssue = 'arc kit could not be created: ' + e.message;
+      ctx.arcIssue = 'arc kit not found: put "66d_arc_kit" (Google Slides) in the brand folder (' + e.message + ')';
       return null;
     }
   }

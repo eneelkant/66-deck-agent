@@ -71,7 +71,7 @@ var ENGINE = (function () {
     return sum * size / 1000;
   }
   function wrap(text, maxW, font, weight, size) {
-    maxW = maxW * 0.97;                              // safety margin: Google Slides sets Plus Jakarta Sans slightly wider
+    maxW = maxW * 0.94;                              // safety margin: Google Slides sets Plus Jakarta Sans wider than the metrics
     var lines = [];
     String(text).split('\n').forEach(function (para) {
       var words = para.split(/\s+/).filter(function (w) { return w.length; });
@@ -220,9 +220,7 @@ var ENGINE = (function () {
   }
   // Column header: "label — title" only when it fits on one line, otherwise the label alone (never cut off)
   function headerText(side, w) {
-    var full = [side.label, side.title].filter(Boolean).join(' — ');
-    if (wrap(full, w, 'sans', 500, TSZ.heading).length <= 1) return full;
-    return side.label || side.title || '';
+    return side.label || side.title || '';      // one short heading per column, never "label — title"
   }
   function onFill(fill) { return isLight(fill) ? T.ink : T.white; }   // readable text color on a fill
   function cardStyleOf(s) { return (s && s.reference && s.reference.cardStyle) || 'panel'; }
@@ -258,7 +256,7 @@ var ENGINE = (function () {
     var a = Number(avail), n = Number(need);
     if (!isFinite(a) || a < 1) a = 1;
     if (!isFinite(n) || n < 1) n = 1;
-    return Math.min(a, Math.max(n, a * 0.7));
+    return Math.min(a, Math.max(n, a * 0.6));
   }
   var boxH_ = boxH;
   // Cuts a text at the last whole word that fits on one line (no ellipsis; trailing joining words are dropped)
@@ -727,13 +725,27 @@ var ENGINE = (function () {
     var els = [];
     var top = header(els, s) + 4;
     var side = s.callout && (s.callout.title || s.callout.text);
+    // No points: the side panel would sit alone on the right with an empty left half. The callout becomes the
+    // slide's statement instead (full width, nothing empty).
+    if (!asList(s.points).length) {
+      if (!side) return { bg: T.white, els: els };
+      var so = L.statement({ title: s.title, statement: s.callout.title || s.callout.label || s.title, text: s.callout.text || '', notes: s.notes }, ctx); so.noBalance = true; return so;
+    }
     var lw = side ? 400 : CW;
-    var listH = bulletList(els, CX, top, lw, BOTTOM - top, s.points, { max: TSZ.body + 0.5, min: TSZ.body + 0.5, gap: 12 });
+    var listH;
+    if (side) listH = bulletList(els, CX, top, lw, BOTTOM - top, s.points, { max: TSZ.body + 0.5, min: TSZ.body + 0.5, gap: 12 });
+    else {
+      var bpts = asList(s.points), bsz = TSZ.body + 2, avail = BOTTOM - top - 10;
+      var textTot = bpts.reduce(function (t, p) { return t + textH(p, lw - 16, bsz); }, 0);
+      var bgap = Math.max(12, Math.min(30, (avail * 0.85 - textTot) / Math.max(bpts.length - 1, 1)));
+      var used = textTot + bgap * (bpts.length - 1);
+      listH = bulletList(els, CX, top + Math.max(0, (avail - used) / 3), lw, avail, bpts, { max: bsz, min: bsz, gap: bgap });
+    }
     if (side) {
       var px = CX + 424, pw = CW - 424;
-      var ptext = [s.callout.label ? s.callout.title : '', s.callout.text].filter(Boolean).join('\n');
+      var ptext = String(s.callout.text || '');
       var need = 43 + 14 + textH(ptext, pw - 24, TSZ.body) + 18;
-      panel(els, px, top, pw, Math.min(BOTTOM - top, Math.max(need, listH, 120)), T.blue, s.callout.label || s.callout.title || 'Why it matters', [], ptext);
+      panel(els, px, top, pw, Math.min(BOTTOM - top, Math.max(need, listH, 120)), T.blue, s.callout.title || s.callout.label || 'Why it matters', [], ptext);
     }
     return { bg: T.white, els: els };
   };
@@ -790,6 +802,12 @@ var ENGINE = (function () {
     var ch = s.chart || {};
     var cats = arr(ch.categories, 8);
     var series = arr(ch.series, 2).map(function (se) { return { name: se.name || '', values: arr(se.values, 8).map(Number) }; });
+    // No real data: never an empty plot with a lonely insight panel - the insight becomes the slide's statement
+    var hasData = cats.length >= 2 && series.some(function (se) { return se.values.some(function (v) { return isFinite(v) && v > 0; }); });
+    if (!hasData) {
+      if (s.insight && (s.insight.title || s.insight.text)) { var si = L.statement({ title: s.title, statement: s.insight.title || s.title, text: s.insight.text || '', notes: s.notes }, ctx); si.noBalance = true; return si; }
+      return { bg: T.white, els: els };
+    }
     var top = header(els, s);                       // chart always starts below the title, however long it is
     var hasInsight = !!(s.insight && (s.insight.title || s.insight.text));
     var cx = CX, cw = hasInsight ? 420 : CW;
@@ -948,6 +966,42 @@ var ENGINE = (function () {
     return { bg: T.white, els: els, noFooter: true };
   };
 
+  /* ---------------- Cover and closing variations (rotated between decks) ----------------
+   * Built only from the template's own parts: the 66° Blue band, the band / strip / cover patterns, the logo, the
+   * white 66° mark and the isometric cube. Light backgrounds only (they never count as dark slides). */
+  var COVER_VARIANTS_ = {};
+  // Blue panel on the left with the white 66° mark and the date; the title on the right
+  COVER_VARIANTS_.ENGINE_COVER_PANEL = function (s, ctx) {
+    var els = [], pw = 236;
+    rect(els, 0, 0, pw, H, T.blue);
+    els[els.length - 1].square = true;
+    image(els, 'mark-white', 28, 30, 55, 36.7);
+    image(els, 'band-pattern', 0, H - 56, 94, 56);
+    text(els, 28, 300, pw - 50, 16, '>> ' + (ctx.dateLabel || ''), { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
+    image(els, 'logo-dark', W - 32 - 68.8, 28, 68.8, 16.2);
+    text(els, pw + 40, 110, W - pw - 80, 116, s.title, { weight: 600, max: 28, min: 22, maxLines: 3, color: T.title || T.ink, valign: 'bottom' });
+    rect(els, pw + 42, 236, 72, 3, T.blue);
+    text(els, pw + 40, 250, W - pw - 90, 40, s.subtitle || s.lead, { weight: 500, max: 12, min: 10, maxLines: 2, color: T.body });
+    image(els, 'cover-pattern', W - 124, H - 96, 92, 72);
+    return { bg: T.white, els: els, noFooter: true };
+  };
+  // Title block with the isometric cube on the right and a slim blue band with the date at the bottom
+  COVER_VARIANTS_.ENGINE_COVER_CUBE = function (s, ctx) {
+    var els = [];
+    image(els, 'logo-dark', 32, 28, 68.8, 16.2);
+    text(els, 32, 92, 430, 128, s.title, { weight: 600, max: 28, min: 22, maxLines: 3, color: T.title || T.ink, valign: 'bottom' });
+    rect(els, 34, 230, 96, 3, T.blue);
+    text(els, 32, 244, 410, 40, s.subtitle || s.lead, { weight: 500, max: 12, min: 10, maxLines: 2, color: T.body });
+    image(els, 'cube', 500, 96, 170, 188);
+    rect(els, 0, H - 40, W, 40, T.blue);
+    els[els.length - 1].square = true;
+    image(els, 'strip-pattern', W - 238, H - 40, 238, 40);
+    text(els, 32, H - 28, 220, 16, '>> ' + (ctx.dateLabel || ''), { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
+    return { bg: T.white, els: els, noFooter: true };
+  };
+
+  // The Thank-you slide always uses the template design (L.closing): strict brand rule, no variations.
+
   // Contact icons drawn from simple shapes in 66° Blue: they always look right (no lookup in the icon sheet)
   function contactIcon(els, kind, x, y, sz) {
     var c = T.blue, bg = T.bgLight;
@@ -973,6 +1027,7 @@ var ENGINE = (function () {
    * does not suit it; the slide is then drawn with the type's default layout.
    * ================================================================================================ */
   var V = {};
+  Object.keys(COVER_VARIANTS_).forEach(function (k) { V[k] = function (s, ctx) { return COVER_VARIANTS_[k](s, ctx || {}); }; });
 
   function shape(els, kind, x, y, w, h, fill, ln) { els.push({ t: 'shape', shape: kind, x: x, y: y, w: w, h: h, fill: fill, line: ln || null }); }
   function ring(els, x, y, d, fill, color, width) { els.push({ t: 'ellipse', x: x, y: y, w: d, h: d, fill: fill, line: { color: color, width: width } }); }
@@ -1029,6 +1084,28 @@ var ENGINE = (function () {
       if (it.text && rowH >= 30) text(els, X0 + 18, y + t.height + 2, listW - 20, 14, it.text, { weight: 400, max: dSize, min: dSize, maxLines: 1, color: T.body });
     });
     image(els, 'cube', 556, 190, 136, 150);
+    agendaBand(els);
+    return { bg: T.white, els: els, noFooter: true };
+  };
+
+  // Agenda as numbered tiles (3 or 4 columns): a second design for long decks, so the agenda changes between decks
+  V.ENGINE_AGENDA_TILES = function (s) {
+    var items = agendaItems(s), n = items.length;
+    if (n < 6 || n > 16) return null;
+    var els = [];
+    text(els, X0, 24, 520, 30, s.title || 'Agenda', { weight: 600, max: 20, min: 16, maxLines: 1, color: T.title || T.ink });
+    var cols = n > 12 ? 4 : n > 8 ? 4 : 3, rows = Math.ceil(n / cols), gap = 10;
+    var top = 66, cw = (W - 2 * X0 - gap * (cols - 1)) / cols, ch = Math.min(84, (338 - top - gap * (rows - 1)) / rows);
+    var tw = cw - 24;
+    var fitsAt = function (sz) { return items.every(function (it) { return wrap(String(it.title), tw, 'sans', 500, sz).length <= 2; }); };
+    var tS = TSZ.heading;
+    while (tS > 10 && !fitsAt(tS)) tS -= 0.5;
+    items.forEach(function (it, i) {
+      var c = i % cols, r = Math.floor(i / cols), x = X0 + c * (cw + gap), y = top + r * (ch + gap);
+      rect(els, x, y, cw, ch, T.bgLight);
+      text(els, x + 12, y + 8, 40, 16, pad2(i + 1), { font: 'mono', weight: 500, max: 11, min: 10, maxLines: 1, color: T.blue });
+      text(els, x + 12, y + 26, tw, ch - 32, it.title, { weight: 500, max: tS, min: tS, maxLines: 2, color: T.ink });
+    });
     agendaBand(els);
     return { bg: T.white, els: els, noFooter: true };
   };
@@ -1290,7 +1367,8 @@ var ENGINE = (function () {
       icon(els, autoIcon(st), x + colW / 2 - 7, y - 7, 14, false);
       var ty = y + stepH + 14;
       var ht = text(els, x + 10, ty, colW - 20, 30, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 2, align: 'center', color: T.ink });
-      text(els, x + 10, ty + ht.height + 6, colW - 20, BOTTOM - (ty + ht.height + 6), st.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.body });
+      var tby = ty + Math.max(ht.height, 2 * lineHeight('sans', hSize)) + 6;     // room for a two-line title, never overlapping
+      text(els, x + 10, tby, colW - 20, BOTTOM - tby, st.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.body });
       if (i < n - 1) dashedLine(els, x + colW, y + stepH + 10, x + colW, BOTTOM, T.cardLine, 0.75, 3, 3);
     });
     return { bg: T.white, els: els };
@@ -1303,27 +1381,30 @@ var ENGINE = (function () {
     var els = [];
     var top = header(els, s, { eyebrow: true });
     var colW = CW / n, d = Math.min(78, colW - 30), cy = top + (BOTTOM - top) / 2;
-    var textW = Math.min(colW * 1.7, 230);
-    var hSize = uniformSize(steps.map(function (st) { return st.title; }), textW, 16, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 1 });
+    var textW = Math.min(colW * 2 - 16, 230);   // captions on the same side are two columns apart: never wider than that
+    var hSize = TSZ.heading;
     steps.forEach(function (st, i) {
       var ccx = CX + colW * i + colW / 2;
-      var tint = T.tints[Math.min(i, 4)];
-      ring(els, ccx - d / 2 - 6, cy - d / 2 - 6, d + 12, T.white, tint, 3);
+      ring(els, ccx - d / 2 - 6, cy - d / 2 - 6, d + 12, T.white, T.blue, 3);
       ellipse(els, ccx - d / 2 + 6, cy - d / 2 + 6, d - 12, d - 12, T.bgLight);
       icon(els, autoIcon(st), ccx - 13, cy - 13, 26, false, pad2(i + 1));
       if (i < n - 1) line(els, ccx + d / 2 + 6, cy, ccx + colW - d / 2 - 6, cy, T.cardLine, 1);
-      var tx = Math.max(CX, Math.min(ccx - textW / 2, CX + CW - textW));
+      // Caption centred on its ring; at the slide edges it is narrowed (never shifted into the next caption)
+      // Room up to half way to the next caption on the same side (two columns away), or to the slide edge
+      var reachL = i >= 2 ? colW - 6 : textW, reachR = i <= n - 3 ? colW - 6 : textW;
+      var tl = Math.max(CX, ccx - reachL), tr = Math.min(CX + CW, ccx + reachR);
+      var tw = Math.min(tr - tl, textW), tx = Math.max(tl, Math.min(ccx - tw / 2, tr - tw));
       if (i % 2 === 0) {
         var areaTop = top, areaH = cy - d / 2 - 14 - top;
-        var bt = fit(String(st.text || ''), textW, areaH - 20, { weight: 400, max: TSZ.body, min: TSZ.body });
-        var ht = lineHeight('sans', hSize) + 4;
+        var bt = fit(String(st.text || ''), tw, areaH - 20, { weight: 400, max: TSZ.body, min: TSZ.body });
+        var ht = lineHeight('sans', hSize) * (wrap(String(st.title || ''), tw, 'sans', 500, hSize).length > 1 ? 2 : 1) + 4;
         var y0 = areaTop + areaH - bt.height - ht;
-        text(els, tx, y0, textW, 16, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 1, align: 'center', color: T.ink });
-        text(els, tx, y0 + ht, textW, bt.height, st.text, { weight: 400, max: bt.size, min: bt.size, align: 'center', color: T.body });
+        text(els, tx, y0, tw, ht, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 2, align: 'center', color: T.ink });
+        text(els, tx, y0 + ht, tw, bt.height, st.text, { weight: 400, max: bt.size, min: bt.size, align: 'center', color: T.body });
       } else {
         var y1 = cy + d / 2 + 14;
-        var h1 = text(els, tx, y1, textW, 16, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 1, align: 'center', color: T.ink });
-        text(els, tx, y1 + h1.height + 4, textW, BOTTOM - y1 - h1.height - 4, st.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.body });
+        var h1 = text(els, tx, y1, tw, 32, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 2, align: 'center', color: T.ink });
+        text(els, tx, y1 + h1.height + 4, tw, BOTTOM - y1 - h1.height - 4, st.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.body });
       }
     });
     return { bg: T.white, els: els, center: true };
@@ -1371,7 +1452,7 @@ var ENGINE = (function () {
     var els = [];
     var top = header(els, s) + 4;
     var colW = CW / n, tabW = Math.min(colW - 30, 110), tabH = 34;
-    var fills = [T.blue, T.tints[1], T.tints[2], T.tints[3], T.tints[4]];
+    var fills = [T.blue, T.blue, T.blue, T.blue, T.blue];
     var hSize = uniformSize(ms.map(function (m) { return m.title; }), colW - 40, 30, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var t4Avail = BOTTOM - (top + tabH + 20);
     var t4Size = uniformSize(ms.map(function (m) { return m.text; }), colW - 40, t4Avail - 90, { weight: 400, max: TSZ.body, min: TSZ.body });
@@ -1956,7 +2037,7 @@ var ENGINE = (function () {
   var DIA_FILLS = function () { return [T.blue, T.ink, T.slate, T.blue, T.ink, T.slate, T.blue, T.ink]; };
   // Title + short text block, aligned left / right / centre; returns its height
   function caption(els, x, y, w, it, align, maxLines) {
-    var h = text(els, x, y, w, 16, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: align, color: T.ink });
+    var h = text(els, x, y, w, 34, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: align, color: T.ink });
     var b = it.text ? text(els, x, y + h.height + 2, w, 60, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: maxLines || 3, align: align, color: T.body }) : { height: 0 };
     return h.height + 2 + b.height;
   }
@@ -2037,15 +2118,16 @@ var ENGINE = (function () {
       var y = py + i * (th + 6), w = widths[i];
       rect(els, cx - w / 2, y, w, th, fills[i]);
       var side = i === 1 ? -1 : 1;                                   // tier 1 right, tier 2 left, tier 3 right
-      var ex = cx + side * (w / 2), lx = cx + side * 150;
+      var ex = cx + side * (w / 2), lx = cx + side * (w / 2 + 28);   // number badge just beyond the tier: more room for the caption
       line(els, ex, y + th / 2, lx, y + th / 2, T.cardLine, 0.75);
       rect(els, lx - 9, y + th / 2 - 9, 18, 18, T.slate);
       text(els, lx - 9, y + th / 2 - 7, 18, 14, String(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, align: 'center', color: T.ink, noFill: true });
-      var capW = 180;
+      var capW = Math.min(210, side > 0 ? CX + CW - 8 - (lx + 16) : (lx - 16) - (CX + 8));
       var tx = side > 0 ? lx + 16 : lx - 16 - capW;
       var lines = asList(it.points).slice(0, 5);
       var body = lines.length ? lines.map(function (p) { return '• ' + p; }).join('\n') : it.text;
-      caption(els, tx, Math.max(top + 10, y + th / 2 - 16), capW, { title: it.title, text: body }, side > 0 ? 'left' : 'right', 5);
+      var capIt = { title: it.title, text: body }, chh = capH(capIt, capW, 5);
+      caption(els, tx, Math.min(Math.max(top + 10, y + th / 2 - 16), BOTTOM - 6 - chh), capW, capIt, side > 0 ? 'left' : 'right', 5);
     });
     return { bg: T.bgLight, els: els, noBalance: true };
   };
@@ -2058,7 +2140,7 @@ var ENGINE = (function () {
     var top = header(els, s);
     var sw = 190, cw = 220, gap = 10, x0 = (W - (2 * sw + cw + 2 * gap)) / 2, iw = sw - 32;
     var need = 0;
-    items.forEach(function (it) { need = Math.max(need, 52 + capH(it, iw, 9) + 56); });
+    items.forEach(function (it) { need = Math.max(need, 52 + 2 * lineHeight('sans', TSZ.heading) + textH(it.text, iw, TSZ.body) + 62); });
     var h = boxH(need, BOTTOM - top - 20);
     var order = [0, 1, 2], xs = [x0, x0 + sw + gap, x0 + sw + cw + 2 * gap];
     order.forEach(function (k, pos) {
@@ -2067,7 +2149,8 @@ var ENGINE = (function () {
       rect(els, x, y, w, hh, center ? T.slate : T.bgLight);
       icon(els, autoIcon(it), x + w / 2 - 11, y + 20, 22, false);
       var tt = text(els, x + 16, y + 52, w - 32, 34, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: 'center', color: T.ink });
-      text(els, x + 16, y + 58 + tt.height, w - 32, hh - 58 - tt.height - 46, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.ink });
+      var tth = Math.max(tt.height, 2 * lineHeight('sans', TSZ.heading));
+      text(els, x + 16, y + 58 + tth, w - 32, hh - 58 - tth - 46, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.ink });
       ellipse(els, x + w / 2 - 13, y + hh - 34, 26, 26, T.blue);
       text(els, x + w / 2 - 13, y + hh - 28, 26, 14, pad2(k + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, align: 'center', color: T.white, noFill: true });
     });
@@ -2102,8 +2185,9 @@ var ENGINE = (function () {
     var sweep = 180 / n;
     if ([30, 36, 45, 60].indexOf(sweep) === -1) return null;
     var els = [];
-    var top = header(els, s);
+    // The intro sits on the left: the lead is shown there OR under the title, never twice
     var intro = s.text || s.lead || '';
+    var top = header(els, (!s.text && s.lead) ? Object.assign({}, s, { lead: '', subtitle: '' }) : s);
     var cx = 300, cy = top + (BOTTOM - top) / 2, r = Math.min(118, (BOTTOM - top) / 2 - 6), fills = DIA_FILLS();
     if (intro) text(els, CX, cy - 60, 170, 130, intro, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body, valign: 'middle' });
     ellipse(els, cx - r * 0.64, cy - r * 0.64, r * 1.28, r * 1.28, T.bgLight);
@@ -2172,7 +2256,12 @@ var ENGINE = (function () {
     if (items.length !== 3) return null;
     var els = [];
     var top = header(els, s);
-    var cx = W / 2, cy = top + (BOTTOM - top) / 2 + 12, L = Math.min(190, (BOTTOM - top) * 0.78), t = 40, fills = [T.blue, T.ink, T.slate];
+    var t = 40, fills = [T.blue, T.ink, T.slate], cx = W / 2;
+    var ch2f = capH(items[2], 260, 3), L = Math.min(190, (BOTTOM - top) * 0.78), cy;
+    for (; L >= 100; L -= 6) {
+      cy = Math.min(top + (BOTTOM - top) / 2 + 12, BOTTOM - ch2f - 16 - t / 2 - L / (2 * Math.sqrt(3)));
+      if (cy - L / Math.sqrt(3) - t / 2 >= top + 6) break;          // apex still below the title
+    }
     var A = { x: cx, y: cy - L / Math.sqrt(3) }, B = { x: cx + L / 2, y: cy + L / (2 * Math.sqrt(3)) }, C = { x: cx - L / 2, y: cy + L / (2 * Math.sqrt(3)) };
     var sides = [[C, A, -60], [A, B, 60], [B, C, 0]];               // left side, right side, base
     sides.forEach(function (sd, i) {
@@ -2187,7 +2276,7 @@ var ENGINE = (function () {
     line(els, CX + capW + 4, top + 16, (C.x + A.x) / 2 - 30, (C.y + A.y) / 2, T.cardLine, 0.75);
     caption(els, CX + CW - capW, cy - ch1 / 2 - 20, capW, items[1], 'left', 4);
     line(els, CX + CW - capW - 6, cy - 20, (A.x + B.x) / 2 + 30, (A.y + B.y) / 2, T.cardLine, 0.75);
-    caption(els, cx - 130, Math.min(BOTTOM - ch2, B.y + t / 2 + 14), 260, items[2], 'center', 3);
+    caption(els, cx - 130, B.y + t / 2 + 14, 260, items[2], 'center', 3);
     return { bg: T.white, els: els, noBalance: true };
   };
 
@@ -2197,17 +2286,23 @@ var ENGINE = (function () {
     if (items.length !== 4) return null;
     var els = [];
     var top = header(els, s);
-    var lw = 250, y = top + 10;
+    // Story on the left only when the slide has one; otherwise the donut and its labels sit in the middle of the slide
+    var story = !!(s.statement || s.subtitle || s.text || asList(s.points).length);
+    var lw = story ? 220 : 0, y = top + 10;
     if (s.statement || s.subtitle) { var h1 = text(els, CX, y, lw, 40, s.statement || s.subtitle, { weight: 500, max: TSZ.heading + 2, min: TSZ.heading, maxLines: 3, color: T.ink }); y += h1.height + 10; }
     if (s.text) { var h2 = text(els, CX, y, lw, 90, s.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 6, color: T.body }); y += h2.height + 10; }
-    if (s.points) bulletList(els, CX, y, lw, BOTTOM - y, asList(s.points).slice(0, 4), { max: TSZ.body, min: TSZ.body, gap: 6 });
-    var cx = 500, cy = top + (BOTTOM - top) / 2, r = Math.min(100, (BOTTOM - top) / 2 - 20), fills = [T.blue, T.ink, T.slate, T.blue];
+    if (story && s.points) bulletList(els, CX, y, lw, BOTTOM - y, asList(s.points).slice(0, 4), { max: TSZ.body, min: TSZ.body, gap: 6 });
+    var x0 = CX + (story ? lw + 24 : 0), x1 = CX + CW, gap = 14;
+    var r = Math.min(story ? 82 : 100, (BOTTOM - top) / 2 - 16);
+    var cx = (x0 + x1) / 2, cy = top + (BOTTOM - top) / 2;
+    var capW = Math.min(story ? 140 : 190, (x1 - x0) / 2 - r - gap);
+    var fills = [T.blue, T.ink, T.slate, T.blue];
     items.forEach(function (it, i) { arc(els, 'ring', cx, cy, r, 90, -90 + i * 90, i === 3 ? T.panelAlt : fills[i]); });
     ellipse(els, cx - r * 0.42, cy - r * 0.42, r * 0.84, r * 0.84, T.white);
     text(els, cx - r * 0.38, cy - 14, r * 0.76, 28, s.center || '', { weight: 500, max: TSZ.heading, min: 10, maxLines: 2, align: 'center', color: T.ink });
-    var capW = 92;
-    [[cx + r + 10, cy - r, 'left'], [cx + r + 10, cy + r - 34, 'left'], [cx - r - 10 - capW, cy + r - 34, 'right'], [cx - r - 10 - capW, cy - r, 'right']]
-      .forEach(function (pos, i) { caption(els, Math.max(CX + lw + 10, Math.min(pos[0], CX + CW - capW)), pos[1], capW, items[i], pos[2], 3); });
+    var rightX = cx + r + gap, leftX = cx - r - gap - capW;
+    [[rightX, cy - r, 'left'], [rightX, cy + r * 0.25, 'left'], [leftX, cy + r * 0.25, 'right'], [leftX, cy - r, 'right']]
+      .forEach(function (pos, i) { caption(els, pos[0], pos[1], capW, items[i], pos[2], 5); });
     return { bg: T.bgLight, els: els, noBalance: true };
   };
 
@@ -2240,8 +2335,9 @@ var ENGINE = (function () {
     var steps = items_(s, 5), n = steps.length;
     if (n < 4) return null;
     var els = [];
-    var top = header(els, s);
+    // The intro sits on the left: the lead is shown there OR under the title, never twice
     var intro = s.text || s.lead || '';
+    var top = header(els, (!s.text && s.lead) ? Object.assign({}, s, { lead: '', subtitle: '' }) : s);
     var x0 = intro ? 220 : CX, stepW = 92, stepH = Math.min(36, (BOTTOM - top) / n - 6), dx = 44;
     if (intro) text(els, CX, top + 10, 170, BOTTOM - top - 20, intro, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
     var fills = [T.slate, T.slate, T.blue, T.blue, T.ink];
@@ -2283,10 +2379,12 @@ var ENGINE = (function () {
       text(els, CX + 6, y + (rowH - 8) / 2 - 7, 18, 14, String(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, align: 'center', color: on ? T.blue : T.white, noFill: true });
       text(els, CX + 32, y, lw - 40, rowH - 8, p.replace(/:\s.*$/, ''), { weight: on ? 500 : 400, max: TSZ.body, min: TSZ.body, maxLines: 1, valign: 'middle', color: on ? T.white : T.ink });
     });
-    var px = CX + lw + 30, pw = CW - lw - 30, ph = BOTTOM - top - 10;
+    var px = CX + lw + 30, pw = CW - lw - 30;
+    var c = s.callout, cy0 = top + 34;
+    var needP = 34 + linesBlock([c.title || c.label || ''], pw - 48, TSZ.heading + 2, 500, 2) + 10 + textH(c.text || '', pw - 48, TSZ.body) + 30;
+    var ph = Math.min(BOTTOM - top - 10, Math.max(needP, pts.length * rowH - 2, 120));
     rect(els, px, top + 6, pw, ph, T.white, { color: T.blue, width: 0.75 });
     rect(els, px + pw / 2 - 30, top + 2, 60, 8, T.blue);
-    var c = s.callout, cy0 = top + 34;
     var ht = text(els, px + 24, cy0, pw - 48, 40, c.title || c.label || '', { weight: 500, max: TSZ.heading + 2, min: TSZ.heading, maxLines: 2, color: T.ink });
     text(els, px + 24, cy0 + ht.height + 10, pw - 48, ph - ht.height - 70, c.text || '', { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
     return { bg: T.bgLight, els: els };
@@ -2496,20 +2594,22 @@ var ENGINE = (function () {
     var stText = s.statement || s.title || '';
     if (!stText) return null;
     var els = [];
-    rect(els, 0, 0, 470, H, T.white);
-    if (s.title && s.title !== stText) header(els, { title: s.title }, { maxW: 420 });
-    image(els, 'band-pattern', 150, 92, 90, 40);
-    image(els, 'mark-dark', 46, 160, 150, 100);
-    line(els, 238, 150, 238, 270, T.ink, 1);
-    var cw = 300, cx0 = 258;
-    var st = fit(String(stText), cw - 40, 90, { weight: 500, max: 16, min: 13, maxLines: 4 });
-    var tx = s.text ? fit(String(s.text), cw - 40, 110, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 7 }) : { height: 0 };
+    var panelW = 500;                                     // white area; the photo strip fills the rest
+    rect(els, 0, 0, panelW, H, T.white);
+    els[els.length - 1].square = true;
+    if (s.title && s.title !== stText) header(els, { title: s.title }, { maxW: panelW - 2 * X0 });
+    var cx0 = 168, cw = panelW - cx0 - 24;                // the card ends 24pt before the photo strip
+    var st = fit(String(stText), cw - 40, 96, { weight: 500, max: 17, min: 13, maxLines: 4 });
+    var tx = s.text ? fit(String(s.text), cw - 40, 120, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 7 }) : { height: 0 };
     var chh = 40 + st.height + (s.text ? 12 + tx.height : 0);
-    var cy0 = H / 2 - chh / 2;
+    var cy0 = Math.max(96, (H - chh) / 2 + 10);
     rect(els, cx0, cy0, cw, chh, T.slate);
     text(els, cx0 + 20, cy0 + 18, cw - 40, st.height + 4, stText, { weight: 500, max: st.size, min: st.size, maxLines: 4, color: T.ink });
     if (s.text) text(els, cx0 + 20, cy0 + 30 + st.height, cw - 40, tx.height + 4, s.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 7, color: T.ink });
-    return { bg: T.ink, bgImage: 'section-bg', els: els, noFooter: false, noBalance: true };
+    // 66 mark: as tall as the card (max 84pt), centred on it, left of the card
+    var mh = Math.min(84, chh), mw = mh * 1.5;
+    image(els, 'mark-dark', cx0 - 20 - mw, cy0 + (chh - mh) / 2, mw, mh);
+    return { bg: T.ink, bgImage: 'section-bg', els: els, noFooter: false, noBalance: true, dark: true };
   };
 
   // Slide 105 (STATEMENT_002): the photo covers the slide; the title and statement in white
@@ -2519,9 +2619,11 @@ var ENGINE = (function () {
     if (!stText) return null;
     var els = [];
     text(els, X0, 24, W - 2 * X0, 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
-    var st = text(els, X0, 120, 420, 120, stText, { weight: 500, max: 26, min: 18, maxLines: 4, color: T.white });
-    line(els, X0 + 1, 120 + st.height + 14, X0 + 121, 120 + st.height + 14, T.white, 1);
-    if (s.text) text(els, X0, 120 + st.height + 28, 420, 90, s.text, { weight: 400, max: TSZ.body + 1, min: TSZ.body, maxLines: 5, color: T.white });
+    var stFit = fit(String(stText), 380, 130, { weight: 500, max: 26, min: 18, maxLines: 4 });
+    var stH = Math.max(stFit.height, wrap(String(stText), 380, 'sans', 500, stFit.size).length * lineHeight('sans', stFit.size)) + 6;
+    text(els, X0, 110, 420, stH, stText, { weight: 500, max: stFit.size, min: stFit.size, maxLines: 4, color: T.white });
+    line(els, X0 + 1, 110 + stH + 12, X0 + 121, 110 + stH + 12, T.white, 1);
+    if (s.text) text(els, X0, 110 + stH + 26, 420, 90, s.text, { weight: 400, max: TSZ.body + 1, min: TSZ.body, maxLines: 5, color: T.white });
     return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true, noBalance: true };
   };
 
@@ -2809,8 +2911,8 @@ var ENGINE = (function () {
         var it = items[k], x = x0 + c * (cw + gap), y = top + r * (rowH + gap);
         rect(els, x, y, cw, rowH - 3, T.bgLight);
         rect(els, x, y + rowH - 3, cw, 3, T.blue);
-        var t = text(els, x + 10, y + 8, cw - 20, 28, it.title, { weight: 500, max: TSZ.body + 0.5, min: TSZ.body, maxLines: 2, color: T.ink });
-        text(els, x + 10, y + 12 + t.height, cw - 20, rowH - t.height - 22, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
+        var t = text(els, x + 10, y + 8, cw - 28, 28, it.title, { weight: 500, max: TSZ.body + 0.5, min: TSZ.body, maxLines: 2, color: T.ink });
+        text(els, x + 10, y + 14 + t.height, cw - 20, rowH - t.height - 24, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
       }
     });
     return { bg: T.ink, bgImage: 'section-bg', els: els, noBalance: true };
@@ -3254,11 +3356,135 @@ var ENGINE = (function () {
     return { bg: T.ink, bgImage: 'section-bg', els: els, noBalance: true };
   };
 
+  /* ================= TEAM / LEADERSHIP (template slides 84-88) =================
+     People come ONLY from the request or the source material (spec.people[{name, title, location, text}]).
+     No photos are generated: every person gets a neutral tile with their initials, in the template's photo position. */
+  function people_(s, max) {
+    return arr(s.people, max).filter(Boolean).map(function (p) { return typeof p === 'string' ? { name: p } : p; })
+      .filter(function (p) { return p.name || p.title; });
+  }
+  function initials_(name) {
+    var w = String(name || '').replace(/[^A-Za-z\s'-]/g, ' ').trim().split(/\s+/).filter(Boolean);
+    if (!w.length) return '·';
+    return (w[0].charAt(0) + (w.length > 1 ? w[w.length - 1].charAt(0) : '')).toUpperCase();
+  }
+  function avatar_(els, x, y, size, name, fill) {
+    rect(els, x, y, size, size, fill || T.bgLight, { color: T.cardLine, width: 0.75 });
+    text(els, x, y, size, size, initials_(name), { font: 'mono', weight: 500, max: Math.max(10, Math.min(24, Math.round(size * 0.3))), min: 9,
+      maxLines: 1, align: 'center', valign: 'middle', color: T.blue, noFill: true });
+  }
+  // Slides 84 / 87 (LEADERSHIP_002 / 004): panel, 3 or 4 white cards: initials tile, blue name, title, location, short text
+  function leaderCards_(s, want) {
+    var ppl = people_(s, want);
+    if (ppl.length !== want) return null;
+    var els = [];
+    var top = header(els, s);
+    var gap = 14, cw = (CW - gap * (want - 1)) / want, av = Math.min(64, cw - 28);
+    var need = 0;
+    ppl.forEach(function (p) {
+      var h = av + 30 + 16 + (p.title ? 26 : 0) + (p.location ? 16 : 0) + (p.text ? 54 : 0);
+      need = Math.max(need, h);
+    });
+    var ch = boxH(need, BOTTOM - top);
+    ppl.forEach(function (p, i) {
+      var x = CX + i * (cw + gap);
+      rect(els, x, top, cw, ch, T.white, { color: T.cardLine, width: 0.75 });
+      avatar_(els, x + 14, top + 14, av, p.name);
+      var y = top + 14 + av + 12;
+      var t1 = text(els, x + 14, y, cw - 28, 18, p.name || '', { weight: 500, max: 12, min: 10, maxLines: 1, color: T.blue });
+      y += t1.height + 2;
+      if (p.title) { var t2 = text(els, x + 14, y, cw - 28, 26, p.title, { weight: 500, max: TSZ.body, min: TSZ.body, maxLines: 2, color: T.ink }); y += t2.height + 2; }
+      if (p.location) { var t3 = text(els, x + 14, y, cw - 28, 14, p.location, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 1, color: T.body }); y += t3.height + 4; }
+      if (p.text) text(els, x + 14, y + 4, cw - 28, top + ch - y - 16, p.text, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body, noFill: true });
+    });
+    return { bg: T.bgLight, els: els };
+  }
+  V['66D_LAYOUT_LEADERSHIP_004'] = function (s) { return leaderCards_(s, 3); };
+  V['66D_LAYOUT_LEADERSHIP_002'] = function (s) { return leaderCards_(s, 4); };
+  // Rows of bordered tiles with name and title under each: slide 85 (5 in a row), 86 (5 + 4), 88 (2 rows of 6)
+  function peopleRows_(s, rowsSpec, bg, tileMax) {
+    var total = rowsSpec.reduce(function (a, b) { return a + b; }, 0);
+    var ppl = people_(s, total);
+    var minN = rowsSpec.length > 1 ? total - rowsSpec[rowsSpec.length - 1] + 1 : Math.min(total, s.__minPeople || total);
+    if (ppl.length < minN || ppl.length > total) return null;
+    var els = [];
+    var top = header(els, s);
+    var rows = rowsSpec.length, maxCols = Math.max.apply(null, rowsSpec), gap = 14;
+    var colW = (CW - gap * (maxCols - 1)) / maxCols;
+    var labelH = 38, rowH = (BOTTOM - top - gap * (rows - 1)) / rows;
+    var tile = Math.min(tileMax, colW - 10, rowH - labelH - 6);
+    var k = 0;
+    rowsSpec.forEach(function (cnt, r) {
+      var inRow = Math.min(cnt, ppl.length - k);
+      if (inRow <= 0) return;
+      var rowW = inRow * colW + (inRow - 1) * gap, x0 = CX + (CW - rowW) / 2, y = top + r * (rowH + gap);
+      for (var c = 0; c < inRow; c++, k++) {
+        var p = ppl[k], x = x0 + c * (colW + gap);
+        avatar_(els, x + (colW - tile) / 2, y, tile, p.name, bg === T.white ? T.bgLight : T.white);
+        var t1 = text(els, x, y + tile + 6, colW, 16, p.name || '', { weight: 500, max: TSZ.body + 0.5, min: TSZ.body, maxLines: 1, align: 'center', color: T.ink });
+        if (p.title) text(els, x, y + tile + 8 + t1.height, colW, 26, p.title, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, align: 'center', color: T.body, noFill: true });
+      }
+    });
+    return { bg: bg, els: els, center: true };
+  }
+  // One row of large tiles: 2 to 5 people (a second look for small groups next to the white cards)
+  V['66D_LAYOUT_LEADERSHIP_003'] = function (s) {
+    var n = people_(s, 5).length;
+    if (n < 2 || n > 5 || arr(s.people, 99).length > 5) return null;
+    return peopleRows_(Object.assign({}, s, { __minPeople: 2 }), [n], T.white, 110);
+  };
+  // List rows: initials tile, name in blue, title and location, and the person's short text on the right (2-6 people)
+  V.ENGINE_TEAM_LIST = function (s) {
+    var ppl = people_(s, 6);
+    if (ppl.length < 2 || arr(s.people, 99).length > 6) return null;
+    var els = [];
+    var top = header(els, s);
+    var n = ppl.length, gap = 8, rowH = Math.min(70, (BOTTOM - top - gap * (n - 1)) / n), av = Math.min(46, rowH - 12);
+    var nameW = 230;
+    ppl.forEach(function (p, i) {
+      var y = top + i * (rowH + gap);
+      rect(els, CX, y, CW, rowH, T.white, { color: T.cardLine, width: 0.75 });
+      rect(els, CX, y, 4, rowH, T.blue);
+      avatar_(els, CX + 16, y + (rowH - av) / 2, av, p.name);
+      var tx = CX + 16 + av + 14;
+      var t1 = text(els, tx, y + 8, nameW - av - 30, 18, p.name || '', { weight: 500, max: 12, min: 10, maxLines: 1, color: T.blue });
+      text(els, tx, y + 10 + t1.height, nameW - av - 30, rowH - t1.height - 14, [p.title, p.location].filter(Boolean).join(', '),
+        { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, color: T.ink });
+      if (p.text) text(els, CX + nameW + 16, y + 8, CW - nameW - 32, rowH - 16, p.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3, valign: 'middle', color: T.body });
+    });
+    return { bg: T.bgLight, els: els };
+  };
+  V['66D_LAYOUT_TEAM_002'] = function (s) { return peopleRows_(s, [5, 4], T.white, 74); };
+  V['66D_LAYOUT_TEAM_003'] = function (s) { return peopleRows_(s, [6, 6], T.bgLight, 66); };
+  L.team = function (s, ctx) {
+    var n = people_(s, 12).length;
+    var tag = n <= 3 ? '66D_LAYOUT_LEADERSHIP_004' : n === 4 ? '66D_LAYOUT_LEADERSHIP_002' : n === 5 ? '66D_LAYOUT_LEADERSHIP_003'
+      : n <= 9 ? '66D_LAYOUT_TEAM_002' : '66D_LAYOUT_TEAM_003';
+    var out = V[tag](s, ctx);
+    if (!out && n === 2) out = peopleRows_(s, [2], T.white, 110);
+    if (!out && n === 1) out = peopleRows_(s, [1], T.white, 120);
+    return out || L.cards(Object.assign({}, s, { items: people_(s, 12).map(function (p) { return { title: p.name, text: [p.title, p.location].filter(Boolean).join(', ') }; }), reference: null }), ctx);
+  };
+  // Real template slides (client logos, leadership, industries) are COPIED from the template by Code.gs.
+  // This layout is only drawn when that copy is not possible: the title and lead, nothing invented.
+  L.template = function (s) {
+    var els = [];
+    header(els, s);
+    return { bg: T.white, els: els };
+  };
+
   var VARIANTS = {
     agenda: [
       { tag: '66D_LAYOUT_AGENDA_002', min: 1, max: 8, desc: 'numbered rows with square badges; the classic agenda' },
       { tag: '66D_LAYOUT_AGENDA_001', min: 2, max: 9, desc: 'clean bulleted list with descriptions' },
-      { tag: '66D_LAYOUT_AGENDA_003', min: 3, max: 5, desc: 'ring graphic with topic pills on an arc; most visual, only for 3-5 short topics' }],
+      { tag: '66D_LAYOUT_AGENDA_003', min: 3, max: 5, desc: 'ring graphic with topic pills on an arc; most visual, only for 3-5 short topics' },
+      { tag: 'ENGINE_AGENDA_COLUMNS', min: 9, max: 16, desc: 'two columns of numbered topics; a long deck' },
+      { tag: 'ENGINE_AGENDA_TILES', min: 6, max: 16, desc: 'numbered tiles in 3-4 columns; a long deck' }],
+    cover: [
+      { tag: '66D_LAYOUT_COVER_001', min: 0, max: 99, desc: 'template cover: title left, blue band with the date and the 66 badge' },
+      { tag: 'ENGINE_COVER_PANEL', min: 0, max: 99, desc: 'blue panel on the left with the 66 mark and date, title on the right' },
+      { tag: 'ENGINE_COVER_CUBE', min: 0, max: 99, desc: 'title with the isometric cube on the right, slim blue band with the date' }],
+
     cards: [
       { tag: '66D_LAYOUT_CARDS_007', min: 2, max: 6, desc: 'grid of panel cards with numbers or icons; general purpose', words: '35-55' },
       { tag: '66D_LAYOUT_CARDS_001', min: 3, max: 6, desc: 'big numbered panels with a divider; values, principles, pillars', words: '30-50' },
@@ -3340,6 +3566,13 @@ var ENGINE = (function () {
       { tag: 'ENGINE_CHART', min: 0, max: 99, desc: 'bar or line chart with an insight panel', words: 'insight 20-35' },
       { tag: '66D_LAYOUT_CHART_003', min: 0, max: 99, needs: 'rows', desc: 'bar chart panel next to a data table panel (chart + columns/rows)', words: 'cells 1-4' },
       { tag: '66D_LAYOUT_CHART_001', min: 0, max: 99, needs: 'stacked', desc: 'narrative and sources on the left, stacked bars (e.g. cost today vs after) with a legend (chart.type "stacked")', words: 'text 40-70' }],
+    team: [
+      { tag: '66D_LAYOUT_LEADERSHIP_004', min: 3, max: 3, desc: 'three white cards: initials tile, name in blue, title, location, one-line text; a small leadership group', words: 'text 8-16' },
+      { tag: '66D_LAYOUT_LEADERSHIP_002', min: 4, max: 4, desc: 'four white cards: initials tile, name in blue, title, location; leadership team', words: 'text 6-12' },
+      { tag: '66D_LAYOUT_LEADERSHIP_003', min: 2, max: 5, desc: 'one row of large bordered tiles with name and title; leadership team', words: 'titles 2-6' },
+      { tag: 'ENGINE_TEAM_LIST', min: 2, max: 6, desc: 'one row per person: initials tile, name, title and location, short text on the right', words: 'text 10-20' },
+      { tag: '66D_LAYOUT_TEAM_002', min: 6, max: 9, desc: 'tiles staggered 5 + 4 with name and title; key contributors', words: 'titles 2-6' },
+      { tag: '66D_LAYOUT_TEAM_003', min: 10, max: 12, desc: 'two rows of six tiles with name and title; a project team', words: 'titles 2-6' }],
     diagram: [
       { tag: '66D_LAYOUT_DIAGRAM_001', min: 5, max: 8, desc: 'hub and spoke: a centre label with numbered circles around it and captions outside; capabilities around one platform', words: '8-16' },
       { tag: '66D_LAYOUT_DIAGRAM_002', min: 3, max: 3, desc: 'three numbered diagonal bars with three text rows; three pillars or levers', words: '20-35' },
@@ -3363,8 +3596,11 @@ var ENGINE = (function () {
   var ALIASES = { intro: 'statement', key_message: 'statement', problem: 'cards', benefits: 'cards', kpi: 'stats', metrics: 'stats',
     steps: 'process', roadmap: 'timeline', list: 'bullets', thank_you: 'closing', title: 'cover', divider: 'section',
     case: 'case_study', checklist: 'next_steps', two_column: 'comparison',
-    architecture: 'diagram', flowchart: 'diagram', 'org-chart': 'diagram', 'data-flow': 'diagram',
-    dependency: 'diagram', 'database-schema': 'diagram', swimlane: 'diagram', sequence: 'diagram', state: 'diagram', tree: 'diagram' };
+    architecture: 'diagram', flowchart: 'diagram', cycle: 'diagram',
+    'org-chart': 'diagram', 'data-flow': 'diagram', dependency: 'diagram', 'database-schema': 'diagram',
+    swimlane: 'diagram', sequence: 'diagram', state: 'diagram', tree: 'diagram',
+    leadership: 'team', people: 'team', contributors: 'team',
+    clients: 'template', logos: 'template', client_logos: 'template', industries: 'template' };
 
   // Removes color codes (e.g. "#0052FF") and stray whitespace that a model may copy from design rules into slide text
   function cleanText(v) {
@@ -3399,10 +3635,35 @@ var ENGINE = (function () {
     }).join('\n');
   }
 
+  // Elements below the title area (images excluded): 0 means the design drew no content
+  function contentCount_(out) {
+    return ((out && out.els) || []).filter(function (e) {
+      var y = e.t === 'line' ? Math.min(e.y1, e.y2) : e.y;
+      return e.t !== 'image' && y >= 64;
+    }).length;
+  }
   function layoutSlide(s, type, lctx) {
     var tag = s.reference && s.reference.tag;
     var out = (tag && V[tag] && variantOf(type, tag)) ? V[tag](s, lctx) : null;
+    if (out && contentCount_(out) === 0) out = null;
     out = out || L[type](s, lctx);
+    // Never an empty slide: content the chosen type cannot show is drawn as cards (items) or bullets (points)
+    if (['cover', 'agenda', 'closing', 'section', 'statement', 'quote', 'template'].indexOf(type) === -1 && contentCount_(out) === 0) {
+      var alt = null;
+      // 1. a design of this type made for the slide's special content (risks -> RAID register, prices, RAG status...)
+      (VARIANTS[type] || []).forEach(function (v) {
+        if (alt || !v.needs || !V[v.tag]) return;
+        try { var o2 = V[v.tag](s, lctx); if (o2 && contentCount_(o2) > 0) alt = o2; } catch (e) {}
+      });
+      if (alt) return alt;
+      // 2. otherwise the content as cards (items, layers, risks) or bullets (points)
+      var its = arr(s.items, 8).concat(arr(s.layers, 4)).concat(arr(s.risks, 6).map(function (r) {
+        return r && { title: r.description || r.title || '', text: r.mitigation || r.text || '' };
+      })).filter(function (x) { return x && (x.title || x.text || typeof x === 'string'); });
+      if (its.length >= 2) alt = L.cards(Object.assign({}, s, { items: its, reference: null }), lctx);
+      else if (arr(s.points, 6).length) alt = L.bullets(Object.assign({}, s, { reference: null }), lctx);
+      if (alt && contentCount_(alt) > 0) out = alt;
+    }
     if (['cover', 'agenda', 'closing', 'section', 'statement', 'chart', 'quote'].indexOf(type) === -1 && !out.noBalance &&
         tag !== '66D_LAYOUT_CHART_002' && tag !== '66D_LAYOUT_CASE_STUDY_006') balance(out);
     return out;
@@ -3432,6 +3693,27 @@ var ENGINE = (function () {
     });
   }
 
+  // Visual family of a drawn slide, e.g. "light|grey|lbar|icons": two designs with the same family look alike to
+  // the audience (grey icon cards, a dark band on top, numbered tiles...) even when they are different template slides.
+  function lookOf_(lay, type) {
+    var els = lay.els || [];
+    var big = els.filter(function (e) { return (e.t === 'rect' || e.t === 'roundrect') && e.w >= 60 && e.h >= 40 && e.y >= 40; });
+    var fills = {};
+    big.forEach(function (e) {
+      var f = e.fill === T.bgLight ? 'grey' : e.fill === T.white ? (e.line ? 'outline' : 'white') : e.fill === T.blue ? 'blue' : e.fill === T.ink ? 'ink' : 'other';
+      fills[f] = (fills[f] || 0) + 1;
+    });
+    var main = Object.keys(fills).sort(function (a, b) { return fills[b] - fills[a]; })[0] || 'none';
+    var has = function (f) { return els.some(f); };
+    var accent = has(function (e) { return e.t === 'arc' || e.t === 'shape'; }) ? 'shape'
+      : has(function (e) { return e.t === 'rect' && e.h >= 18 && e.h <= 46 && e.w >= 60 && (e.fill === T.blue || e.fill === T.ink) && e.y >= 60; }) ? 'hdr'
+      : has(function (e) { return e.t === 'rect' && e.w <= 6 && e.h >= 24 && e.y >= 40; }) ? 'lbar'
+      : has(function (e) { return e.t === 'rect' && e.h <= 4 && e.w >= 40 && e.y >= 40; }) ? 'tbar'
+      : els.filter(function (e) { return e.t === 'ellipse'; }).length >= 3 ? 'dots' : 'plain';
+    var icons = has(function (e) { return e.t === 'icon'; }) ? 'icons' : 'noicons';
+    return [(lay.dark || lay.bgImage) ? 'dark' : 'light', main, accent, icons].join('|');
+  }
+
   // Fit check for one planned slide at the standard type sizes: which texts do not fit, which boxes are mostly empty.
   function measure(spec, ctx) {
     ctx = ctx || {};
@@ -3448,7 +3730,9 @@ var ENGINE = (function () {
     var boxes = res.filter(function (a) { return a.body; });
     var fill = boxes.length ? boxes.reduce(function (t, a) { return t + Math.min(a.fill, 1); }, 0) / boxes.length : 0.8;
     return {
+      look: lay ? lookOf_(lay, type) : type,                            // visual family (designs that look alike share it)
       dark: !!(lay && (lay.dark || lay.bgImage)),                       // photo or dark design (for the deck rhythm)
+      content: lay ? contentCount_(lay) : 0,                            // 0 = the design shows nothing under the title
       fill: fill,
       overflow: res.filter(function (a) { return a.truncated; }).map(function (a) { return { text: a.text, maxChars: a.maxChars, isTitle: !!a.isTitle }; }),
       underfill: res.filter(function (a) { return !a.truncated && a.body && a.fill < 0.6; })
