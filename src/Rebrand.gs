@@ -55,12 +55,16 @@ function rebrandPresentation(presId, ctx, opts) {
   const pageH = pres.pageSize.height.magnitude / EMU;
   const S = pageW / 720; // scale from the 720pt iPAY canvas
   const slides = pres.slides || [];
-  stats.slides = slides.length;
+  // Large decks are rebranded in parts: only slides start..end-1 are touched in this run (V.1_27+)
+  const start = Math.max(0, opts.start || 0), end = Math.min(slides.length, opts.end != null ? opts.end : slides.length);
+  const inPart = function (i) { return i >= start && i < end; };
+  const whole = start === 0 && end === slides.length;
+  stats.slides = end - start;
 
   // ---- Inventory + Gemini review ----
   const inv = slides.map(function (pg, i) { return buildInventory(pg, i, pageW, pageH); });
   // Rebrand mode: the progress list shows the deck's own slides (first text of each slide)
-  if (ctx.progress && !opts.specs) {
+  if (ctx.progress && !opts.specs && start === 0) {
     progressSlides_(ctx, inv.map(function (it, i) {
       const top = it.texts.slice().sort(function (a, b) { return a.y - b.y; })[0];
       return top ? top.text.replace(/\s+/g, ' ').slice(0, 70) : 'Slide ' + (i + 1);
@@ -69,7 +73,7 @@ function rebrandPresentation(presId, ctx, opts) {
   progressStage_(ctx, 'review', 'active', 'Gemini is checking ' + slides.length + ' slides against the 66degrees template');
   let review = {};
   if (CONFIG.reviewWithGemini) {
-    try { review = reviewSlidesWithGemini(presId, slides, inv, ctx, opts); }
+    try { review = reviewSlidesWithGemini(presId, slides.slice(start, end), inv.slice(start, end), ctx, Object.assign({}, opts, { offset: start })); }
     catch (e) { ctx.log.push('Slide review skipped: ' + e.message); }
   }
   progressStage_(ctx, 'review', 'done', slides.length + ' slides reviewed');
@@ -80,6 +84,7 @@ function rebrandPresentation(presId, ctx, opts) {
   // Template reference per slide: from the plan (Create) or from Gemini's slide_type classification (Rebrand)
   const usage = { lastTag: null, counts: {}, darkCount: 0 };
   const refs = inv.map(function (it, i) {
+    if (!inPart(i)) return null;
     if (specs && specs[i] && specs[i].reference) return specs[i].reference;
     const r = review[i] || {};
     const t = r.slide_type || (r.redraw_spec && r.redraw_spec.type);
@@ -88,6 +93,7 @@ function rebrandPresentation(presId, ctx, opts) {
   saveRotation_(usage);
 
   inv.forEach(function (it, i) {
+    if (!inPart(i)) return;
     const r = review[i] || (review[i] = {});
     r.remove_images = (r.remove_images || []).filter(function (id) { return it.imageIds.indexOf(id) !== -1; });
     r.delete_shapes = (r.delete_shapes || []).filter(function (id) { return it.textIds.indexOf(id) !== -1; });
@@ -140,6 +146,7 @@ function rebrandPresentation(presId, ctx, opts) {
   progressStage_(ctx, 'brand', 'active', 'Applying colors, fonts and card styles to all slides');
   const requests = [];
   slides.forEach(function (page, i) {
+    if (!inPart(i)) return;
     const r = review[i];
     const it = inv[i];
     if (r.redraw) {
@@ -174,7 +181,7 @@ function rebrandPresentation(presId, ctx, opts) {
   // ---- ALL CAPS titles -> sentence case (brand rule) ----
   const capsFixes = [];
   slides.forEach(function (page, i) {
-    if (review[i].redraw) return;
+    if (!inPart(i) || review[i].redraw) return;
     inv[i].texts.forEach(function (t) {
       const fixed = fixAllCaps(t.text);
       if (fixed !== t.text && t.text.length < 120) {
@@ -228,6 +235,7 @@ function rebrandPresentation(presId, ctx, opts) {
     addFooterMark(slide, occupied, pageW, pageH, S, ctx);
   };
   deckSlides.forEach(function (slide, i) {
+    if (!inPart(i)) return;
     checkCancel_(ctx);
     progressSlide_(ctx, i, 'active');
     brandSlide(slide, i);
@@ -235,11 +243,11 @@ function rebrandPresentation(presId, ctx, opts) {
   });
 
   flushPresentation(deck);
-  progressStage_(ctx, 'brand', 'done', deckSlides.length + ' slides branded');
+  progressStage_(ctx, 'brand', 'done', (end - start) + ' slides branded');
   stats.libraryIcons = ctx.libraryIconsPlaced || 0;
 
   // ---- Deterministic brand check (reported, not blocking) ----
-  const issues = validateDeckAgainstReference(presId, refs, ctx);
+  const issues = whole ? validateDeckAgainstReference(presId, refs, ctx) : [];
   if (issues.length) {
     stats.issues = issues.length;
     ctx.log.push('Brand check: ' + issues.slice(0, 6).join('; ') + (issues.length > 6 ? ' (+' + (issues.length - 6) + ' more)' : '') + '.');
@@ -741,6 +749,7 @@ function reviewSlidesWithGemini(presId, slides, inv, ctx, opts) {
   opts = opts || {};
   const isCreate = !!opts.specs;
   const specs = opts.specs && opts.specs.length === slides.length ? opts.specs : null;
+  const offset = opts.offset || 0;                     // index of the first slide of this part in the whole deck
   const parts = [];
   const lines = [];
   slides.forEach(function (page, i) {
@@ -749,14 +758,14 @@ function reviewSlidesWithGemini(presId, slides, inv, ctx, opts) {
         'thumbnailProperties.thumbnailSize': 'MEDIUM', 'thumbnailProperties.mimeType': 'PNG'
       });
       const img = UrlFetchApp.fetch(thumb.contentUrl).getBlob();
-      parts.push({ text: 'SLIDE ' + i + ' image:' });
+      parts.push({ text: 'SLIDE ' + (i + offset) + ' image:' });
       parts.push({ inline_data: { mime_type: 'image/png', data: Utilities.base64Encode(img.getBytes()) } });
     } catch (e) {
       Logger.log('Thumbnail failed for slide ' + i + ': ' + e.message);
     }
     const it = inv[i];
     const ref = specs && specs[i] && specs[i].reference;
-    lines.push('SLIDE ' + i + ': icon_images=' + JSON.stringify(it.icons) + ' other_images=' + JSON.stringify(it.photos) +
+    lines.push('SLIDE ' + (i + offset) + ': icon_images=' + JSON.stringify(it.icons) + ' other_images=' + JSON.stringify(it.photos) +
       ' texts=' + JSON.stringify(it.texts.map(function (t) { return { id: t.id, text: t.text.slice(0, 90), x: t.x, y: t.y }; })) +
       (ref && !ref.fallback ? ' reference=' + ref.tag + ' (' + String(ref.layoutPattern || '').slice(0, 160) + ')' : ''));
   });

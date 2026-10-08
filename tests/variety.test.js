@@ -17,14 +17,14 @@ function loadEngine() {
   return sandbox.ENGINE;
 }
 
-test("cover, closing and long agenda each have several designs to rotate", () => {
+test("cover and long agenda have several designs; the Thank-you slide is always the template design", () => {
   const E = loadEngine();
   assert.ok(E.VARIANTS.cover.length >= 3);
-  assert.ok(E.VARIANTS.closing.length >= 3);
+  assert.ok(!E.VARIANTS.closing || E.VARIANTS.closing.length <= 1, "closing never rotates");
   const long = E.VARIANTS.agenda.filter((v) => 13 >= v.min && 13 <= v.max);
   assert.ok(long.length >= 2, "a 13-item agenda has at least two designs");
-  ["ENGINE_COVER_PANEL", "ENGINE_COVER_CUBE", "ENGINE_CLOSING_PANEL", "ENGINE_CLOSING_CENTER"].forEach((tag) => {
-    const type = /COVER/.test(tag) ? "cover" : "closing";
+  ["ENGINE_COVER_PANEL", "ENGINE_COVER_CUBE"].forEach((tag) => {
+    const type = "cover";
     const out = E.render({ slides: [{ type, title: "Modernizing FP&A", subtitle: "Driving insight", reference: { tag } }] }, { dateLabel: "Oct 1, 2026" })[0];
     assert.ok(out.els.some((e) => e.t === "text"), tag + " draws text");
   });
@@ -65,6 +65,7 @@ test("measure reports a look so similar designs are grouped", () => {
 test("the design chooser shuffles, uses history for looks and saves one step per deck", () => {
   const src = read("src/Code.gs");
   assert.match(src, /Math\.random\(\) \* 35/);
+  assert.match(src, /score -= 220 \* \(used\[d\.tag\] \|\| 0\)/);
   assert.match(src, /function lookRecencyScore_/);
   assert.match(src, /saveDesignUsage_\(Object\.keys\(used\), Object\.keys\(looksUsed\)\)/);
   assert.doesNotMatch(src, /try \{ saveDesignUsage_\(\[tag\]\); \} catch/);

@@ -96,18 +96,19 @@ test("presentation type and department options come from the backend catalogs", 
   assert.ok(sandbox.DEPARTMENTS.includes("Sales"));
 });
 
-test("slide count validation clamps to 3–20", () => {
+test("slide count validation clamps to 3–200", () => {
   const sandbox = loadPipeline();
   assert.equal(sandbox.clampSlideCount_(8), 8);
   assert.equal(sandbox.clampSlideCount_(2), 3);
-  assert.equal(sandbox.clampSlideCount_(100), 20);
+  assert.equal(sandbox.clampSlideCount_(100), 100);
+  assert.equal(sandbox.clampSlideCount_(500), 200);
   assert.equal(sandbox.clampSlideCount_(""), 8);
   assert.equal(sandbox.clampSlideCount_(NaN), 8);
   const html = read("src/Generator.html");
   assert.match(html, /min="3"/);
-  assert.match(html, /max="20"/);
+  assert.match(html, /max="200"/);
   assert.match(html, /var MIN_SLIDES = 3;/);
-  assert.match(html, /var MAX_SLIDES = 20;/);
+  assert.match(html, /var MAX_SLIDES = 200;/);
 });
 
 test("server accepts the panel's payload: capitalised modes, several files, cancel alias, elapsed time", () => {
@@ -146,7 +147,7 @@ test("bootstrap exposes type, department, and slide bounds for the same presenta
   assert.deepEqual(Array.from(boot.presentationTypes), Array.from(sandbox.PRESENTATION_TYPES));
   assert.deepEqual(Array.from(boot.departments), Array.from(sandbox.DEPARTMENTS));
   assert.equal(boot.minSlides, 3);
-  assert.equal(boot.maxSlides, 20);
+  assert.equal(boot.maxSlides, 200);
 });
 
 test("department filter keeps general slides and falls back when nothing matches", () => {

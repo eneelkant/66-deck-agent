@@ -980,10 +980,10 @@
 
           <!-- Slide count -->
           <div class="field" id="slidesField">
-            <label for="slideCountInput">Slides <span class="opt">(3–20)</span></label>
+            <label for="slideCountInput">Slides <span class="opt">(3–200)</span></label>
             <div class="slider">
-              <input id="slideCount" type="range" min="3" max="20" value="8" aria-label="Slide count slider" />
-              <input id="slideCountInput" type="number" min="3" max="20" step="1" value="8" />
+              <input id="slideCount" type="range" min="3" max="200" value="8" aria-label="Slide count slider" />
+              <input id="slideCountInput" type="number" min="3" max="200" step="1" value="8" />
             </div>
             <div class="hint">Includes cover and Thank You slides.</div>
           </div>
@@ -1046,7 +1046,7 @@
 
       var MAX_TOTAL_BYTES = 20 * 1024 * 1024;
       var MIN_SLIDES = 3;
-      var MAX_SLIDES = 20;   // one run must finish inside the Apps Script 6-minute limit
+      var MAX_SLIDES = 200;  // decks over 20 slides (and large rebrands) are built in parts, one Apps Script run per part
 
       var state = {
         mode: "Create",
@@ -1123,6 +1123,9 @@
                 elapsedMs: 10000
               });
             }, 10000);
+          },
+          continueDeckGeneration: function () {
+            setTimeout(function () { ok({ ok: true, url: "https://docs.google.com/presentation/", slideCount: 30, elapsedMs: 20000 }); }, 2000);
           },
           cancelDeckGeneration: function () {
             setTimeout(function () { ok(true); }, 100);
@@ -1378,7 +1381,7 @@
       function updateSub() {
         var secs = Math.floor((Date.now() - state.startedAt) / 1000);
         var stage = state.stages[Math.min(state.cur, state.stages.length - 1)];
-        $("runSub").textContent = label(stage) + " · " + secs + "s";
+        $("runSub").textContent = (state.partNote ? state.partNote + " · " : "") + label(stage) + " · " + secs + "s";
       }
 
       function startProgress() {
@@ -1444,6 +1447,7 @@
         var runId = newRunId();
         payload.runId = runId;
         state.runId = runId;
+        state.partNote = "";
         state.lastPayload = payload;
 
         hideNotice();
@@ -1454,9 +1458,18 @@
         showView("runView");
         startProgress();
 
-        server()
-          .withSuccessHandler(function (result) {
+        var onResult = function (result) {
             if (state.runId !== runId) return; // cancelled — ignore late result
+            // Long deck or large rebrand: the server finished one part; ask for the next part
+            if (result && result.continue) {
+              state.partNote = result.done + " of " + result.total + " slides done";
+              updateSub();
+              server()
+                .withSuccessHandler(onResult)
+                .withFailureHandler(onFail)
+                .continueDeckGeneration(runId);
+              return;
+            }
             stopProgress();
             if (!result || !result.ok) {
               var err = (result && result.error) || {};
@@ -1483,12 +1496,15 @@
             setTimeout(function () {
               showSuccess(result);
             }, 1400);
-          })
-          .withFailureHandler(function (err) {
+        };
+        var onFail = function (err) {
             if (state.runId !== runId) return;
             stopProgress();
             showFailure(null, (err && err.message) || String(err));
-          })
+        };
+        server()
+          .withSuccessHandler(onResult)
+          .withFailureHandler(onFail)
           .runDeckGeneration(payload);
       }
 
