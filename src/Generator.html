@@ -211,12 +211,12 @@
 
     <script>
       const WEIGHTS = {
-        create: { research: 12, write: 30, match: 2, fit: 12, design: 30, import: 8, review: 15, brand: 40, insert: 10 },
+        create: { research: 12, write: 28, diagram: 10, match: 2, fit: 10, icons: 8, design: 30, import: 8, review: 15, brand: 36, insert: 10 },
         rebrand: { review: 40, brand: 60 }
       };
-      const EXPECTED_SECS = { research: 25, write: 50, match: 1, fit: 20, design: 60, import: 12, review: 30, brand: 60, insert: 15 };
+      const EXPECTED_SECS = { research: 25, write: 50, diagram: 20, match: 1, fit: 20, icons: 12, design: 60, import: 12, review: 30, brand: 60, insert: 15 };
       const FALLBACK_STAGES = {
-        create: ['Research', 'Writing the content', 'Choosing a 66degrees template design for each slide', 'Fitting the text to each design', 'Drawing the slides',
+        create: ['Research', 'Writing the content', 'Analyzing diagram', 'Choosing a 66degrees template design for each slide', 'Fitting the text to each design', 'Selecting icons', 'Drawing the slides',
                  'Adding slides to your deck'],
         rebrand: ['Reviewing every slide', 'Applying the 66degrees brand']
       };

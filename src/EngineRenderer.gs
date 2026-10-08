@@ -342,6 +342,27 @@ function engineAssetId(asset, ctx) {
 // Icon order (CONFIG.iconOrder): template icon library (vector) -> Drive brand icon -> Material Icons
 function drawEngineIcon(slide, e, s, ctx) {
   const size = safeSize_(finiteNumber_(e.size, 16) * s, MIN_SIZE_);
+  // Semantic IconProvider path (local / better-icons / fallback) before legacy lookup.
+  if (typeof resolveIconRequest_ === 'function' && typeof insertResolvedIcon_ === 'function') {
+    try {
+      const concept = e.concept || e.name || e.material || '';
+      const pre = (ctx && ctx.currentSpec && ctx.currentSpec.resolvedIcons &&
+        (ctx.currentSpec.resolvedIcons[concept] || ctx.currentSpec.resolvedIcons[e.nodeId])) || null;
+      const resolved = pre && pre.svg ? pre : resolveIconRequest_({
+        concept: concept,
+        brandColor: e.color || (e.dark ? '#FFFDF9' : '#0052FF'),
+        onDark: !!e.dark,
+        size: Math.max(16, Math.round(size)),
+        style: 'outline'
+      }, ctx);
+      if (resolved && insertResolvedIcon_(slide, resolved, e.x * s, e.y * s, size, ctx)) {
+        ctx.providerIconsPlaced = (ctx.providerIconsPlaced || 0) + 1;
+        return;
+      }
+    } catch (err) {
+      Logger.log('IconProvider draw skipped: ' + err.message);
+    }
+  }
   const order = (typeof CONFIG !== 'undefined' && CONFIG.iconOrder) ? CONFIG.iconOrder : ['library', 'drive', 'material'];
   for (let k = 0; k < order.length; k++) {
     const step = order[k];

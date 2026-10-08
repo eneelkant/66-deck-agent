@@ -7,6 +7,8 @@
   "filePushOrder": [
     "Brand.gs",
     "ShapeKit.gs",
+    "IconProvider.gs",
+    "Diagram.gs",
     "Engine.gs",
     "EngineRenderer.gs",
     "Reference.gs",

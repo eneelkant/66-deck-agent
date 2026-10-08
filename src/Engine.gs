@@ -3363,7 +3363,8 @@ var ENGINE = (function () {
   var ALIASES = { intro: 'statement', key_message: 'statement', problem: 'cards', benefits: 'cards', kpi: 'stats', metrics: 'stats',
     steps: 'process', roadmap: 'timeline', list: 'bullets', thank_you: 'closing', title: 'cover', divider: 'section',
     case: 'case_study', checklist: 'next_steps', two_column: 'comparison',
-    architecture: 'bullets', flowchart: 'bullets', diagram: 'bullets' };
+    architecture: 'diagram', flowchart: 'diagram', 'org-chart': 'diagram', 'data-flow': 'diagram',
+    dependency: 'diagram', 'database-schema': 'diagram', swimlane: 'diagram', sequence: 'diagram', state: 'diagram', tree: 'diagram' };
 
   // Removes color codes (e.g. "#0052FF") and stray whitespace that a model may copy from design rules into slide text
   function cleanText(v) {
@@ -3484,6 +3485,9 @@ var ENGINE = (function () {
         if (!over) break;
       }
       TSZ.body = TYPE_STEPS[0].body; TSZ.heading = TYPE_STEPS[0].heading;
+      if (s.diagram && typeof applyDiagramIrToEngineOutput_ === 'function') {
+        out = applyDiagramIrToEngineOutput_(out, s, ctx.tokens || null);
+      }
       if (!out.noFooter) footerMark(out.els, out.dark);
       out.type = type;
       out.notes = s.notes || '';

@@ -211,15 +211,20 @@ test("every ENGINE layout and metrics alias keeps positive dimensions", () => {
   }
 });
 
-test("unknown architecture/flowchart/diagram types fall back to bullets", () => {
+test("architecture/flowchart alias to diagram; unknown types fall back to bullets", () => {
   const { ENGINE } = loadEngine();
-  for (const type of ["architecture", "flowchart", "diagram", "unknown_widget"]) {
+  for (const type of ["architecture", "flowchart", "diagram"]) {
     const out = ENGINE.render({
       slides: [{ type, title: type, items: SAMPLE_ITEMS }]
     })[0];
-    assert.equal(out.type, "bullets");
+    assert.equal(out.type, "diagram");
     assertPositiveEls(out.els, type);
   }
+  const unknown = ENGINE.render({
+    slides: [{ type: "unknown_widget", title: "x", items: SAMPLE_ITEMS }]
+  })[0];
+  assert.equal(unknown.type, "bullets");
+  assertPositiveEls(unknown.els, "unknown_widget");
 });
 
 test("metrics alias renders as stats", () => {
@@ -315,9 +320,9 @@ test("sidebar completion uses the returned active presentation URL", () => {
 
 test("pipeline stages stay in the V1_17 create order", () => {
   const sandbox = loadPipeline();
-  assert.equal(Array.from(sandbox.getPipelineStages()).join(","), "research,write,match,fit,brand,insert");
+  assert.equal(Array.from(sandbox.getPipelineStages()).join(","), "research,write,diagram,match,fit,icons,brand,insert");
   const stages = vm.runInContext("PROGRESS_STAGES.create.map(function (s) { return s[0]; }).join(',')", sandbox);
-  assert.equal(stages, "research,write,match,fit,brand,insert");
+  assert.equal(stages, "research,write,diagram,match,fit,icons,brand,insert");
 });
 
 test("overlayTextIfNeeded writes overlay boxes for fill-only shapes", () => {
