@@ -220,9 +220,7 @@ var ENGINE = (function () {
   }
   // Column header: "label — title" only when it fits on one line, otherwise the label alone (never cut off)
   function headerText(side, w) {
-    var full = [side.label, side.title].filter(Boolean).join(' — ');
-    if (wrap(full, w, 'sans', 500, TSZ.heading).length <= 1) return full;
-    return side.label || side.title || '';
+    return side.label || side.title || '';      // one short heading per column, never "label — title"
   }
   function onFill(fill) { return isLight(fill) ? T.ink : T.white; }   // readable text color on a fill
   function cardStyleOf(s) { return (s && s.reference && s.reference.cardStyle) || 'panel'; }
@@ -737,9 +735,9 @@ var ENGINE = (function () {
     var listH = bulletList(els, CX, top, lw, BOTTOM - top, s.points, { max: TSZ.body + 0.5, min: TSZ.body + 0.5, gap: 12 });
     if (side) {
       var px = CX + 424, pw = CW - 424;
-      var ptext = [s.callout.label ? s.callout.title : '', s.callout.text].filter(Boolean).join('\n');
+      var ptext = String(s.callout.text || '');
       var need = 43 + 14 + textH(ptext, pw - 24, TSZ.body) + 18;
-      panel(els, px, top, pw, Math.min(BOTTOM - top, Math.max(need, listH, 120)), T.blue, s.callout.label || s.callout.title || 'Why it matters', [], ptext);
+      panel(els, px, top, pw, Math.min(BOTTOM - top, Math.max(need, listH, 120)), T.blue, s.callout.title || s.callout.label || 'Why it matters', [], ptext);
     }
     return { bg: T.white, els: els };
   };
@@ -994,53 +992,7 @@ var ENGINE = (function () {
     return { bg: T.white, els: els, noFooter: true };
   };
 
-  var CLOSING_VARIANTS_ = {};
-  function contactRows_(els, x, y, gap) {
-    [['web', 'www.66degrees.com'], ['at', '@66degrees'], ['mail', 'hello@66degrees.com']].forEach(function (c, i) {
-      contactIcon(els, c[0], x + 4, y + i * gap + 2, 14);
-      text(els, x + 30, y + i * gap, 200, 18, c[1], { weight: 400, max: 11, min: 11, maxLines: 1, color: T.ink });
-    });
-  }
-  function closingSub_(s) {
-    var sub = s.subtitle || s.lead || s.title || '';
-    return sub && sub.toLowerCase().indexOf('thank') === -1 ? sub : '';
-  }
-  // Blue panel on the left with "Thank You!" in white; contacts on the right
-  CLOSING_VARIANTS_.ENGINE_CLOSING_PANEL = function (s) {
-    var els = [], pw = 400;
-    rect(els, 0, 0, pw, H, T.blue);
-    els[els.length - 1].square = true;
-    image(els, 'mark-white', 40, 36, 42, 28);
-    text(els, 40, 128, pw - 70, 80, 'Thank You!', { weight: 500, max: 52, min: 40, maxLines: 1, color: T.white, valign: 'bottom' });
-    rect(els, 42, 216, 96, 3, T.white);
-    var sub = closingSub_(s);
-    if (sub) text(els, 42, 230, pw - 80, 60, sub, { weight: 400, max: 13, min: 11, maxLines: 3, color: T.white });
-    image(els, 'band-pattern', pw - 94, H - 56, 94, 56);
-    image(els, 'logo-dark', W - 40 - 82, 40, 82, 19.4);
-    text(els, pw + 40, 140, 240, 24, 'Stay Connected', { weight: 500, max: 16, min: 14, maxLines: 1, color: T.ink });
-    rect(els, pw + 40, 170, 48, 2, T.blue);
-    contactRows_(els, pw + 36, 192, 30);
-    return { bg: T.white, els: els, noFooter: true };
-  };
-  // Centred "Thank You!", contacts in one row, full blue band at the bottom
-  CLOSING_VARIANTS_.ENGINE_CLOSING_CENTER = function (s) {
-    var els = [];
-    image(els, 'logo-dark', (W - 82) / 2, 40, 82, 19.4);
-    text(els, 110, 100, W - 220, 74, 'Thank You!', { weight: 500, max: 56, min: 42, maxLines: 1, align: 'center', color: T.ink, valign: 'bottom' });
-    rect(els, (W - 96) / 2, 184, 96, 3, T.blue);
-    var sub = closingSub_(s);
-    if (sub) text(els, 140, 198, W - 280, 40, sub, { weight: 400, max: 13, min: 11, maxLines: 2, align: 'center', color: T.ink });
-    var cx = [130, 300, 450];
-    [['web', 'www.66degrees.com'], ['at', '@66degrees'], ['mail', 'hello@66degrees.com']].forEach(function (c, i) {
-      contactIcon(els, c[0], cx[i], 268, 14);
-      text(els, cx[i] + 22, 266, 150, 18, c[1], { weight: 400, max: 11, min: 11, maxLines: 1, color: T.ink });
-    });
-    rect(els, 0, 349, W, 56, T.blue);
-    els[els.length - 1].square = true;
-    image(els, 'strip-pattern', W - 238, 349, 238, 56);
-    image(els, 'mark-white', 22.3, 368, 28.2, 18.8);
-    return { bg: T.white, els: els, noFooter: true };
-  };
+  // The Thank-you slide always uses the template design (L.closing): strict brand rule, no variations.
 
   // Contact icons drawn from simple shapes in 66° Blue: they always look right (no lookup in the icon sheet)
   function contactIcon(els, kind, x, y, sz) {
@@ -1068,7 +1020,6 @@ var ENGINE = (function () {
    * ================================================================================================ */
   var V = {};
   Object.keys(COVER_VARIANTS_).forEach(function (k) { V[k] = function (s, ctx) { return COVER_VARIANTS_[k](s, ctx || {}); }; });
-  Object.keys(CLOSING_VARIANTS_).forEach(function (k) { V[k] = function (s, ctx) { return CLOSING_VARIANTS_[k](s, ctx || {}); }; });
 
   function shape(els, kind, x, y, w, h, fill, ln) { els.push({ t: 'shape', shape: kind, x: x, y: y, w: w, h: h, fill: fill, line: ln || null }); }
   function ring(els, x, y, d, fill, color, width) { els.push({ t: 'ellipse', x: x, y: y, w: d, h: d, fill: fill, line: { color: color, width: width } }); }
@@ -1421,27 +1372,30 @@ var ENGINE = (function () {
     var els = [];
     var top = header(els, s, { eyebrow: true });
     var colW = CW / n, d = Math.min(78, colW - 30), cy = top + (BOTTOM - top) / 2;
-    var textW = Math.min(colW * 1.7, 230);
-    var hSize = uniformSize(steps.map(function (st) { return st.title; }), textW, 16, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 1 });
+    var textW = Math.min(colW * 2 - 16, 230);   // captions on the same side are two columns apart: never wider than that
+    var hSize = TSZ.heading;
     steps.forEach(function (st, i) {
       var ccx = CX + colW * i + colW / 2;
-      var tint = T.tints[Math.min(i, 4)];
-      ring(els, ccx - d / 2 - 6, cy - d / 2 - 6, d + 12, T.white, tint, 3);
+      ring(els, ccx - d / 2 - 6, cy - d / 2 - 6, d + 12, T.white, T.blue, 3);
       ellipse(els, ccx - d / 2 + 6, cy - d / 2 + 6, d - 12, d - 12, T.bgLight);
       icon(els, autoIcon(st), ccx - 13, cy - 13, 26, false, pad2(i + 1));
       if (i < n - 1) line(els, ccx + d / 2 + 6, cy, ccx + colW - d / 2 - 6, cy, T.cardLine, 1);
-      var tx = Math.max(CX, Math.min(ccx - textW / 2, CX + CW - textW));
+      // Caption centred on its ring; at the slide edges it is narrowed (never shifted into the next caption)
+      // Room up to half way to the next caption on the same side (two columns away), or to the slide edge
+      var reachL = i >= 2 ? colW - 6 : textW, reachR = i <= n - 3 ? colW - 6 : textW;
+      var tl = Math.max(CX, ccx - reachL), tr = Math.min(CX + CW, ccx + reachR);
+      var tw = Math.min(tr - tl, textW), tx = Math.max(tl, Math.min(ccx - tw / 2, tr - tw));
       if (i % 2 === 0) {
         var areaTop = top, areaH = cy - d / 2 - 14 - top;
-        var bt = fit(String(st.text || ''), textW, areaH - 20, { weight: 400, max: TSZ.body, min: TSZ.body });
-        var ht = lineHeight('sans', hSize) + 4;
+        var bt = fit(String(st.text || ''), tw, areaH - 20, { weight: 400, max: TSZ.body, min: TSZ.body });
+        var ht = lineHeight('sans', hSize) * (wrap(String(st.title || ''), tw, 'sans', 500, hSize).length > 1 ? 2 : 1) + 4;
         var y0 = areaTop + areaH - bt.height - ht;
-        text(els, tx, y0, textW, 16, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 1, align: 'center', color: T.ink });
-        text(els, tx, y0 + ht, textW, bt.height, st.text, { weight: 400, max: bt.size, min: bt.size, align: 'center', color: T.body });
+        text(els, tx, y0, tw, ht, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 2, align: 'center', color: T.ink });
+        text(els, tx, y0 + ht, tw, bt.height, st.text, { weight: 400, max: bt.size, min: bt.size, align: 'center', color: T.body });
       } else {
         var y1 = cy + d / 2 + 14;
-        var h1 = text(els, tx, y1, textW, 16, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 1, align: 'center', color: T.ink });
-        text(els, tx, y1 + h1.height + 4, textW, BOTTOM - y1 - h1.height - 4, st.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.body });
+        var h1 = text(els, tx, y1, tw, 32, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 2, align: 'center', color: T.ink });
+        text(els, tx, y1 + h1.height + 4, tw, BOTTOM - y1 - h1.height - 4, st.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.body });
       }
     });
     return { bg: T.white, els: els, center: true };
@@ -2316,17 +2270,23 @@ var ENGINE = (function () {
     if (items.length !== 4) return null;
     var els = [];
     var top = header(els, s);
-    var lw = 250, y = top + 10;
+    // Story on the left only when the slide has one; otherwise the donut and its labels sit in the middle of the slide
+    var story = !!(s.statement || s.subtitle || s.text || asList(s.points).length);
+    var lw = story ? 220 : 0, y = top + 10;
     if (s.statement || s.subtitle) { var h1 = text(els, CX, y, lw, 40, s.statement || s.subtitle, { weight: 500, max: TSZ.heading + 2, min: TSZ.heading, maxLines: 3, color: T.ink }); y += h1.height + 10; }
     if (s.text) { var h2 = text(els, CX, y, lw, 90, s.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 6, color: T.body }); y += h2.height + 10; }
-    if (s.points) bulletList(els, CX, y, lw, BOTTOM - y, asList(s.points).slice(0, 4), { max: TSZ.body, min: TSZ.body, gap: 6 });
-    var cx = 500, cy = top + (BOTTOM - top) / 2, r = Math.min(100, (BOTTOM - top) / 2 - 20), fills = [T.blue, T.ink, T.slate, T.blue];
+    if (story && s.points) bulletList(els, CX, y, lw, BOTTOM - y, asList(s.points).slice(0, 4), { max: TSZ.body, min: TSZ.body, gap: 6 });
+    var x0 = CX + (story ? lw + 24 : 0), x1 = CX + CW, gap = 14;
+    var r = Math.min(story ? 82 : 100, (BOTTOM - top) / 2 - 16);
+    var cx = (x0 + x1) / 2, cy = top + (BOTTOM - top) / 2;
+    var capW = Math.min(story ? 140 : 190, (x1 - x0) / 2 - r - gap);
+    var fills = [T.blue, T.ink, T.slate, T.blue];
     items.forEach(function (it, i) { arc(els, 'ring', cx, cy, r, 90, -90 + i * 90, i === 3 ? T.panelAlt : fills[i]); });
     ellipse(els, cx - r * 0.42, cy - r * 0.42, r * 0.84, r * 0.84, T.white);
     text(els, cx - r * 0.38, cy - 14, r * 0.76, 28, s.center || '', { weight: 500, max: TSZ.heading, min: 10, maxLines: 2, align: 'center', color: T.ink });
-    var capW = 92;
-    [[cx + r + 10, cy - r, 'left'], [cx + r + 10, cy + r - 34, 'left'], [cx - r - 10 - capW, cy + r - 34, 'right'], [cx - r - 10 - capW, cy - r, 'right']]
-      .forEach(function (pos, i) { caption(els, Math.max(CX + lw + 10, Math.min(pos[0], CX + CW - capW)), pos[1], capW, items[i], pos[2], 3); });
+    var rightX = cx + r + gap, leftX = cx - r - gap - capW;
+    [[rightX, cy - r, 'left'], [rightX, cy + r * 0.25, 'left'], [leftX, cy + r * 0.25, 'right'], [leftX, cy - r, 'right']]
+      .forEach(function (pos, i) { caption(els, pos[0], pos[1], capW, items[i], pos[2], 5); });
     return { bg: T.bgLight, els: els, noBalance: true };
   };
 
@@ -2639,9 +2599,11 @@ var ENGINE = (function () {
     if (!stText) return null;
     var els = [];
     text(els, X0, 24, W - 2 * X0, 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
-    var st = text(els, X0, 120, 420, 120, stText, { weight: 500, max: 26, min: 18, maxLines: 4, color: T.white });
-    line(els, X0 + 1, 120 + st.height + 14, X0 + 121, 120 + st.height + 14, T.white, 1);
-    if (s.text) text(els, X0, 120 + st.height + 28, 420, 90, s.text, { weight: 400, max: TSZ.body + 1, min: TSZ.body, maxLines: 5, color: T.white });
+    var stFit = fit(String(stText), 380, 130, { weight: 500, max: 26, min: 18, maxLines: 4 });
+    var stH = Math.max(stFit.height, wrap(String(stText), 380, 'sans', 500, stFit.size).length * lineHeight('sans', stFit.size)) + 6;
+    text(els, X0, 110, 420, stH, stText, { weight: 500, max: stFit.size, min: stFit.size, maxLines: 4, color: T.white });
+    line(els, X0 + 1, 110 + stH + 12, X0 + 121, 110 + stH + 12, T.white, 1);
+    if (s.text) text(els, X0, 110 + stH + 26, 420, 90, s.text, { weight: 400, max: TSZ.body + 1, min: TSZ.body, maxLines: 5, color: T.white });
     return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true, noBalance: true };
   };
 
@@ -3502,10 +3464,7 @@ var ENGINE = (function () {
       { tag: '66D_LAYOUT_COVER_001', min: 0, max: 99, desc: 'template cover: title left, blue band with the date and the 66 badge' },
       { tag: 'ENGINE_COVER_PANEL', min: 0, max: 99, desc: 'blue panel on the left with the 66 mark and date, title on the right' },
       { tag: 'ENGINE_COVER_CUBE', min: 0, max: 99, desc: 'title with the isometric cube on the right, slim blue band with the date' }],
-    closing: [
-      { tag: '66D_LAYOUT_CLOSING_001', min: 0, max: 99, desc: 'template closing: Thank You, Stay Connected card, blue band' },
-      { tag: 'ENGINE_CLOSING_PANEL', min: 0, max: 99, desc: 'blue panel with Thank You in white, contacts on the right' },
-      { tag: 'ENGINE_CLOSING_CENTER', min: 0, max: 99, desc: 'centred Thank You with the contacts in one row and a full blue band' }],
+
     cards: [
       { tag: '66D_LAYOUT_CARDS_007', min: 2, max: 6, desc: 'grid of panel cards with numbers or icons; general purpose', words: '35-55' },
       { tag: '66D_LAYOUT_CARDS_001', min: 3, max: 6, desc: 'big numbered panels with a divider; values, principles, pillars', words: '30-50' },

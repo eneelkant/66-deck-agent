@@ -255,18 +255,14 @@ function generatePresentation(data) {
       );
     }
     progressFail_(ctx, e && e.message ? e.message : String(e));
+    try { if (run.runId) deleteRunState_(run.runId); } catch (e2) {}
     throw e;
   }
 }
 
-function generatePresentationRun_(data, run) {
-  const started = Date.now();
-  const mode = data.mode === 'rebrand' ? 'rebrand' : 'create';
-  const ctx = { runId: run.runId, progress: null, blobCache: {}, generatedIcons: 0, log: [] };
-  run.ctx = ctx;
-  progressInit_(ctx, mode);
+// Brand profile, assets, template library and harvest data for one Apps Script run
+function loadRunContext_(ctx) {
   try { ensureInitialSetup_(); } catch (e) { ctx.log.push('Initial setup: ' + (e && e.message ? e.message : String(e))); }
-
   ctx.apiKey = getApiKey();
   try { ctx.brand = getBrandProfile(ctx.apiKey, false); }
   catch (e) { ctx.brand = JSON.parse(JSON.stringify(DEFAULT_BRAND)); ctx.log.push('Brand profile fallback: ' + sanitizeDriveError_(e)); }
@@ -278,16 +274,21 @@ function generatePresentationRun_(data, run) {
   try { ctx.refRuntime = ctx.lib ? loadReferenceRuntime(false) : null; }
   catch (e) { ctx.refRuntime = null; ctx.log.push('Reference harvest skipped: ' + sanitizeDriveError_(e)); }
   if (ctx.lib && !ctx.refRuntime) ctx.iconIssue = 'harvest data not loaded: ' + (REF_RUNTIME_ERROR || 'unknown reason');
-  const target = SlidesApp.getActivePresentation();
   if (!ctx.lib && CONFIG.useReferenceLibrary) ctx.log.push('Reference library not loaded — using built-in 66degrees template values.');
+}
+
+function generatePresentationRun_(data, run) {
+  const started = Date.now();
+  const mode = data.mode === 'rebrand' ? 'rebrand' : 'create';
+  const ctx = { runId: run.runId, progress: null, blobCache: {}, generatedIcons: 0, log: [] };
+  run.ctx = ctx;
+  progressInit_(ctx, mode);
+  loadRunContext_(ctx);
+  const target = SlidesApp.getActivePresentation();
 
   if (mode === 'rebrand') {
-    const stats = rebrandPresentation(target.getId(), ctx, { specs: null });
-    let rmsg = 'SUCCESS: Rebranded ' + stats.slides + ' slides with the 66degrees brand. ' + summarizeStats(stats);
-    if (ctx.log.length) rmsg += '\n' + ctx.log.join('\n');
-    progressFinish_(ctx, 'done', stats.slides + ' slides rebranded');
-    Logger.log(rmsg);
-    return generationResult_(rmsg, target, stats.slides);
+    // Large decks are rebranded in parts (one part per Apps Script run); the panel asks for the next part
+    return rebrandStep_(ctx, target, { mode: 'rebrand', runId: run.runId, startedAt: started, start: 0, stats: null, log: [] }, started);
   }
 
   // ---------- CREATE ----------
@@ -315,7 +316,8 @@ function generatePresentationRun_(data, run) {
   }
   const presentationType = normalizePresentationType_(data.presentationType || data.type);
   const department = normalizeDepartment_(data.department);
-  const totalSlides = clampSlideCount_(data.slideCount != null && data.slideCount !== '' ? data.slideCount : data.slides);
+  let totalSlides = clampSlideCount_(data.slideCount != null && data.slideCount !== '' ? data.slideCount : data.slides);
+  if (!run.runId && totalSlides > SINGLE_RUN_MAX_) totalSlides = SINGLE_RUN_MAX_;   // callers without a run id cannot continue
   ctx.presentationType = presentationType;
   ctx.department = department;
   if (ctx.lib) ctx.lib = applyDepartmentFilter_(ctx.lib, department);
@@ -359,6 +361,12 @@ function generatePresentationRun_(data, run) {
     }
   }
   checkCancel_(ctx);
+
+  // Long decks (more than one Apps Script run can build): outline first, then the slides in parts, run after run
+  if (totalSlides > SINGLE_RUN_MAX_ && run.runId) {
+    return startLongDeck_(ctx, target, { userPrompt: userPrompt, sources: sources, presentationType: presentationType,
+      department: department, n: totalSlides, blankDeck: blankDeck }, started);
+  }
 
   // 1b. Gemini writes the content plan grounded in Scite's research (one spec per slide, in order)
   progressStage_(ctx, 'write', 'active', 'Gemini is writing ' + totalSlides + ' slides');
@@ -576,6 +584,7 @@ function getProgress(runId) {
 // Called by the dialog's Cancel button: the run stops at its next checkpoint
 // The current panel calls cancelDeckGeneration; older panels call cancelRun
 function cancelDeckGeneration(runId) {
+  try { if (runId) deleteRunState_(String(runId).slice(0, 60)); } catch (e) {}
   return cancelRun(runId);
 }
 
@@ -659,7 +668,9 @@ function summarizeStats(s) {
    1. CONTENT PLAN (Gemini)
 ========================= */
 
-function planContent(userPrompt, presentationType, n, sources, ctx) {
+function planContent(userPrompt, presentationType, n, sources, ctx, opts) {
+  // opts.batch (long decks): write only these planned slides { slides:[{type, title, brief}], deckSize, deckTitle, otherTitles[] }
+  const batch = opts && opts.batch ? opts.batch : null;
   const guidance = TYPE_GUIDANCE[presentationType] || TYPE_GUIDANCE['Custom'];
   const iconNames = Object.keys(ctx.assets.icons).sort();
   const libIconNames = ctx.lib ? ctx.lib.icons.map(function (i) { return i.name; }) : [];
@@ -673,19 +684,12 @@ function planContent(userPrompt, presentationType, n, sources, ctx) {
   ctx.userPrompt = userPrompt;
   ctx.approvedFacts = approvedFacts;
   const storyShape = pickStoryShape_();                                       // a different story shape on every run
-  const prompt = `
-You are the senior presentation strategist for ${ctx.brand.name}. Write the content for the best possible presentation on the topic:
-a clear story, one idea per slide, concrete and useful content.
-
-REQUEST: "${userPrompt || 'Build the presentation from the attached source material.'}"
-PRESENTATION TYPE: ${presentationType}
-DEPARTMENT: ${ctx.department || 'Other'}
-STRUCTURE: ${guidance} Shape the story around what the request is really asking for, the way a senior consultant would.
-EXACT NUMBER OF SLIDES: ${n}
-
-AUDIENCE: do not assume or name an audience, job title or company unless the user states one. Never write "for the VP of ...".
-
-STORY (MANDATORY):
+  const storyBlock = batch ? `THIS IS PART OF A LONG DECK (${batch.deckSize} slides, titled "${batch.deckTitle || ''}"). The outline is fixed.
+Write EXACTLY these ${n} body slides, in this order, with these types and titles (keep each title word for word):
+${batch.slides.map(function (o, k) { return (k + 1) + '. type "' + o.type + '" | title "' + o.title + '"' + (o.brief ? ' | about: ' + o.brief : ''); }).join('\n')}
+Other slides of the deck (already written or written later - never repeat their content): ${(batch.otherTitles || []).slice(0, 220).join(' | ')}
+No cover, agenda or closing slide in this part.
+` : `STORY (MANDATORY):
 - Slide 1 MUST be type "cover".
 - Slide 2 MUST be type "agenda" when ${n} >= 5.
 - Slide ${n} (the LAST slide) MUST be type "closing" with a short title and subtitle — this is non-negotiable, always include it.
@@ -696,11 +700,32 @@ STORY (MANDATORY):
 - The agenda lists ONLY the body slides, one item per body slide, in the same order (so ${Math.max(n - 3, 1)} items).
   Each agenda item title is EXACTLY that slide's title, word for word (the code enforces this). Its "text" is a one-line description.
   If the request asks for more topics than there are body slides, combine related topics on one slide rather than dropping any.
-- Do not write "eyebrow" labels (the design has no label bar above the title).
+`;
+  const prompt = `
+You are the senior presentation strategist for ${ctx.brand.name}. Write the content for the best possible presentation on the topic:
+a clear story, one idea per slide, concrete and useful content.
+
+REQUEST: "${userPrompt || 'Build the presentation from the attached source material.'}"
+PRESENTATION TYPE: ${presentationType}
+DEPARTMENT: ${ctx.department || 'Other'}
+STRUCTURE: ${guidance} Shape the story around what the request is really asking for, the way a senior consultant would.
+${batch ? 'SLIDES IN THIS PART: ' + n + ' (of a ' + batch.deckSize + '-slide deck)' : 'EXACT NUMBER OF SLIDES: ' + n}
+
+AUDIENCE: do not assume or name an audience, job title or company unless the user states one. Never write "for the VP of ...".
+
+${storyBlock}- Do not write "eyebrow" labels (the design has no label bar above the title).
 - No filler summary slide ("The future of X is now", "In summary", "Key takeaways", "Looking ahead") unless the request asks
   for a summary: every body slide adds new content.
 - At most ONE roadmap / timeline / phased-plan slide in the deck (quarters, phases, quick wins, "building momentum" are all the
   same topic): never a second slide about the phases or the early value of the plan.
+- Follow the ORDER of the topics in the request: when the request lists topics (e.g. "why now, what good looks like, use cases,
+  how we deliver, risks, KPIs, client result"), the body slides cover them in that order, each requested topic on its own slide.
+- "How we deliver" / approach / methodology is a "process" slide with the delivery steps (not a list of services or accelerators).
+- A KPI / measuring-success slide is type "stats" with 3-4 items whose "value" is a number (a target when no source gives one:
+  label starts with "Target:"), never cards without numbers.
+- Never more than ${n >= 30 ? Math.max(2, Math.round(n / 7)) : 2} "cards" slides in the deck: use diagram, process, comparison, table, stats instead.
+- No 66degrees credentials / "why 66degrees" / "trusted partner" / services / accelerators slide unless the request asks for it.
+- A case study names the client in its title (e.g. "AES: AI quality reviews for every call") and in the field "client".
 - When the request asks for a client result, case study, success story or proof, include ONE "case_study" slide built on the
   approved client fact whose work is closest to the topic (data platform, analytics, cost savings...). Never replace it with
   a credentials slide.
@@ -813,7 +838,7 @@ SLIDE TYPES (use exactly these field names)
   text 8-20 words). Use a diagram for capabilities around a platform, parts of a whole, a cycle, levels or building blocks.
 - table: title, columns[] (2-5 plain strings), rows[][] (2-7, plain strings)
 - chart with a table (design 66D_LAYOUT_CHART_003): chart{...} plus columns[] and rows[][] with the same data
-- case_study (one client): title, industry (e.g. "Energy | AI/ML"), challenge (2-3 sentences), solution [3-4 points of 15-25 words], results[{value, label}] (2-3), outcome (1-2 sentences)
+- case_study (one client): title (starts with the client name), client, industry (e.g. "Energy | AI/ML"), challenge (2-3 sentences), solution [3-4 points of 15-25 words], results[{value, label}] (2-3), outcome (1-2 sentences)
 - case_study (several clients): title, cases[{phase, client, offering, industry, challenge, solution, value_headline, value}] (3-6)
   Use approved client facts only; value_headline is the key result (e.g. "$3M+ in annual savings").
 - bullets: title, points[] (3-6, each "Label: explanation"), callout{label, title, text} (callout text 25-45 words)
@@ -870,7 +895,7 @@ ${sources.text ? '\nUSER-PROVIDED SOURCE MATERIAL (secondary):\n' + sources.text
 ${sources.pdfs.length ? '\nA source PDF is attached: use it alongside the research sources.' : ''}
 ${(sources.images || []).length ? '\nA source image is attached: use what it shows (text, numbers, diagrams) as source material.' : ''}
 
-OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [1,2,3], "slides": [ { "type": "cover", ..., "notes": "...", "fact_tags": [] }, ... exactly ${n} slides ] }
+OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [1,2,3], "slides": [ { "type": "${batch ? batch.slides[0].type : 'cover'}", ..., "notes": "...", "fact_tags": [] }, ... exactly ${n} slides ] }
 `;
   const parts = [{ text: prompt }];
   // Pictures of the template designs, so Gemini chooses by seeing them (lorem ipsum shows the layout only)
@@ -903,8 +928,28 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
   dedupeStatValues_(plan.slides);                                                 // the same figure is shown once in a deck
   plan.slides = plan.slides.map(statsNeedNumbers_);                               // "Significant" is not a stat
   plan.slides.forEach(evenHighlights_);                                           // highlights on all cards or none
+  if (batch) {
+    // Long deck part: one slide per outline entry, with the outline's type and title (the agenda already lists them)
+    const got = plan.slides.slice();
+    const norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+    plan.slides = batch.slides.map(function (o, k) {
+      const byTitle = got.filter(function (g) { return g && norm(g.title) === norm(o.title); })[0];
+      const sp = byTitle || got[k] || { type: o.type, title: o.title, items: [] };
+      sp.title = o.title;
+      if (!sp.type) sp.type = o.type;
+      return sp;
+    });
+    limitCardSlides_(plan.slides, n, Math.max(1, Math.round(n / 7)));
+    plan.slides.forEach(function (sp) { nameCaseClient_(sp, ctx); });
+    plan.slides.forEach(function (sp) { if (sp.title && String(sp.type).toLowerCase() !== 'template') sp.title = sentenceCase_(sp.title, 2); });
+    if (!plan.deck_title) plan.deck_title = batch.deckTitle || '';
+    return plan;
+  }
   plan.slides = limitRepeatedTypes_(plan.slides);                                 // statement / bullets at most once
-  replaceDuplicateSlides_(plan, ctx);                                             // no two slides with the same content                  // "24.69%" -> "25%" 
+  replaceDuplicateSlides_(plan, ctx);                                             // no two slides with the same content
+  orderSlidesToRequest_(plan, ctx);                                               // body slides in the order the request lists its topics
+  limitCardSlides_(plan.slides, n);                                               // at most 2 "cards" slides (more in long decks)
+  plan.slides.forEach(function (sp) { nameCaseClient_(sp, ctx); });               // a case study names its client                  // "24.69%" -> "25%" 
   plan.slides.forEach(function (sp) {                                            // brand rule: sentence-case titles
     const tt = String(sp.type).toLowerCase();
     if (sp.title && tt !== 'closing' && tt !== 'template') sp.title = sentenceCase_(sp.title, 2);
@@ -1805,11 +1850,14 @@ function designThumbnailParts_(ctx) {
 function chooseDesignsByContent_(plan, ctx) {
   if (typeof ENGINE === 'undefined' || !ENGINE.variantsFor) return 0;
   let swaps = 0;
-  const used = {}, looksUsed = {};
-  let prevTag = null, prevLook = null;
-  const history = loadDesignUsage_();                                  // designs and looks used in earlier decks (all users)
-  let prevDark = false, darkUsed = 0;
-  const darkMax = plan.slides.length >= 8 ? 2 : 1;                       // dark / photo designs: at most 2 per deck
+  // Long decks are built in batches: the variety state carries over from batch to batch (ctx.chooserState)
+  const st = ctx.chooserState || { used: {}, looksUsed: {}, prevTag: null, prevLook: null, prevDark: false, darkUsed: 0 };
+  const used = st.used, looksUsed = st.looksUsed;
+  let prevTag = st.prevTag, prevLook = st.prevLook;
+  const history = st.history || loadDesignUsage_();                    // designs and looks used in earlier decks (all users)
+  let prevDark = st.prevDark, darkUsed = st.darkUsed;
+  const deckSize = ctx.deckSize || plan.slides.length;
+  const darkMax = deckSize >= 30 ? Math.round(deckSize / 8) : deckSize >= 8 ? 2 : 1;   // dark / photo designs: 2 per deck (more in long decks)
   const FRAME = { cover: 1, agenda: 1, closing: 1 };
   const lookKey = function (type, tag, m) { return FRAME[type] ? type + ':' + tag : (m && m.look) || tag; };
   const trialOf = function (sp, tag) { return Object.assign({}, sp, { reference: Object.assign({}, sp.reference || {}, { tag: tag }) }); };
@@ -1849,10 +1897,12 @@ function chooseDesignsByContent_(plan, ctx) {
       if (d.needs) score += 30;                                       // made for this slide's special content (risks, prices...)
       if (sp.design && String(sp.design).trim() === d.tag) score += 8;   // Gemini's choice (a light preference only)
       // 2. Variety inside the deck: a design once, a look (family of similar designs) once, never twice in a row
-      score -= 70 * (used[d.tag] || 0);
-      score -= 45 * (looksUsed[c.look] || 0);
-      if (d.tag === prevTag) score -= 40;
-      if (c.look === prevLook) score -= 40;
+      // (a design already used in this deck loses more than a design that needs its text rewritten: the fit step
+      //  shortens or fills the text afterwards, so variety wins whenever another design can show the content)
+      score -= 220 * (used[d.tag] || 0);
+      score -= 70 * (looksUsed[c.look] || 0);
+      if (d.tag === prevTag) score -= 60;
+      if (c.look === prevLook) score -= 50;
       // 3. Variety between decks (every user): designs and looks used in the last decks lose, unused ones win
       score += recencyScore_(history, d.tag);
       score += lookRecencyScore_(history, c.look);
@@ -1873,6 +1923,8 @@ function chooseDesignsByContent_(plan, ctx) {
     prevDark = !!(best && best.c.m.dark);
     if (prevDark) darkUsed++;
   });
+  st.prevTag = prevTag; st.prevLook = prevLook; st.prevDark = prevDark; st.darkUsed = darkUsed;
+  if (ctx.chooserState) { st.history = history; return swaps; }          // long deck: saved once, when the deck is finished
   saveDesignUsage_(Object.keys(used), Object.keys(looksUsed));
   return swaps;
 }
@@ -2230,6 +2282,41 @@ function fillerSlide_(sp, isLastBody) {
   return FILLER_TITLE_RE_.test(String(sp.title || '') + ' ' + String(sp.statement || '')) || (isLastBody && t === 'statement');
 }
 
+// Topic family of a slide: two body slides in the same family say the same thing in different words
+const TOPIC_FAMILIES_ = [
+  ['whynow', /\b(why now|why it matters now|rising|expectations?|the (state|future) of|market (shift|trends?)|trends? (in|shaping)|is changing|landscape)\b/i],
+  ['value', /\b(benefits?|value of|business value|why (gemini|ai)|shift(ing)? from|from reactive|without .{2,30} with|before and after|old way|new way)\b/i],
+  ['usecases', /\b(use cases?|applications? (of|for)|where .{2,30} (helps|delivers|adds value)|capabilities (across|for|in)|enhances .{2,40}(operations|service)|touchpoints|ways? .{2,20} helps?)\b/i],
+  ['services', /\b(end-to-end|lifecycle|our (services|offerings|capabilities)|how we (help|support)|support across|comprehensive support|accelerators?|purpose-built tools|offerings?)\b/i],
+  ['riskgov', /\b(risks?|governance|responsible ai|guardrails?|compliance|ethic(s|al)|safe(ty)?|trust(worthy)? ai)\b/i],
+  ['kpi', /\b(kpis?|measur(e|ing) (success|impact)|metrics?|tracking (success|progress)|success measures?|scorecard)\b/i],
+  ['credentials', /\b(trusted (partner|guide)|why 66degrees|why us|partner (of choice|for)|our expertise|credentials|who we are|about 66degrees)\b/i],
+  ['roadmap', /\b(roadmap|phased|phases|quarters?|journey to|path to|quick wins?|early value|building momentum)\b/i]
+];
+function topicFamily_(sp) {
+  const t = String(sp.title || '') + ' ' + String(sp.statement || '');
+  for (let k = 0; k < TOPIC_FAMILIES_.length; k++) if (TOPIC_FAMILIES_[k][1].test(t)) return TOPIC_FAMILIES_[k][0];
+  return null;
+}
+// How much a slide shows (the richer slide of a repeated topic is kept)
+const TYPE_RICHNESS_ = { case_study: 9, stats: 8, chart: 8, comparison: 7, process: 6, timeline: 6, diagram: 6, table: 5, team: 5, cards: 4, bullets: 3, statement: 2, quote: 2 };
+// Word stems (first 5 letters) of a slide's item headings: "assist" and "assistance" are the same idea
+function headingStems_(sp) {
+  const set = {};
+  const add = function (t) { (String(t || '').toLowerCase().match(/[a-z]{4,}/g) || []).forEach(function (w) { set[w.slice(0, 5)] = true; }); };
+  (sp.items || sp.steps || sp.layers || []).forEach(function (it) { if (it && typeof it === 'object') add(it.title || it.label); else add(it); });
+  (sp.points || []).forEach(function (p) { add(typeof p === 'string' ? String(p).split(':')[0] : (p && p.title)); });
+  return set;
+}
+// Topics the request lists ("…: why now, what good looks like, use cases, how we deliver, risks, KPIs, and a client result")
+function requestedTopics_(prompt) {
+  const p = String(prompt || '');
+  const i = p.indexOf(':');
+  const tail = i !== -1 ? p.slice(i + 1) : (p.match(/\b(?:cover|covering|include|including|about)\b(.+)$/i) || [])[1] || '';
+  return tail.split(/,|;|\band\b|\n/i).map(function (x) { return x.replace(/^\s*(a|an|the)\s+/i, '').replace(/[.]+$/, '').trim(); })
+    .filter(function (x) { return x && x.split(/\s+/).length <= 8 && x.length >= 3; }).slice(0, 14);
+}
+
 // Request asks for client proof
 const CASE_REQUEST_RE_ = /case stud|client (result|story|stories|example|success|proof|win)|customer (story|stories|success|example|result)|success stor|proof points?|reference (client|customer)|relevant client|similar client/i;
 
@@ -2240,6 +2327,80 @@ function caseStudyFacts_(ctx) {
     .map(function (f) { return f.statement + ' [' + f.tag + ']'; });
   if (facts.length) return facts.slice(0, 20);
   return (ctx.approvedFacts || []).filter(function (f) { return /client|customer|saved|reduc|faster|\$\d|%/i.test(f); }).slice(0, 20);
+}
+
+// The body slides follow the order of the topics the request lists (one small Gemini call; skipped when the request
+// lists no topics). Cover, agenda and closing keep their places.
+function orderSlidesToRequest_(plan, ctx) {
+  const topics = requestedTopics_(ctx.userPrompt);
+  if (topics.length < 3 || !ctx.apiKey) return;
+  const fixed = { cover: 1, agenda: 1, closing: 1 };
+  const bodyIdx = plan.slides.map(function (sp, i) { return fixed[String(sp.type || '').toLowerCase()] ? -1 : i; }).filter(function (i) { return i !== -1; });
+  if (bodyIdx.length < 3) return;
+  try {
+    const prompt = [
+      'The request lists these topics in this order: ' + topics.map(function (t, k) { return (k + 1) + '. ' + t; }).join('  '),
+      'These are the body slides of the presentation (id: title):',
+      bodyIdx.map(function (i) { return i + ': ' + slideHeading_(plan.slides[i]); }).join('\n'),
+      'Put the slides in the order that follows the request: the slides for topic 1 first, then topic 2, and so on. Slides that',
+      'match no topic go next to the topic they support. Return every id exactly once.',
+      'Return ONLY JSON: {"order":[id, ...]}'
+    ].join('\n');
+    const out = callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.1);
+    const order = ((out && out.order) || []).map(Number);
+    const ok = order.length === bodyIdx.length && bodyIdx.every(function (i) { return order.indexOf(i) !== -1; });
+    if (!ok) return;
+    const body = order.map(function (i) { return plan.slides[i]; });
+    let k = 0;
+    plan.slides = plan.slides.map(function (sp, i) { return bodyIdx.indexOf(i) !== -1 ? body[k++] : sp; });
+  } catch (e) {
+    ctx.log.push('Slide order check skipped: ' + e.message);
+  }
+}
+
+// At most 2 "cards" slides (one per 7 slides in long decks): the others become a diagram, a two-column table or bullets,
+// so the deck is not a run of card grids. Cards with special content (teams, OKRs, bullet points per card) stay.
+function limitCardSlides_(slides, n, maxOverride) {
+  const max = maxOverride != null ? maxOverride : (n >= 30 ? Math.max(2, Math.round(n / 7)) : 2);
+  let cards = 0, k = 0, hasBullets = slides.some(function (sp) { return String(sp.type || '').toLowerCase() === 'bullets'; });
+  slides.forEach(function (sp, i) {
+    if (String(sp.type || '').toLowerCase() !== 'cards') return;
+    const items = Array.isArray(sp.items) ? sp.items.filter(Boolean) : [];
+    const special = sp.teams || sp.org || sp.tabs || sp.epics || items.some(function (it) { return it && (it.points || it.label || it.challenge); });
+    if (special || ++cards <= max || items.length < 3) return;
+    const base = { title: sp.title, lead: sp.lead || '', notes: sp.notes, fact_tags: sp.fact_tags || [], reference: null };
+    const pick = (k++) % 3;
+    if (pick === 2 && !hasBullets && items.length <= 6) {
+      hasBullets = true;
+      slides[i] = Object.assign(base, { type: 'bullets', points: items.map(function (it) { return (it.title ? it.title + ': ' : '') + (it.text || ''); }) });
+    } else if (pick === 1 || items.length > 6) {
+      slides[i] = Object.assign(base, { type: 'table', columns: ['Topic', 'What it means'], rows: items.map(function (it) { return [it.title || '', it.text || '']; }) });
+    } else {
+      const words = String(sp.title || '').replace(/[^A-Za-z0-9&' -]/g, ' ').split(/\s+/).filter(function (w) { return w.length > 3; });
+      slides[i] = Object.assign(base, { type: 'diagram', center: words.slice(-2).join(' ') || 'Overview',
+        items: items.map(function (it) { return { title: it.title || '', text: it.text || '', icon: it.icon, material: it.material }; }) });
+    }
+  });
+}
+
+// A case study names its client: from the "client" field or from the approved fact it used (fact_tags)
+function nameCaseClient_(sp, ctx) {
+  if (String((sp && sp.type) || '').toLowerCase() !== 'case_study' || Array.isArray(sp.cases)) return;
+  let client = String(sp.client || '').trim();
+  if (!client && ctx.lib && Array.isArray(sp.fact_tags)) {
+    (ctx.lib.companyFacts || []).forEach(function (f) {
+      if (client || sp.fact_tags.indexOf(f.tag) === -1) return;
+      const m = String(f.name || '').match(/client impact\s*[—-]\s*(.+)$/i) || String(f.statement || '').match(/^Client:\s*([^(.]+)/i);
+      if (m) client = m[1].trim();
+    });
+  }
+  if (!client || /^(a|an|the)\s/i.test(client)) return;
+  sp.client = client;
+  const title = String(sp.title || '');
+  if (title.toLowerCase().indexOf(client.toLowerCase()) !== -1) return;
+  const rest = title.replace(/^(client success|case study|success story|client result|customer story)\s*[:\-–—]\s*/i, '');
+  const t = client + ': ' + rest.charAt(0).toLowerCase() + rest.slice(1);
+  sp.title = ENGINE.titleFits(t) ? t : client + ': ' + rest.split(/\s+/).slice(0, 5).join(' ').toLowerCase();
 }
 
 function limitRepeatedTypes_(slides) {
@@ -2307,6 +2468,44 @@ function replaceDuplicateSlides_(plan, ctx) {
   });
   // Topics repeated in other words, or one topic split over several slides: Gemini lists them, they get new topics
   topicRepeats_(plan, ctx).forEach(function (i) { if (dupIdx.indexOf(i) === -1) dupIdx.push(i); });
+  // The same topic in other words (checked in code): slides of one topic family, or slides whose item headings share most
+  // word stems ("Agent assist / Self-service" twice). The richer slide is kept, the others get new topics.
+  const families = {};
+  plan.slides.forEach(function (sp, i) {
+    const t = String(sp.type || '').toLowerCase();
+    if (skip[t] || t === 'case_study' || dupIdx.indexOf(i) !== -1) return;
+    const f = topicFamily_(sp);
+    if (f && f !== 'roadmap') (families[f] = families[f] || []).push(i);
+  });
+  Object.keys(families).forEach(function (f) {
+    const list = families[f];
+    if (list.length < 2) return;
+    const keep = list.slice().sort(function (a, b) {
+      return (TYPE_RICHNESS_[String(plan.slides[b].type).toLowerCase()] || 0) - (TYPE_RICHNESS_[String(plan.slides[a].type).toLowerCase()] || 0) || a - b;
+    })[0];
+    list.forEach(function (i) { if (i !== keep && dupIdx.indexOf(i) === -1) dupIdx.push(i); });
+  });
+  const stems = plan.slides.map(function (sp) { return skip[String(sp.type || '').toLowerCase()] ? null : headingStems_(sp); });
+  for (let i = 0; i < plan.slides.length; i++) {
+    if (!stems[i] || Object.keys(stems[i]).length < 4 || dupIdx.indexOf(i) !== -1) continue;
+    for (let j = 0; j < i; j++) {
+      if (!stems[j] || dupIdx.indexOf(j) !== -1 || Object.keys(stems[j]).length < 4) continue;
+      if (/case_study/i.test(String(plan.slides[i].type)) || /case_study/i.test(String(plan.slides[j].type))) continue;
+      if (overlap_(stems[i], stems[j]) >= 0.45) {
+        const ri = TYPE_RICHNESS_[String(plan.slides[i].type).toLowerCase()] || 0, rj = TYPE_RICHNESS_[String(plan.slides[j].type).toLowerCase()] || 0;
+        const drop = ri > rj ? j : i;
+        if (dupIdx.indexOf(drop) === -1) dupIdx.push(drop);
+        break;
+      }
+    }
+  }
+  // 66degrees credentials / services / accelerators only when the request asks for them
+  if (!/66degrees|why us|about us|credential|our (team|experience|services|offerings)|accelerator|partner/i.test(String(ctx.userPrompt || ''))) {
+    plan.slides.forEach(function (sp, i) {
+      const f = topicFamily_(sp);
+      if ((f === 'credentials' || f === 'services') && dupIdx.indexOf(i) === -1) dupIdx.push(i);
+    });
+  }
   // One roadmap per deck: a second slide about the phases / quarters / early value is a repeat (checked in code)
   let roadmapSeen = false;
   plan.slides.forEach(function (sp, i) {
@@ -2354,16 +2553,20 @@ function replaceDuplicateSlides_(plan, ctx) {
       titles.map(function (t, k) { return (k + 1) + '. ' + t; }).join('\n'),
       '',
       'Write ' + dupIdx.length + ' NEW body slide(s) on topics the deck does not cover yet, in the same JSON slide format.',
+      requestedTopics_(ctx.userPrompt).length ? 'The request asks for these topics, in this order: ' + requestedTopics_(ctx.userPrompt).join('; ') +
+        '. FIRST write a slide for every requested topic that no slide above covers yet (e.g. "how we deliver" = a process slide with ' +
+        'the delivery steps; "KPIs" = a stats slide with target numbers, labels starting "Target:").' : '',
       needCase ? 'The FIRST new slide MUST be a case study (type "case_study", one client) built ONLY on the approved client result below\n' +
         'whose work is closest to the request (the same kind of work: data platform, analytics, cost savings...). Fields: title (names the\n' +
         'client), industry, challenge (2-3 sentences), solution [3-4 points of 15-25 words], results[{value, label}] (2-3, numbers copied\n' +
         'exactly from the fact), outcome (1-2 sentences). Put the fact ID in fact_tags.\nAPPROVED CLIENT RESULTS:\n' +
         caseFacts.map(function (f) { return '- ' + f; }).join('\n') : '',
-      'Allowed types' + (needCase ? ' for the other slides' : '') + ': cards (title, lead, items[{title, text}] 3-4 items, 20-35 words each),',
-      'process (title, lead, items[{title, text}] 3-5), diagram (title, lead, center, items[{title, text}] 4-6, 8-20 words each)' +
+      'Allowed types' + (needCase ? ' for the other slides' : '') + ': process (title, lead, items[{title, text}] 3-5),',
+      'stats (title, items[{value, label, text}] 3-4), comparison (title, left{label, points[]}, right{label, points[]}),',
+      'diagram (title, lead, center, items[{title, text}] 4-6, 8-20 words each), cards (only if nothing else fits: title, lead, items[{title, text}] 3-4)' +
         (keepsRoadmap ? '.' : ', timeline (title, items[{label, title, text}] 3-5).'),
       'Each new slide takes a different angle that the request supports (how it works, risks and how to manage them, what changes',
-      'for each team, decisions to make, governance). ' + (keepsRoadmap ? 'The deck already has its roadmap: never write another roadmap, phases, ' +
+      'for each team, decisions to make). No 66degrees credentials, services or accelerators slide. ' + (keepsRoadmap ? 'The deck already has its roadmap: never write another roadmap, phases, ' +
         'quarters, timeline, quick wins or "early value" slide. ' : '') + 'No summary or "future of" slide.',
       'Sentence-case titles, max 58 characters. No invented numbers, clients or quotes.',
       'Return ONLY JSON: {"slides":[...]}'
@@ -2513,13 +2716,262 @@ function getGeneratorBootstrap() {
     presentationTypes: PRESENTATION_TYPES.slice(),
     departments: DEPARTMENTS.slice(),
     minSlides: 3,
-    maxSlides: 20,
+    maxSlides: MAX_SLIDES_,
     hasVertexConfig: isVertexConfigured_()
   };
 }
 
 function runDeckGeneration(data) {
   return generatePresentation(data);
+}
+
+/* =========================
+   LONG RUNS (V.1_27+): up to 200 slides
+   One Apps Script run stops after 6 minutes, so a long deck (more than 20 slides) or a large rebrand is built in parts.
+   Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
+   calls continueDeckGeneration(runId) for the next part, until the deck is finished.
+========================= */
+const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
+const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
+const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
+const REBRAND_CHUNK_ = 10;          // slides rebranded together
+const RUN_BUDGET_MS_ = 270000;      // stop starting new parts after ~4.5 minutes
+
+function continueDeckGeneration(runId) {
+  const t0 = Date.now();
+  runId = String(runId || '').slice(0, 60);
+  const st = loadRunState_(runId);
+  if (!st) throw new Error('This run is no longer available (it finished, was cancelled or expired). Please start again.');
+  const ctx = { runId: runId, progress: null, blobCache: {}, generatedIcons: 0, log: st.log || [] };
+  try {
+    loadRunContext_(ctx);
+    checkCancel_(ctx);
+    const target = SlidesApp.getActivePresentation();
+    const res = st.mode === 'rebrand' ? rebrandStep_(ctx, target, st, t0) : longDeckStep_(ctx, target, st, t0);
+    if (res && typeof res === 'object') res.elapsedMs = Date.now() - (st.startedAt || t0);
+    return res;
+  } catch (e) {
+    deleteRunState_(runId);
+    if (e && e.cancelled) {
+      return generationResult_('CANCELLED: Stopped at your request. ' + (st.mode === 'rebrand'
+        ? 'Slides that were already processed keep their new styling.' : 'The slides already added stay in your deck.'), null, 0);
+    }
+    throw e;
+  }
+}
+
+// Run state: small states in the user's properties, large ones (long decks with sources) in a Drive file that is
+// deleted when the run ends
+function saveRunState_(runId, st) {
+  try { if (CacheService.getUserCache().get('cancel_' + runId)) { deleteRunState_(runId); return; } } catch (e) {}
+  const json = JSON.stringify(st);
+  const props = PropertiesService.getUserProperties();
+  const key = 'RUNSTATE_' + runId;
+  const old = props.getProperty(key);
+  if (json.length < 8000) {
+    if (old && /^file:/.test(old)) { try { DriveApp.getFileById(old.slice(5)).setTrashed(true); } catch (e) {} }
+    props.setProperty(key, json);
+    return;
+  }
+  let file = null;
+  if (old && /^file:/.test(old)) { try { file = DriveApp.getFileById(old.slice(5)); file.setContent(json); } catch (e) { file = null; } }
+  if (!file) {
+    file = DriveApp.createFile('66deck-run-' + runId + '.json', json, 'application/json');
+    props.setProperty(key, 'file:' + file.getId());
+  }
+}
+function loadRunState_(runId) {
+  const raw = PropertiesService.getUserProperties().getProperty('RUNSTATE_' + runId);
+  if (!raw) return null;
+  try {
+    if (/^file:/.test(raw)) return JSON.parse(DriveApp.getFileById(raw.slice(5)).getBlob().getDataAsString());
+    return JSON.parse(raw);
+  } catch (e) { return null; }
+}
+function deleteRunState_(runId) {
+  const props = PropertiesService.getUserProperties();
+  const raw = props.getProperty('RUNSTATE_' + runId);
+  if (raw && /^file:/.test(raw)) { try { DriveApp.getFileById(raw.slice(5)).setTrashed(true); } catch (e) {} }
+  try { props.deleteProperty('RUNSTATE_' + runId); } catch (e) {}
+}
+
+function continueResult_(st, done, total, what) {
+  return { ok: true, continue: true, runId: st.runId, done: done, total: total, slideCount: done,
+    message: done + ' of ' + total + ' slides ' + what + ' — continuing' };
+}
+
+/* ---------- Long Create decks ---------- */
+
+// The outline of a long deck: sections with one line per slide (type, title, what it covers). Fixed before any slide is
+// written, so every slide has its own topic and the agenda is right from the start.
+function planOutline_(userPrompt, presentationType, n, sources, ctx) {
+  const body = n - 3;                                   // cover, agenda and closing are added by the code
+  const sections = Math.max(3, Math.min(12, Math.round(body / 12)));
+  const topics = requestedTopics_(userPrompt);
+  const facts = libraryFacts(ctx.lib, [userPrompt, presentationType, String(sources.text || '').slice(0, 4000)].join(' '), 30);
+  const caseFacts = caseStudyFacts_(ctx);
+  const prompt = [
+    'You are the senior presentation strategist for ' + ctx.brand.name + '. Plan the OUTLINE of a long presentation.',
+    'REQUEST: "' + (userPrompt || 'Build the presentation from the attached source material.') + '"',
+    'PRESENTATION TYPE: ' + presentationType + '   DEPARTMENT: ' + (ctx.department || 'Other'),
+    'BODY SLIDES: exactly ' + body + ' (the code adds the cover, the agenda and the closing), grouped into ' + sections + ' sections.',
+    topics.length ? 'The request lists these topics in this order - the sections follow this order: ' + topics.join('; ') + '.' : '',
+    'RULES:',
+    '- Every slide has its own topic: never two slides about the same thing in different words, never one topic split into "part 1/part 2".',
+    '- Slide types: cards, process, timeline, stats, chart, comparison, diagram, table, case_study, bullets, statement, team.',
+    '  Mix them like a designed deck: at most ' + Math.max(2, Math.round(n / 7)) + ' "cards" slides in total, at most ' + Math.max(1, Math.round(n / 15)) +
+    ' "statement" slides, never the same type three times in a row. Use process for how things are done, diagram for parts of a whole,',
+    '  comparison for before/after, stats only when real numbers exist (or targets for KPIs), timeline only for the one roadmap.',
+    '- At most ONE roadmap / phased-plan slide. No filler summary slides ("the future of...", "in summary").',
+    '- No 66degrees credentials / services / accelerators slides unless the request asks for them.',
+    '- case_study slides only for these approved client results, one slide per client, only when relevant to the request:',
+    caseFacts.length ? caseFacts.map(function (f) { return '  - ' + f; }).join('\n') : '  (none available: no case_study slides)',
+    '- Titles: the key message in sentence case, max 58 characters, all different. "brief": one line on what the slide covers.',
+    '- Section titles: 2-6 words, sentence case.',
+    facts.usable.length ? 'APPROVED FACTS (the only claims about ' + ctx.brand.name + '):\n' + facts.usable.map(function (f) { return '- ' + f; }).join('\n') : '',
+    sources.research && sources.research.length ? formatSciteForPrompt(sources.research, sources.researchProvider) : '',
+    sources.text ? 'USER SOURCE MATERIAL:\n' + String(sources.text).slice(0, 12000) : '',
+    'Return ONLY JSON: {"deck_title":"","subtitle":"","closing_subtitle":"","sections":[{"title":"","slides":[{"type":"","title":"","brief":""}]}]}'
+  ].filter(Boolean).join('\n');
+  const parts = [{ text: prompt }];
+  (sources.pdfs || []).forEach(function (b64) { parts.push({ inline_data: { mime_type: 'application/pdf', data: b64 } }); });
+  (sources.images || []).forEach(function (im) { parts.push({ inline_data: { mime_type: im.mime, data: im.data } }); });
+  const out = callGeminiJSON(parts, ctx.apiKey, 0.6);
+  const allowed = { cards: 1, process: 1, timeline: 1, stats: 1, chart: 1, comparison: 1, diagram: 1, table: 1, case_study: 1, bullets: 1, statement: 1, team: 1 };
+  const seen = {};
+  const secs = [];
+  const slides = [];
+  ((out && out.sections) || []).forEach(function (sec) {
+    const list = [];
+    ((sec && sec.slides) || []).forEach(function (o) {
+      if (!o || !o.title || slides.length >= body) return;
+      const key = String(o.title).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (seen[key]) return;
+      seen[key] = true;
+      const t = String(o.type || '').toLowerCase();
+      const sl = { type: allowed[t] ? t : 'cards', title: sentenceCase_(String(o.title).slice(0, 80), 2), brief: String(o.brief || '').slice(0, 200) };
+      if (sl.type === 'team' && !/\b[A-Z][a-z]+ [A-Z][a-z]+/.test(String(userPrompt || '') + ' ' + String(sources.text || ''))) sl.type = 'cards';
+      list.push(sl);
+      slides.push(sl);
+    });
+    if (list.length) secs.push({ title: sentenceCase_(String(sec.title || 'Section ' + (secs.length + 1)), 2), count: list.length });
+  });
+  if (!slides.length) throw new Error('Gemini returned no outline for the long deck.');
+  if (slides.length < body) ctx.log.push('The outline has ' + slides.length + ' body slides (asked for ' + body + ').');
+  const agendaItems = slides.length <= 16
+    ? slides.map(function (o) { return { title: o.title, text: '' }; })
+    : secs.slice(0, 16).map(function (sc) { return { title: sc.title, text: sc.count + ' slides' }; });
+  return { deck_title: out.deck_title || slides[0].title, subtitle: out.subtitle || '', closing_subtitle: out.closing_subtitle || '',
+    sections: secs, slides: slides, agendaItems: agendaItems };
+}
+
+function startLongDeck_(ctx, target, p, started) {
+  progressStage_(ctx, 'write', 'active', 'Gemini is planning the outline of ' + p.n + ' slides');
+  const outline = planOutline_(p.userPrompt, p.presentationType, p.n, p.sources, ctx);
+  const st = {
+    mode: 'create-long', runId: ctx.runId, startedAt: started, userPrompt: p.userPrompt, presentationType: p.presentationType,
+    department: p.department, n: p.n, sources: p.sources, outline: outline, next: 0, drawn: 0, phase: 'body', avgBatchMs: 0,
+    chooser: { used: {}, looksUsed: {}, prevTag: null, prevLook: null, prevDark: false, darkUsed: 0 }, log: ctx.log
+  };
+  if (JSON.stringify(st).length > 40 * 1024 * 1024) { st.sources.pdfs = []; ctx.log.push('Uploaded PDFs were used for the outline only (too large to keep between runs).'); }
+  // Cover and agenda first (the agenda lists the slide titles, or the sections in a very long deck)
+  prepareLongCtx_(ctx, st);
+  const head = [
+    { type: 'cover', title: outline.deck_title, subtitle: outline.subtitle },
+    { type: 'agenda', title: 'Agenda', items: outline.agendaItems }
+  ];
+  const headPlan = { slides: head };
+  selectReferences(headPlan, ctx);
+  chooseDesignsByContent_(headPlan, ctx);
+  drawSlidesIntoActive_(target, head, ctx, p.blankDeck);
+  st.drawn = 2;
+  saveRunState_(st.runId, st);
+  return longDeckStep_(ctx, target, st, started);
+}
+
+function prepareLongCtx_(ctx, st) {
+  ctx.userPrompt = st.userPrompt;
+  ctx.presentationType = st.presentationType;
+  ctx.department = st.department;
+  ctx.deckSize = st.n;
+  ctx.chooserState = st.chooser;
+  if (ctx.lib) ctx.lib = applyDepartmentFilter_(ctx.lib, st.department);
+}
+
+function longDeckStep_(ctx, target, st, t0) {
+  prepareLongCtx_(ctx, st);
+  const all = st.outline.slides;
+  let parts = 0;
+  while (st.next < all.length) {
+    const est = st.avgBatchMs || 150000;
+    if (parts > 0 && Date.now() - t0 + est > RUN_BUDGET_MS_) break;
+    checkCancel_(ctx);
+    const b0 = Date.now();
+    const part = all.slice(st.next, st.next + LONG_BATCH_);
+    const others = all.filter(function (o, i) { return i < st.next || i >= st.next + part.length; }).map(function (o) { return o.title; });
+    const plan = planContent(st.userPrompt, st.presentationType, part.length, st.sources, ctx,
+      { batch: { slides: part, deckSize: st.n, deckTitle: st.outline.deck_title, otherTitles: others } });
+    selectReferences(plan, ctx);
+    chooseDesignsByContent_(plan, ctx);
+    fitContentToDesigns_(plan, ctx, b0);
+    finalizeNotes_(plan, st.sources);
+    drawSlidesIntoActive_(target, plan.slides, ctx, false);
+    st.next += part.length;
+    st.drawn += plan.slides.length;
+    const ms = Date.now() - b0;
+    st.avgBatchMs = st.avgBatchMs ? Math.round(st.avgBatchMs * 0.5 + ms * 0.5) : ms;
+    parts++;
+    st.log = ctx.log.slice(-40);
+    saveRunState_(st.runId, st);
+  }
+  if (st.next < all.length) return continueResult_(st, st.drawn, st.n, 'added');
+  // Closing: the template Thank-you slide (strict rule)
+  checkCancel_(ctx);
+  ctx.noCancel = true;
+  drawSlidesIntoActive_(target, [{ type: 'closing', title: 'Thank You!', subtitle: st.outline.closing_subtitle || st.outline.deck_title || '' }], ctx, false);
+  st.drawn++;
+  saveDesignUsage_(Object.keys(st.chooser.used || {}), Object.keys(st.chooser.looksUsed || {}));
+  deleteRunState_(st.runId);
+  const secs = Math.round((Date.now() - (st.startedAt || t0)) / 1000);
+  let msg = 'SUCCESS: ' + st.drawn + ' branded slides added to this presentation (' + secs + 's, built in parts).';
+  if (ctx.log.length) msg += '\n' + ctx.log.slice(-20).join('\n');
+  Logger.log(msg);
+  return generationResult_(msg, target, st.drawn);
+}
+
+/* ---------- Rebrand in parts ---------- */
+function rebrandStep_(ctx, target, st, t0) {
+  const presId = target.getId();
+  const total = Math.min(target.getSlides().length, MAX_SLIDES_);
+  if (target.getSlides().length > MAX_SLIDES_) ctx.log.push('Only the first ' + MAX_SLIDES_ + ' slides were rebranded.');
+  const sum = st.stats || { slides: 0, fonts: 0, colors: 0, icons: 0, removed: 0, redrawn: 0, normalized: 0, failed: 0, libraryIcons: 0, issues: 0 };
+  let parts = 0;
+  // Without a run id (menu callers) the whole deck is done in one run, as before
+  const chunk = st.runId ? REBRAND_CHUNK_ : total;
+  while (st.start < total) {
+    if (parts > 0 && Date.now() - t0 + (st.avgMs || 100000) > RUN_BUDGET_MS_) break;
+    checkCancel_(ctx);
+    const p0 = Date.now();
+    const end = Math.min(total, st.start + chunk);
+    const stats = rebrandPresentation(presId, ctx, { specs: null, start: st.start, end: end });
+    Object.keys(sum).forEach(function (k) { sum[k] += Number(stats[k] || 0); });
+    st.start = end;
+    const ms = Date.now() - p0;
+    st.avgMs = st.avgMs ? Math.round(st.avgMs * 0.5 + ms * 0.5) : ms;
+    parts++;
+  }
+  st.stats = sum;
+  st.log = ctx.log.slice(-40);
+  if (st.start < total) {
+    saveRunState_(st.runId, st);
+    return continueResult_(st, st.start, total, 'rebranded');
+  }
+  if (st.runId) deleteRunState_(st.runId);
+  let rmsg = 'SUCCESS: Rebranded ' + sum.slides + ' slides with the 66degrees brand. ' + summarizeStats(sum);
+  if (ctx.log.length) rmsg += '\n' + ctx.log.join('\n');
+  progressFinish_(ctx, 'done', sum.slides + ' slides rebranded');
+  Logger.log(rmsg);
+  return generationResult_(rmsg, target, sum.slides);
 }
 
 function getPipelineStages() {
@@ -2530,7 +2982,7 @@ function clampSlideCount_(n) {
   if (n == null || n === '') n = 8;
   n = Number(n);
   if (!isFinite(n) || isNaN(n)) n = 8;
-  return Math.max(3, Math.min(20, Math.round(n)));
+  return Math.max(3, Math.min(MAX_SLIDES_, Math.round(n)));
 }
 
 function normalizePresentationType_(raw) {

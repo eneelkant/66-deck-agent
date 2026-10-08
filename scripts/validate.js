@@ -404,10 +404,10 @@ function assertSamePresentation() {
   } else {
     ok("Generator.html has presentation type and department controls");
   }
-  if (!/min="3"/.test(html) || !/max="20"/.test(html) || /max="100"/.test(html)) {
-    fail("Generator.html slide count must be 3–20");
+  if (!/min="3"/.test(html) || !/max="200"/.test(html)) {
+    fail("Generator.html slide count must be 3–200");
   } else {
-    ok("Generator.html slide count is 3–20");
+    ok("Generator.html slide count is 3–200");
   }
   if (!/data\.presentationType/.test(code) || !/data\.department/.test(code) || !/data\.slideCount/.test(code)) {
     fail("Code.gs must read presentationType, department, and slideCount from generator data");
