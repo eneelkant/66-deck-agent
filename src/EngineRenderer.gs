@@ -160,11 +160,24 @@ function applyTextStyleSafe_(textRange, fn) {
 
 function overlayTextIfNeeded_(slide, shape, e, box) {
   if (!e || e.text == null || e.text === '') return;
-  if (hasTextFrame_(shape)) {
-    writeTextSafe_(shape, e.text);
-    return;
+  let target = shape;
+  if (hasTextFrame_(shape)) writeTextSafe_(shape, e.text);
+  else target = insertTextBoxSafe_(slide, e.text, box.x, box.y, box.w, box.h);
+  // Text inside diagram boxes (flowcharts): brand font, size, colour and centring
+  if (e.textStyle && target) {
+    const st = e.textStyle, scale = e.w > 0 ? box.w / e.w : 1;
+    try {
+      const tr = target.getText();
+      applyTextStyleSafe_(tr, function (ts) {
+        ts.setFontFamily(st.font || 'Plus Jakarta Sans');
+        ts.setFontSize(Math.max(6, (st.size || 11) * scale));
+        ts.setForegroundColor(st.color || '#040A1B');
+        ts.setBold(false);
+      });
+      tr.getParagraphStyle().setParagraphAlignment(st.align === 'left' ? SlidesApp.ParagraphAlignment.START : SlidesApp.ParagraphAlignment.CENTER);
+      if (typeof target.setContentAlignment === 'function') target.setContentAlignment(SlidesApp.ContentAlignment.MIDDLE);
+    } catch (err) {}
   }
-  insertTextBoxSafe_(slide, e.text, box.x, box.y, box.w, box.h);
 }
 
 function layoutDiagramPositions(diagram, area) {
@@ -270,6 +283,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
         const ln = slide.insertLine(SlidesApp.LineCategory.STRAIGHT, x1, y1, x2 === x1 && y2 === y1 ? x2 + MIN_SIZE_ : x2, y2);
         ln.setWeight(Math.max(0.5, finiteNumber_(e.width, 1) * s));
         ln.getLineFill().setSolidFill(e.color);
+        if (e.arrow) { try { ln.setEndArrow(SlidesApp.ArrowStyle.FILL_ARROW); } catch (err) {} }   // flowchart connectors
       } else if (e.t === 'image') {
         const id = engineAssetId(e.asset, ctx);
         if (id) {

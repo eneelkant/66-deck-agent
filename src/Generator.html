@@ -187,7 +187,7 @@
       /* ---------- Mode switch ---------- */
       .modes {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr 1fr 1fr;
         gap: 4px;
         padding: 4px;
         margin-bottom: 18px;
@@ -198,7 +198,8 @@
       .modes button {
         border: 0;
         border-radius: 9px;
-        padding: 9px 10px;
+        padding: 9px 8px;
+        min-width: 0;
         background: transparent;
         font: inherit;
         text-align: left;
@@ -218,6 +219,9 @@
         margin-top: 1px;
         font-size: 10.5px;
         line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .modes button.active {
@@ -260,9 +264,112 @@
         color: var(--ink);
       }
 
-      body.is-rebrand [data-only="create"],
-      body:not(.is-rebrand) [data-only="rebrand"] {
+      /* Each mode shows only its own inputs */
+      body:not(.mode-create) [data-only="create"],
+      body:not(.mode-rebrand) [data-only="rebrand"],
+      body:not(.mode-flowchart) [data-only="flowchart"] {
         display: none !important;
+      }
+
+      /* ---------- Flowchart ---------- */
+      .flow-info {
+        margin-bottom: 16px;
+        padding: 12px 14px;
+        border-left: 3px solid var(--blue);
+        border-radius: var(--radius);
+        background: var(--panel);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .flow-info strong {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 13px;
+        color: var(--ink);
+      }
+
+      .or {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: -4px 0 12px;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+
+      .or::before,
+      .or::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--line-soft);
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .chips button {
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--white);
+        font: inherit;
+        font-size: 11.5px;
+        color: var(--body);
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+      }
+
+      .chips button:hover {
+        border-color: var(--blue);
+      }
+
+      .chips button.active {
+        background: var(--blue-50);
+        border-color: var(--blue);
+        color: var(--blue);
+        font-weight: 600;
+      }
+
+      .seg {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        padding: 3px;
+        border-radius: 10px;
+        background: var(--panel);
+      }
+
+      .seg button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 7px 8px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        font: inherit;
+        font-size: 11.5px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .seg button.active {
+        background: var(--white);
+        color: var(--blue);
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(4, 10, 27, 0.08), 0 0 0 1px var(--line-soft);
+      }
+
+      .seg svg {
+        flex: none;
       }
 
       .field {
@@ -914,11 +1021,15 @@
         <div class="modes" id="modeGroup" role="tablist">
           <button type="button" class="active" data-mode="Create" role="tab">
             <strong>Create</strong>
-            <small>New deck from a topic</small>
+            <small>New deck</small>
           </button>
           <button type="button" data-mode="Rebrand" role="tab">
             <strong>Rebrand</strong>
-            <small>Restyle an existing deck</small>
+            <small>Restyle deck</small>
+          </button>
+          <button type="button" data-mode="Flowchart" role="tab">
+            <strong>Flowchart</strong>
+            <small>Diagram slide</small>
           </button>
         </div>
 
@@ -926,6 +1037,54 @@
         <div class="rebrand-info" data-only="rebrand">
           <strong>Rebrand this presentation</strong>
           The slides in this presentation will be restyled to the 66degrees template: colors, fonts, logo and footer are applied automatically. No content is added or removed.
+        </div>
+
+        <!-- Flowchart: one editable, on-brand diagram slide from a description or a sketch / diagram file -->
+        <div data-only="flowchart">
+          <div class="flow-info">
+            <strong>Build a flowchart slide</strong>
+            Describe the steps, or upload a sketch, screenshot or diagram file. You get one editable slide in the 66degrees style.
+          </div>
+
+          <div class="field" id="flowField">
+            <label for="flowText">Describe the flow</label>
+            <textarea id="flowText" placeholder="e.g. Customer submits a ticket → Gemini triages it → if urgent, route to an agent, otherwise send an automated reply → close the ticket"></textarea>
+            <div class="err" id="flowErr"></div>
+            <div class="hint">One step per line or use arrows (→). Add "if … / otherwise …" for decisions.</div>
+          </div>
+
+          <div class="or">OR</div>
+
+          <div class="field" id="flowFileField">
+            <div class="label">
+              <span>Upload a sketch or diagram <span class="opt">(Optional)</span></span>
+            </div>
+            <div class="drop" id="flowDrop" role="button" tabindex="0" aria-label="Upload a diagram">
+              <div class="drop-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="5" rx="1" /><rect x="14" y="16" width="7" height="5" rx="1" /><path d="M6.5 8v5.5H17.5V16" />
+                </svg>
+              </div>
+              <strong>Drop a file or <span>choose a file</span></strong>
+              <small>Whiteboard photo, screenshot (PNG, JPG), Mermaid, draw.io, Excalidraw or SVG · up to 20 MB</small>
+            </div>
+            <input id="flowFileInput" type="file" accept=".png,.jpg,.jpeg,.webp,.svg,.mmd,.mermaid,.drawio,.dio,.excalidraw,.txt,image/*" hidden />
+            <ul class="file-list" id="flowFileList"></ul>
+          </div>
+
+          <div class="field">
+            <div class="label"><span>Diagram type</span></div>
+            <div class="chips" id="flowTypes">
+              <button type="button" class="active" data-type="auto">Auto</button>
+              <button type="button" data-type="flowchart">Flowchart</button>
+              <button type="button" data-type="process">Process</button>
+              <button type="button" data-type="swimlane">Swimlane</button>
+              <button type="button" data-type="architecture">Architecture</button>
+              <button type="button" data-type="org-chart">Org chart</button>
+            </div>
+          </div>
+
+          <div class="hint" style="margin-top:-6px">The flowchart is added as a new slide right after the slide you are on, laid out and aligned automatically.</div>
         </div>
 
         <div class="form" data-only="create">
@@ -1044,6 +1203,9 @@
         "final_presentation"
       ];
 
+      // Steps shown while a flowchart is built (one slide, so fewer steps than a deck)
+      var FLOW_STAGES = ["flow_read", "flow_structure", "flow_layout", "flow_insert"];
+
       var MAX_TOTAL_BYTES = 20 * 1024 * 1024;
       var MIN_SLIDES = 3;
       var MAX_SLIDES = 200;  // decks over 20 slides (and large rebrands) are built in parts, one Apps Script run per part
@@ -1059,7 +1221,8 @@
         timer: null,
         startedAt: 0,
         runId: null,
-        lastPayload: null
+        lastPayload: null,
+        flow: { file: null, type: "auto" }
       };
 
       function $(id) {
@@ -1076,7 +1239,11 @@
         icons: "Selecting icons",
         brand: "Drawing the slides",
         insert: "Adding the slides to your deck",
-        review: "Reviewing every slide"
+        review: "Reviewing every slide",
+        flow_read: "Reading your description or sketch",
+        flow_structure: "Working out the steps and decisions",
+        flow_layout: "Laying out boxes and arrows",
+        flow_insert: "Adding the slide to your deck"
       };
 
       function label(s) {
@@ -1126,6 +1293,9 @@
               });
             }, 10000);
           },
+          runFlowchartGeneration: function () {
+            setTimeout(function () { ok({ ok: true, url: "https://docs.google.com/presentation/", slideCount: 1, elapsedMs: 12000 }); }, 6000);
+          },
           continueDeckGeneration: function () {
             setTimeout(function () { ok({ ok: true, url: "https://docs.google.com/presentation/", slideCount: 30, elapsedMs: 20000 }); }, 2000);
           },
@@ -1159,6 +1329,9 @@
       function setMode(mode) {
         state.mode = mode;
         document.body.classList.toggle("is-rebrand", mode === "Rebrand");
+        document.body.classList.toggle("mode-create", mode === "Create");
+        document.body.classList.toggle("mode-rebrand", mode === "Rebrand");
+        document.body.classList.toggle("mode-flowchart", mode === "Flowchart");
         document.querySelectorAll("#modeGroup button").forEach(function (b) {
           var active = b.getAttribute("data-mode") === mode;
           b.classList.toggle("active", active);
@@ -1170,7 +1343,7 @@
 
       /* ---------- Generate button states ---------- */
       function idleLabel() {
-        return "Generate";
+        return state.mode === "Flowchart" ? "Generate flowchart" : "Generate";
       }
 
       function setButtonPhase(phase) {
@@ -1324,7 +1497,7 @@
       }
 
       function clearErrors() {
-        ["promptField", "sourceField", "filesField"].forEach(function (id) {
+        ["promptField", "sourceField", "filesField", "flowField"].forEach(function (id) {
           $(id).classList.remove("invalid");
         });
       }
@@ -1342,6 +1515,17 @@
 
         // Rebrand has no inputs to check.
         if (state.mode === "Rebrand") return true;
+
+        // Flowchart: a description (a few words at least) or a sketch / diagram file
+        if (state.mode === "Flowchart") {
+          var flow = $("flowText").value.trim();
+          if (flow.length < 10 && !state.flow.file) {
+            setError("flowField", "flowErr", "Describe the steps, or upload a sketch or diagram file.");
+            $("flowText").focus();
+            return false;
+          }
+          return true;
+        }
 
         if (url && !/^https:\/\//.test(url)) {
           setError("sourceField", "sourceErr", "Use a full https:// link.");
@@ -1416,8 +1600,11 @@
       function showSuccess(result) {
         $("resultBadge").className = "badge ok";
         $("resultBadge").textContent = "✓";
-        $("resultTitle").textContent = "Your presentation is ready";
-        $("resultText").textContent = "Review the slides and tweak anything before sharing.";
+        var isFlow = state.mode === "Flowchart";
+        $("resultTitle").textContent = isFlow ? "Your flowchart is ready" : "Your presentation is ready";
+        $("resultText").textContent = isFlow
+          ? "Every box and arrow is an editable shape: move, rename or recolour anything."
+          : "Review the slides and tweak anything before sharing.";
         $("statSlides").textContent = result.slideCount || 0;
         $("statTime").textContent = Math.round((result.elapsedMs || 0) / 1000) + "s";
         $("resultStats").hidden = false;
@@ -1426,7 +1613,7 @@
         $("openBtn").hidden = !/^https:\/\//.test(url);
         $("openBtn").setAttribute("href", url);
         $("retryBtn").hidden = true;
-        $("backBtn").textContent = state.mode === "Rebrand" ? "Rebrand another" : "Create another";
+        $("backBtn").textContent = state.mode === "Rebrand" ? "Rebrand another" : state.mode === "Flowchart" ? "Make another flowchart" : "Create another";
         showView("resultView");
       }
 
@@ -1455,7 +1642,10 @@
         hideNotice();
         $("cancelBtn").disabled = false;
         $("runTitle").textContent =
-          payload.mode === "Rebrand" ? "Rebranding your deck" : "Building your deck";
+          payload.mode === "Rebrand" ? "Rebranding your deck" : payload.mode === "Flowchart" ? "Building your flowchart" : "Building your deck";
+        // Flowchart runs show their own steps; Create and Rebrand keep the deck steps from the server
+        if (!state.deckStages) state.deckStages = state.stages;
+        state.stages = payload.mode === "Flowchart" ? FLOW_STAGES.slice() : state.deckStages;
         setButtonPhase("running");
         showView("runView");
         startProgress();
@@ -1504,10 +1694,9 @@
             stopProgress();
             showFailure(null, (err && err.message) || String(err));
         };
-        server()
-          .withSuccessHandler(onResult)
-          .withFailureHandler(onFail)
-          .runDeckGeneration(payload);
+        var call = server().withSuccessHandler(onResult).withFailureHandler(onFail);
+        if (payload.mode === "Flowchart") call.runFlowchartGeneration(payload);
+        else call.runDeckGeneration(payload);
       }
 
       function cancelRun() {
@@ -1540,6 +1729,16 @@
           run({ mode: "Rebrand" });
           return;
         }
+        if (state.mode === "Flowchart") {
+          var f = state.flow.file;
+          run({
+            mode: "Flowchart",
+            prompt: $("flowText").value.trim(),
+            diagramType: state.flow.type,
+            files: f ? [{ name: f.name, mimeType: f.mimeType, size: f.size, data: f.data }] : []
+          });
+          return;
+        }
         setSlides($("slideCountInput").value);
         run({
           mode: state.mode,
@@ -1569,7 +1768,7 @@
         server()
           .withSuccessHandler(function (data) {
             data = data || {};
-            if (data.stages && data.stages.length) state.stages = data.stages;
+            if (data.stages && data.stages.length) { state.stages = data.stages; state.deckStages = data.stages; }
             fillSelect($("department"), data.departments);
             fillSelect($("presentationType"), data.presentationTypes);
             var pill = $("aiStatus");
@@ -1660,6 +1859,124 @@
         if (e.key === "Escape" && !$("runView").hidden) {
           cancelRun();
         }
+      });
+
+      /* ---------- Flowchart inputs ---------- */
+      function renderFlowFile() {
+        var list = $("flowFileList");
+        list.innerHTML = "";
+        var f = state.flow.file;
+        if (!f) return;
+        var li = document.createElement("li");
+        var badge;
+        if (f.preview) {
+          badge = document.createElement("img");
+          badge.className = "file-thumb";
+          badge.src = f.preview;
+          badge.alt = "";
+        } else {
+          badge = document.createElement("span");
+          badge.className = "file-ext";
+          var dot = f.name.lastIndexOf(".");
+          badge.textContent = dot > -1 ? f.name.slice(dot + 1).slice(0, 4) : "file";
+        }
+        var name = document.createElement("span");
+        name.className = "file-name";
+        name.textContent = f.name;
+        name.title = f.name;
+        var size = document.createElement("span");
+        size.className = "file-size";
+        size.textContent = formatBytes(f.size);
+        var rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "file-remove";
+        rm.setAttribute("aria-label", "Remove " + f.name);
+        rm.textContent = "×";
+        rm.addEventListener("click", function () {
+          state.flow.file = null;
+          renderFlowFile();
+        });
+        li.appendChild(badge);
+        li.appendChild(name);
+        li.appendChild(size);
+        li.appendChild(rm);
+        list.appendChild(li);
+        $("flowField").classList.remove("invalid");
+      }
+
+      function setFlowFile(file) {
+        if (!file) return;
+        if (file.size > MAX_TOTAL_BYTES) {
+          setError("flowField", "flowErr", file.name + " is over the 20 MB limit.");
+          return;
+        }
+        state.reading += 1;
+        updateGenerateBtn();
+        var reader = new FileReader();
+        reader.onload = function () {
+          var result = String(reader.result || "");
+          state.flow.file = {
+            name: file.name,
+            mimeType: file.type || "application/octet-stream",
+            size: file.size,
+            data: result.slice(result.indexOf(",") + 1),
+            preview: /^image\/(png|jpe?g|webp|gif)/.test(file.type) ? result : null
+          };
+          state.reading -= 1;
+          updateGenerateBtn();
+          renderFlowFile();
+        };
+        reader.onerror = function () {
+          state.reading -= 1;
+          updateGenerateBtn();
+          setError("flowField", "flowErr", "Couldn't read " + file.name + ".");
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function pick(groupId, attr, key) {
+        document.querySelectorAll("#" + groupId + " button").forEach(function (b) {
+          b.addEventListener("click", function () {
+            state.flow[key] = b.getAttribute(attr);
+            document.querySelectorAll("#" + groupId + " button").forEach(function (o) {
+              o.classList.toggle("active", o === b);
+            });
+          });
+        });
+      }
+      pick("flowTypes", "data-type", "type");
+
+      $("flowText").addEventListener("input", function () {
+        $("flowField").classList.remove("invalid");
+      });
+      var flowDrop = $("flowDrop");
+      flowDrop.addEventListener("click", function () {
+        $("flowFileInput").click();
+      });
+      flowDrop.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          $("flowFileInput").click();
+        }
+      });
+      $("flowFileInput").addEventListener("change", function () {
+        setFlowFile(this.files && this.files[0]);
+        this.value = "";
+      });
+      ["dragenter", "dragover"].forEach(function (evt) {
+        flowDrop.addEventListener(evt, function (e) {
+          e.preventDefault();
+          flowDrop.classList.add("over");
+        });
+      });
+      ["dragleave", "drop"].forEach(function (evt) {
+        flowDrop.addEventListener(evt, function (e) {
+          e.preventDefault();
+          flowDrop.classList.remove("over");
+        });
+      });
+      flowDrop.addEventListener("drop", function (e) {
+        setFlowFile(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
       });
 
       $("generateBtn").addEventListener("click", generate);

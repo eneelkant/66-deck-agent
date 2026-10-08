@@ -628,6 +628,195 @@ function diagramIrToEngineElements_(ir, area) {
   return els;
 }
 
+/* =========================
+   FLOWCHART LAYOUT (aligned, layered)
+   Steps are placed in columns by their order (longest path from the start), decisions branch into rows, and the
+   whole chart is centred in the content area with even spacing. Long single chains wrap into rows that read like a
+   snake. Arrows are elbow connectors (horizontal - vertical - horizontal) with an arrow head; loops go underneath.
+========================= */
+
+var FLOW_TYPES_ = ['flowchart', 'process', 'data-flow', 'swimlane', 'architecture', 'dependency', 'state', 'sequence', 'tree', 'org-chart'];
+
+function flowchartLayers_(ir) {
+  const nodes = ir.nodes || [], edges = ir.edges || [];
+  const out = {}, inc = {};
+  nodes.forEach(function (n) { out[n.id] = []; inc[n.id] = 0; });
+  edges.forEach(function (e) { if (out[e.from] && out[e.to] != null) { out[e.from].push(e.to); } });
+  // DFS from the starts marks back edges (loops), so ranks follow the forward flow only
+  const state = {}, back = {};
+  const starts = nodes.filter(function (n) { return !edges.some(function (e) { return e.to === n.id; }); }).map(function (n) { return n.id; });
+  const visit = function (id) {
+    state[id] = 1;
+    out[id].forEach(function (t) {
+      if (state[t] === 1) back[id + '>' + t] = true;
+      else if (!state[t]) visit(t);
+    });
+    state[id] = 2;
+  };
+  (starts.length ? starts : [nodes[0] && nodes[0].id]).forEach(function (id) { if (id && !state[id]) visit(id); });
+  nodes.forEach(function (n) { if (!state[n.id]) visit(n.id); });
+  const rank = {};
+  nodes.forEach(function (n) { rank[n.id] = 0; });
+  // longest path on the forward edges (n passes is enough for <= 24 nodes)
+  for (let k = 0; k < nodes.length; k++) {
+    let moved = false;
+    edges.forEach(function (e) {
+      if (back[e.from + '>' + e.to] || rank[e.from] == null || rank[e.to] == null) return;
+      if (rank[e.to] < rank[e.from] + 1) { rank[e.to] = rank[e.from] + 1; moved = true; }
+    });
+    if (!moved) break;
+  }
+  const layers = [];
+  nodes.forEach(function (n) { (layers[rank[n.id]] = layers[rank[n.id]] || []).push(n.id); });
+  const clean = layers.filter(function (l) { return l && l.length; });
+  // order inside a layer: average position of the steps that lead into it (fewer crossing arrows)
+  const pos = {};
+  clean.forEach(function (layer, li) {
+    if (li > 0) {
+      layer.sort(function (a, b) {
+        const avg = function (id) {
+          const ps = edges.filter(function (e) { return e.to === id && pos[e.from] != null && !back[e.from + '>' + e.to]; }).map(function (e) { return pos[e.from]; });
+          return ps.length ? ps.reduce(function (x, y) { return x + y; }, 0) / ps.length : 0;
+        };
+        return avg(a) - avg(b);
+      });
+    }
+    layer.forEach(function (id, j) { pos[id] = j - (layer.length - 1) / 2; });
+  });
+  return { layers: clean, back: back };
+}
+
+function layoutFlowchart_(ir, area) {
+  const lay = flowchartLayers_(ir);
+  const L = lay.layers.length, maxW = Math.max.apply(null, lay.layers.map(function (l) { return l.length; }).concat([1]));
+  const byId = {};
+  (ir.nodes || []).forEach(function (n) { byId[n.id] = n; });
+  const pos = {};
+  let dir = 'LR';
+  if (L > 7 && maxW === 1) dir = 'SNAKE';            // a long single chain wraps into rows
+  else if (L > 7 && L <= 12 && maxW <= 2) dir = 'TB2'; // long chain with a few branches: two bands
+  const gapX = 26, gapY = 18;
+  const place = function (id, cx, cy, w, h) {
+    const n = byId[id] || {};
+    const isDecision = /decision/i.test(n.type || '');
+    const ww = isDecision ? Math.min(w, h * 2.4) : w, hh = isDecision ? h * 1.25 : h;
+    pos[id] = { x: cx - ww / 2, y: cy - hh / 2, w: ww, h: hh, cx: cx, cy: cy };
+  };
+  if (dir === 'LR') {
+    const colW = (area.w - gapX * (L - 1)) / L;
+    const nodeW = Math.min(150, colW);
+    const rowH = Math.min(78, (area.h - gapY * (maxW - 1)) / maxW);
+    const nodeH = Math.max(34, Math.min(48, rowH - 6));
+    const usedW = nodeW * L + gapX * (L - 1) + (colW - nodeW) * 0;
+    const x0 = area.x + (area.w - (colW * L + gapX * (L - 1))) / 2;
+    lay.layers.forEach(function (layer, i) {
+      const cx = x0 + i * (colW + gapX) + colW / 2;
+      layer.forEach(function (id, j) {
+        const cy = area.y + area.h / 2 + (j - (layer.length - 1) / 2) * (rowH + gapY);
+        place(id, cx, cy, nodeW, nodeH);
+      });
+    });
+  } else {
+    // rows of layers: SNAKE (one node per layer, alternate direction) or TB2 (two bands left to right)
+    const perRow = dir === 'SNAKE' ? Math.min(6, Math.ceil(L / Math.ceil(L / 6))) : Math.ceil(L / 2);
+    const rows = Math.ceil(L / perRow);
+    const colW = (area.w - gapX * (perRow - 1)) / perRow;
+    const nodeW = Math.min(140, colW);
+    const bandH = Math.min(maxW > 1 ? 150 : 96, (area.h - gapY * 2 * (rows - 1)) / rows); // rows sit close together; the whole chart is centred below
+    const subH = Math.min(70, bandH / maxW);
+    const nodeH = Math.max(32, Math.min(46, subH - 8));
+    lay.layers.forEach(function (layer, i) {
+      const r = Math.floor(i / perRow);
+      let c = i % perRow;
+      if (dir === 'SNAKE' && r % 2 === 1) c = perRow - 1 - c;
+      const cx = area.x + (area.w - (colW * perRow + gapX * (perRow - 1))) / 2 + c * (colW + gapX) + colW / 2;
+      const bandCy = area.y + r * (bandH + gapY * 2) + bandH / 2;
+      layer.forEach(function (id, j) { place(id, cx, bandCy + (j - (layer.length - 1) / 2) * subH, nodeW, nodeH); });
+    });
+  }
+  // centre the finished chart vertically and horizontally in the area (alignment)
+  const ids = Object.keys(pos);
+  if (ids.length) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    ids.forEach(function (id) { const p = pos[id]; minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x + p.w); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y + p.h); });
+    const dx = area.x + (area.w - (maxX - minX)) / 2 - minX, dy = area.y + (area.h - (maxY - minY)) / 2 - minY;
+    ids.forEach(function (id) { const p = pos[id]; p.x += dx; p.y += dy; p.cx += dx; p.cy += dy; });
+  }
+  return { pos: pos, dir: dir, back: lay.back };
+}
+
+function flowchartToElements_(ir, area) {
+  const els = [];
+  const L = layoutFlowchart_(ir, area);
+  const P = L.pos;
+  let maxBottom = -Infinity;
+  Object.keys(P).forEach(function (id) { maxBottom = Math.max(maxBottom, P[id].y + P[id].h); });
+  (ir.nodes || []).forEach(function (n) {
+    const p = P[n.id];
+    if (!p) return;
+    const t = String(n.type || 'process').toLowerCase();
+    const label = String(n.label || '');
+    const size = label.length > 34 ? 9 : label.length > 22 ? 10 : 11;
+    const textStyle = { size: size, color: n.textColor || DIAGRAM_BRAND.nightBlue, align: 'center', valign: 'middle' };
+    if (t === 'decision' || t === 'terminator' || t === 'start' || t === 'end' || t === 'data' || t === 'io') {
+      els.push({ t: 'shape', shape: diagramNodeShape_(t), x: p.x, y: p.y, w: p.w, h: p.h, fill: n.fill || DIAGRAM_BRAND.panel,
+        line: { color: n.stroke || DIAGRAM_BRAND.shark, width: 1 }, text: label, textStyle: textStyle });
+    } else {
+      els.push({ t: 'rect', x: p.x, y: p.y, w: p.w, h: p.h, fill: n.fill || DIAGRAM_BRAND.panel,
+        line: { color: n.stroke || DIAGRAM_BRAND.shark, width: 1 }, text: label, textStyle: textStyle });
+    }
+  });
+  const seg = function (x1, y1, x2, y2, color, width, arrow) {
+    if (Math.abs(x1 - x2) < 0.5 && Math.abs(y1 - y2) < 0.5) return;
+    els.push({ t: 'line', x1: x1, y1: y1, x2: x2, y2: y2, color: color, width: width, arrow: !!arrow });
+  };
+  let loop = 0;
+  (ir.edges || []).forEach(function (e) {
+    const a = P[e.from], b = P[e.to];
+    if (!a || !b) return;
+    const color = e.color || DIAGRAM_BRAND.nightBlue, width = e.width || 1.25;
+    let lx, ly;
+    if (L.back[e.from + '>' + e.to]) {
+      // loop back: down from the step, along underneath the chart, up into the earlier step
+      const yb = maxBottom + 14 + 8 * (loop++ % 3);
+      seg(a.cx, a.y + a.h, a.cx, yb, color, width);
+      seg(a.cx, yb, b.cx, yb, color, width);
+      seg(b.cx, yb, b.cx, b.y + b.h, color, width, true);
+      lx = (a.cx + b.cx) / 2; ly = yb - 14;
+    } else if (Math.abs(a.cy - b.cy) < 2) {
+      const right = b.cx > a.cx;
+      seg(right ? a.x + a.w : a.x, a.cy, right ? b.x : b.x + b.w, b.cy, color, width, true);
+      lx = (a.cx + b.cx) / 2; ly = a.cy - 15;
+    } else if (Math.abs(a.cx - b.cx) < 2) {
+      const down = b.cy > a.cy;
+      seg(a.cx, down ? a.y + a.h : a.y, b.cx, down ? b.y : b.y + b.h, color, width, true);
+      lx = a.cx + 4; ly = (a.cy + b.cy) / 2 - 7;
+    } else if (L.dir !== 'LR' && Math.abs(b.cy - a.cy) > a.h) {
+      // row change (snake / two bands): down from the step, across, down into the next
+      const ym = (a.y + a.h + b.y) / 2;
+      seg(a.cx, a.y + a.h, a.cx, ym, color, width);
+      seg(a.cx, ym, b.cx, ym, color, width);
+      seg(b.cx, ym, b.cx, b.y, color, width, true);
+      lx = (a.cx + b.cx) / 2; ly = ym - 14;
+    } else {
+      // elbow: out of the right side, vertical in the gap between columns, into the left side
+      const right = b.cx > a.cx;
+      const x1 = right ? a.x + a.w : a.x, x2 = right ? b.x : b.x + b.w, xm = (x1 + x2) / 2;
+      seg(x1, a.cy, xm, a.cy, color, width);
+      seg(xm, a.cy, xm, b.cy, color, width);
+      seg(xm, b.cy, x2, b.cy, color, width, true);
+      // the label sits left of the vertical run, next to the turn into the target step, so it never sits on a line or a box
+      const ty = b.cy + (b.cy < a.cy ? 9 : -9);
+      if (e.label) els.push({ t: 'text', text: String(e.label).slice(0, 24), x: xm - 4 - 60 - 7.2, y: ty - 7 - 7.2, w: 60 + 14.4, h: 14 + 14.4,
+        size: 9, weight: 500, font: 'sans', color: DIAGRAM_BRAND.accent, align: 'right', valign: 'middle', spacing: 1 });
+      return;
+    }
+    if (e.label) els.push({ t: 'text', text: String(e.label).slice(0, 24), x: lx - 30 - 7.2, y: ly - 7.2, w: 60 + 14.4, h: 14 + 14.4, size: 9, weight: 500,
+      font: 'sans', color: DIAGRAM_BRAND.accent, align: 'center', valign: 'middle', spacing: 1 });
+  });
+  return els;
+}
+
 function applyDiagramIrToEngineOutput_(out, spec, tokens) {
   if (!spec || !spec.diagram || !out) return out;
   const check = validateDiagramIr_(spec.diagram);
@@ -635,14 +824,24 @@ function applyDiagramIrToEngineOutput_(out, spec, tokens) {
     out.notes = (out.notes ? out.notes + '\n' : '') + 'Diagram IR invalid; template layout kept. ' + check.errors.join('; ');
     return out;
   }
-  const area = { x: 40, y: 64, w: 640, h: 290 };
-  const body = diagramIrToEngineElements_(spec.diagram, area);
+  // The chart starts under the slide's own title and intro (never on top of them)
+  // header() draws the title first and the intro second: the chart starts under those two
+  let headBottom = 64, seen = 0;
+  (out.els || []).forEach(function (e) {
+    if (seen >= 2 || !e || e.t !== 'text' || e.y == null || e.y > 90) return;
+    seen++;
+    headBottom = Math.max(headBottom, e.y + (e.vh || e.h || 0) + 6);
+  });
+  const area = { x: 40, y: headBottom, w: 640, h: Math.max(160, 352 - headBottom) };
+  const ir = spec.diagram;
+  const useFlow = (ir.edges || []).length > 0 && FLOW_TYPES_.indexOf(String(ir.type || 'flowchart')) !== -1;
+  const body = useFlow ? flowchartToElements_(ir, area) : diagramIrToEngineElements_(ir, area);
   if (!body.length) return out;
   // Keep header/footer chrome from the template layout; replace body-ish elements.
   const chrome = (out.els || []).filter(function (e) {
     if (!e) return false;
     if (e.t === 'image' && /logo|mark|pattern/i.test(String(e.asset || ''))) return true;
-    if (e.t === 'text' && e.y != null && e.y < 56) return true;
+    if (e.t === 'text' && e.y != null && e.y < 110 && e.y + (e.vh || e.h || 0) <= headBottom) return true;
     if (e.t === 'rect' && e.y != null && e.h != null && e.y + e.h <= 56) return true;
     if (e.t === 'text' && e.y != null && e.y >= 370) return true;
     return false;
@@ -665,5 +864,7 @@ var DiagramIR = {
   ingestUpload: ingestUploadedDiagram_,
   attachToPlan: attachDiagramsToPlan_,
   toElements: diagramIrToEngineElements_,
+  layoutFlowchart: layoutFlowchart_,
+  flowchartToElements: flowchartToElements_,
   applyToEngineOutput: applyDiagramIrToEngineOutput_
 };
