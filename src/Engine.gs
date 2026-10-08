@@ -71,7 +71,7 @@ var ENGINE = (function () {
     return sum * size / 1000;
   }
   function wrap(text, maxW, font, weight, size) {
-    maxW = maxW * 0.97;                              // safety margin: Google Slides sets Plus Jakarta Sans slightly wider
+    maxW = maxW * 0.94;                              // safety margin: Google Slides sets Plus Jakarta Sans wider than the metrics
     var lines = [];
     String(text).split('\n').forEach(function (para) {
       var words = para.split(/\s+/).filter(function (w) { return w.length; });
@@ -732,7 +732,15 @@ var ENGINE = (function () {
       var so = L.statement({ title: s.title, statement: s.callout.title || s.callout.label || s.title, text: s.callout.text || '', notes: s.notes }, ctx); so.noBalance = true; return so;
     }
     var lw = side ? 400 : CW;
-    var listH = bulletList(els, CX, top, lw, BOTTOM - top, s.points, { max: TSZ.body + 0.5, min: TSZ.body + 0.5, gap: 12 });
+    var listH;
+    if (side) listH = bulletList(els, CX, top, lw, BOTTOM - top, s.points, { max: TSZ.body + 0.5, min: TSZ.body + 0.5, gap: 12 });
+    else {
+      var bpts = asList(s.points), bsz = TSZ.body + 2, avail = BOTTOM - top - 10;
+      var textTot = bpts.reduce(function (t, p) { return t + textH(p, lw - 16, bsz); }, 0);
+      var bgap = Math.max(12, Math.min(30, (avail * 0.85 - textTot) / Math.max(bpts.length - 1, 1)));
+      var used = textTot + bgap * (bpts.length - 1);
+      listH = bulletList(els, CX, top + Math.max(0, (avail - used) / 3), lw, avail, bpts, { max: bsz, min: bsz, gap: bgap });
+    }
     if (side) {
       var px = CX + 424, pw = CW - 424;
       var ptext = String(s.callout.text || '');
@@ -1359,7 +1367,8 @@ var ENGINE = (function () {
       icon(els, autoIcon(st), x + colW / 2 - 7, y - 7, 14, false);
       var ty = y + stepH + 14;
       var ht = text(els, x + 10, ty, colW - 20, 30, st.title, { weight: 700, max: hSize, min: hSize, maxLines: 2, align: 'center', color: T.ink });
-      text(els, x + 10, ty + ht.height + 6, colW - 20, BOTTOM - (ty + ht.height + 6), st.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.body });
+      var tby = ty + Math.max(ht.height, 2 * lineHeight('sans', hSize)) + 6;     // room for a two-line title, never overlapping
+      text(els, x + 10, tby, colW - 20, BOTTOM - tby, st.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.body });
       if (i < n - 1) dashedLine(els, x + colW, y + stepH + 10, x + colW, BOTTOM, T.cardLine, 0.75, 3, 3);
     });
     return { bg: T.white, els: els };
@@ -1443,7 +1452,7 @@ var ENGINE = (function () {
     var els = [];
     var top = header(els, s) + 4;
     var colW = CW / n, tabW = Math.min(colW - 30, 110), tabH = 34;
-    var fills = [T.blue, T.tints[1], T.tints[2], T.tints[3], T.tints[4]];
+    var fills = [T.blue, T.blue, T.blue, T.blue, T.blue];
     var hSize = uniformSize(ms.map(function (m) { return m.title; }), colW - 40, 30, { weight: 700, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var t4Avail = BOTTOM - (top + tabH + 20);
     var t4Size = uniformSize(ms.map(function (m) { return m.text; }), colW - 40, t4Avail - 90, { weight: 400, max: TSZ.body, min: TSZ.body });
@@ -2028,7 +2037,7 @@ var ENGINE = (function () {
   var DIA_FILLS = function () { return [T.blue, T.ink, T.slate, T.blue, T.ink, T.slate, T.blue, T.ink]; };
   // Title + short text block, aligned left / right / centre; returns its height
   function caption(els, x, y, w, it, align, maxLines) {
-    var h = text(els, x, y, w, 16, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: align, color: T.ink });
+    var h = text(els, x, y, w, 34, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: align, color: T.ink });
     var b = it.text ? text(els, x, y + h.height + 2, w, 60, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: maxLines || 3, align: align, color: T.body }) : { height: 0 };
     return h.height + 2 + b.height;
   }
@@ -2109,15 +2118,16 @@ var ENGINE = (function () {
       var y = py + i * (th + 6), w = widths[i];
       rect(els, cx - w / 2, y, w, th, fills[i]);
       var side = i === 1 ? -1 : 1;                                   // tier 1 right, tier 2 left, tier 3 right
-      var ex = cx + side * (w / 2), lx = cx + side * 150;
+      var ex = cx + side * (w / 2), lx = cx + side * (w / 2 + 28);   // number badge just beyond the tier: more room for the caption
       line(els, ex, y + th / 2, lx, y + th / 2, T.cardLine, 0.75);
       rect(els, lx - 9, y + th / 2 - 9, 18, 18, T.slate);
       text(els, lx - 9, y + th / 2 - 7, 18, 14, String(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, align: 'center', color: T.ink, noFill: true });
-      var capW = 180;
+      var capW = Math.min(210, side > 0 ? CX + CW - 8 - (lx + 16) : (lx - 16) - (CX + 8));
       var tx = side > 0 ? lx + 16 : lx - 16 - capW;
       var lines = asList(it.points).slice(0, 5);
       var body = lines.length ? lines.map(function (p) { return '• ' + p; }).join('\n') : it.text;
-      caption(els, tx, Math.max(top + 10, y + th / 2 - 16), capW, { title: it.title, text: body }, side > 0 ? 'left' : 'right', 5);
+      var capIt = { title: it.title, text: body }, chh = capH(capIt, capW, 5);
+      caption(els, tx, Math.min(Math.max(top + 10, y + th / 2 - 16), BOTTOM - 6 - chh), capW, capIt, side > 0 ? 'left' : 'right', 5);
     });
     return { bg: T.bgLight, els: els, noBalance: true };
   };
@@ -2130,7 +2140,7 @@ var ENGINE = (function () {
     var top = header(els, s);
     var sw = 190, cw = 220, gap = 10, x0 = (W - (2 * sw + cw + 2 * gap)) / 2, iw = sw - 32;
     var need = 0;
-    items.forEach(function (it) { need = Math.max(need, 52 + capH(it, iw, 9) + 56); });
+    items.forEach(function (it) { need = Math.max(need, 52 + 2 * lineHeight('sans', TSZ.heading) + textH(it.text, iw, TSZ.body) + 62); });
     var h = boxH(need, BOTTOM - top - 20);
     var order = [0, 1, 2], xs = [x0, x0 + sw + gap, x0 + sw + cw + 2 * gap];
     order.forEach(function (k, pos) {
@@ -2139,7 +2149,8 @@ var ENGINE = (function () {
       rect(els, x, y, w, hh, center ? T.slate : T.bgLight);
       icon(els, autoIcon(it), x + w / 2 - 11, y + 20, 22, false);
       var tt = text(els, x + 16, y + 52, w - 32, 34, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: 'center', color: T.ink });
-      text(els, x + 16, y + 58 + tt.height, w - 32, hh - 58 - tt.height - 46, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.ink });
+      var tth = Math.max(tt.height, 2 * lineHeight('sans', TSZ.heading));
+      text(els, x + 16, y + 58 + tth, w - 32, hh - 58 - tth - 46, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.ink });
       ellipse(els, x + w / 2 - 13, y + hh - 34, 26, 26, T.blue);
       text(els, x + w / 2 - 13, y + hh - 28, 26, 14, pad2(k + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, align: 'center', color: T.white, noFill: true });
     });
@@ -2245,7 +2256,12 @@ var ENGINE = (function () {
     if (items.length !== 3) return null;
     var els = [];
     var top = header(els, s);
-    var cx = W / 2, cy = top + (BOTTOM - top) / 2 + 12, L = Math.min(190, (BOTTOM - top) * 0.78), t = 40, fills = [T.blue, T.ink, T.slate];
+    var t = 40, fills = [T.blue, T.ink, T.slate], cx = W / 2;
+    var ch2f = capH(items[2], 260, 3), L = Math.min(190, (BOTTOM - top) * 0.78), cy;
+    for (; L >= 100; L -= 6) {
+      cy = Math.min(top + (BOTTOM - top) / 2 + 12, BOTTOM - ch2f - 16 - t / 2 - L / (2 * Math.sqrt(3)));
+      if (cy - L / Math.sqrt(3) - t / 2 >= top + 6) break;          // apex still below the title
+    }
     var A = { x: cx, y: cy - L / Math.sqrt(3) }, B = { x: cx + L / 2, y: cy + L / (2 * Math.sqrt(3)) }, C = { x: cx - L / 2, y: cy + L / (2 * Math.sqrt(3)) };
     var sides = [[C, A, -60], [A, B, 60], [B, C, 0]];               // left side, right side, base
     sides.forEach(function (sd, i) {
@@ -2260,7 +2276,7 @@ var ENGINE = (function () {
     line(els, CX + capW + 4, top + 16, (C.x + A.x) / 2 - 30, (C.y + A.y) / 2, T.cardLine, 0.75);
     caption(els, CX + CW - capW, cy - ch1 / 2 - 20, capW, items[1], 'left', 4);
     line(els, CX + CW - capW - 6, cy - 20, (A.x + B.x) / 2 + 30, (A.y + B.y) / 2, T.cardLine, 0.75);
-    caption(els, cx - 130, Math.min(BOTTOM - ch2, B.y + t / 2 + 14), 260, items[2], 'center', 3);
+    caption(els, cx - 130, B.y + t / 2 + 14, 260, items[2], 'center', 3);
     return { bg: T.white, els: els, noBalance: true };
   };
 
@@ -2363,10 +2379,12 @@ var ENGINE = (function () {
       text(els, CX + 6, y + (rowH - 8) / 2 - 7, 18, 14, String(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, align: 'center', color: on ? T.blue : T.white, noFill: true });
       text(els, CX + 32, y, lw - 40, rowH - 8, p.replace(/:\s.*$/, ''), { weight: on ? 500 : 400, max: TSZ.body, min: TSZ.body, maxLines: 1, valign: 'middle', color: on ? T.white : T.ink });
     });
-    var px = CX + lw + 30, pw = CW - lw - 30, ph = BOTTOM - top - 10;
+    var px = CX + lw + 30, pw = CW - lw - 30;
+    var c = s.callout, cy0 = top + 34;
+    var needP = 34 + linesBlock([c.title || c.label || ''], pw - 48, TSZ.heading + 2, 500, 2) + 10 + textH(c.text || '', pw - 48, TSZ.body) + 30;
+    var ph = Math.min(BOTTOM - top - 10, Math.max(needP, pts.length * rowH - 2, 120));
     rect(els, px, top + 6, pw, ph, T.white, { color: T.blue, width: 0.75 });
     rect(els, px + pw / 2 - 30, top + 2, 60, 8, T.blue);
-    var c = s.callout, cy0 = top + 34;
     var ht = text(els, px + 24, cy0, pw - 48, 40, c.title || c.label || '', { weight: 500, max: TSZ.heading + 2, min: TSZ.heading, maxLines: 2, color: T.ink });
     text(els, px + 24, cy0 + ht.height + 10, pw - 48, ph - ht.height - 70, c.text || '', { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
     return { bg: T.bgLight, els: els };
@@ -2576,20 +2594,22 @@ var ENGINE = (function () {
     var stText = s.statement || s.title || '';
     if (!stText) return null;
     var els = [];
-    rect(els, 0, 0, 470, H, T.white);
-    if (s.title && s.title !== stText) header(els, { title: s.title }, { maxW: 420 });
-    image(els, 'band-pattern', 150, 92, 90, 40);
-    image(els, 'mark-dark', 46, 160, 150, 100);
-    line(els, 238, 150, 238, 270, T.ink, 1);
-    var cw = 300, cx0 = 258;
-    var st = fit(String(stText), cw - 40, 90, { weight: 500, max: 16, min: 13, maxLines: 4 });
-    var tx = s.text ? fit(String(s.text), cw - 40, 110, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 7 }) : { height: 0 };
+    var panelW = 500;                                     // white area; the photo strip fills the rest
+    rect(els, 0, 0, panelW, H, T.white);
+    els[els.length - 1].square = true;
+    if (s.title && s.title !== stText) header(els, { title: s.title }, { maxW: panelW - 2 * X0 });
+    var cx0 = 168, cw = panelW - cx0 - 24;                // the card ends 24pt before the photo strip
+    var st = fit(String(stText), cw - 40, 96, { weight: 500, max: 17, min: 13, maxLines: 4 });
+    var tx = s.text ? fit(String(s.text), cw - 40, 120, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 7 }) : { height: 0 };
     var chh = 40 + st.height + (s.text ? 12 + tx.height : 0);
-    var cy0 = H / 2 - chh / 2;
+    var cy0 = Math.max(96, (H - chh) / 2 + 10);
     rect(els, cx0, cy0, cw, chh, T.slate);
     text(els, cx0 + 20, cy0 + 18, cw - 40, st.height + 4, stText, { weight: 500, max: st.size, min: st.size, maxLines: 4, color: T.ink });
     if (s.text) text(els, cx0 + 20, cy0 + 30 + st.height, cw - 40, tx.height + 4, s.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 7, color: T.ink });
-    return { bg: T.ink, bgImage: 'section-bg', els: els, noFooter: false, noBalance: true };
+    // 66 mark: as tall as the card (max 84pt), centred on it, left of the card
+    var mh = Math.min(84, chh), mw = mh * 1.5;
+    image(els, 'mark-dark', cx0 - 20 - mw, cy0 + (chh - mh) / 2, mw, mh);
+    return { bg: T.ink, bgImage: 'section-bg', els: els, noFooter: false, noBalance: true, dark: true };
   };
 
   // Slide 105 (STATEMENT_002): the photo covers the slide; the title and statement in white
