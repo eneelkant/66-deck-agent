@@ -422,6 +422,7 @@ var ENGINE = (function () {
     var t = text(els, 32.4, 164, 420, 80, s.title, { weight: 600, max: 28, min: 20, maxLines: 2, color: T.white });
     var ly = 164 + Math.max(t.height, lineHeight('sans', t.size || 28)) + 14;
     line(els, 33.4, ly, 33.4 + 120, ly, T.white, 1);
+    if (s.lead) text(els, 32.4, ly + 14, 420, 60, s.lead, { weight: 400, max: TSZ.body + 2, min: TSZ.body, maxLines: 3, color: T.white });
     return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true };
   };
 
@@ -1905,7 +1906,7 @@ var ENGINE = (function () {
     if (n < 4) return null;
     var els = [];
     var top = bandHeader(els, s);
-    var cols = 3, cw0 = (CW - 24) / cols, iw = cw0 - 30;
+    var cols = n === 4 ? 2 : 3, cw0 = (CW - 12 * (cols - 1)) / cols, iw = cw0 - 30;
     var hBlock = headBlock(items, iw, 2);
     var cells = gridCells(n, cols, CX, top, CW, BOTTOM - top, 12, 10, cardNeed(items, iw, hBlock, 36));
     items.forEach(function (it, i) {
@@ -2079,8 +2080,8 @@ var ENGINE = (function () {
       if (over > 0) ys = ys.map(function (v) { return v - over; });
       for (k = 0; k < ys.length; k++) ys[k] = Math.max(ys[k], top + (k ? ys[k - 1] - top + hs[k - 1] + 8 : 0));
       list.forEach(function (e, k) {
-        if (side === 'right') caption(els, cx + R + 44, ys[k], cw2, e.it, 'left', 2);
-        else caption(els, cx - R - 44 - cw2, ys[k], cw2, e.it, 'right', 2);
+        if (side === 'right') caption(els, cx + R + 44, ys[k], cw2, e.it, 'left', 3);
+        else caption(els, cx - R - 44 - cw2, ys[k], cw2, e.it, 'right', 3);
       });
     });
     return { bg: T.white, els: els, noBalance: true };
@@ -2197,9 +2198,9 @@ var ENGINE = (function () {
       var start = -90 + i * sweep, mid = (start + sweep / 2) * Math.PI / 180;
       arc(els, 'ring', cx, cy, r, sweep, start, fills[i % 3]);
       icon(els, autoIcon(it), cx + r * 0.82 * Math.cos(mid) - 9, cy + r * 0.82 * Math.sin(mid) - 9, 18, fills[i % 3] !== T.slate, pad2(i + 1));
-      var ty = top + i * rowH + (rowH - capH(it, capW, 2)) / 2;
+      var ty = top + i * rowH + (rowH - capH(it, capW, 3)) / 2;
       line(els, cx + (r + 6) * Math.cos(mid), cy + (r + 6) * Math.sin(mid), capX - 8, ty + 7, T.cardLine, 0.75);
-      caption(els, capX, ty, capW, it, 'left', 2);
+      caption(els, capX, ty, capW, it, 'left', 3);
     });
     return { bg: T.white, els: els, noBalance: true };
   };
@@ -2612,6 +2613,36 @@ var ENGINE = (function () {
     return { bg: T.ink, bgImage: 'section-bg', els: els, noFooter: false, noBalance: true, dark: true };
   };
 
+  // Statement in a full-width blue band under the title, the points as cards in a row below (a second look for
+  // statements with points, so statement slides do not all look the same)
+  V.ENGINE_STATEMENT_BAND = function (s) {
+    var pts = arr(s.points, 3).filter(Boolean);
+    var stText = s.statement || '';
+    if (pts.length < 2 || !stText) return null;
+    var els = [];
+    var top = header(els, { title: s.title || stText });
+    var st = fit(String(stText), CW - 48, 70, { weight: 500, max: 18, min: 14, maxLines: 3 });
+    var bandH = st.height + 36;
+    var cardsNeed = 0;
+    pts.forEach(function (p) { var it0 = typeof p === 'string' ? { text: p } : p; cardsNeed = Math.max(cardsNeed, 28 + (it0.title ? 40 : 0) + textH(it0.text, (CW - 24) / pts.length - 32, TSZ.body)); });
+    top += Math.max(0, (BOTTOM - top - bandH - 14 - Math.max(cardsNeed, 110)) / 3);   // the block sits in the middle of the free space
+    rect(els, CX, top, CW, bandH, T.blue);
+    text(els, CX + 24, top + 18, CW - 48, st.height + 4, stText, { weight: 500, max: st.size, min: st.size, maxLines: 3, color: T.white });
+    var y = top + bandH + 14, n = pts.length, gap = 12, cw = (CW - gap * (n - 1)) / n;
+    var items = pts.map(function (p) { return typeof p === 'string' ? { title: '', text: p } : p; });
+    var need = 0;
+    items.forEach(function (it) { need = Math.max(need, 28 + (it.title ? textH(it.title, cw - 32, TSZ.heading, 500) + 6 : 0) + textH(it.text, cw - 32, TSZ.body)); });
+    var ch = boxH(need, BOTTOM - y);
+    items.forEach(function (it, i) {
+      var x = CX + i * (cw + gap);
+      rect(els, x, y, cw, ch, T.white, { color: T.cardLine, width: 0.75 });
+      var ty = y + 14;
+      if (it.title) { var t1 = text(els, x + 16, ty, cw - 32, 34, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, color: T.ink }); ty += t1.height + 6; }
+      text(els, x + 16, ty, cw - 32, y + ch - ty - 12, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
+    });
+    return { bg: T.bgLight, els: els };
+  };
+
   // Slide 105 (STATEMENT_002): the photo covers the slide; the title and statement in white
   V['66D_LAYOUT_STATEMENT_002'] = function (s) {
     if (arr(s.points, 3).length) return null;
@@ -2790,7 +2821,10 @@ var ENGINE = (function () {
     var crumb = ['Success story', s.industry || s.client].filter(Boolean).join('  |  ');
     text(els, X0, 14, 500, 14, crumb, { weight: 500, max: 10, min: 10, maxLines: 1, color: T.white });
     text(els, X0, 34, W - 2 * X0, 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
-    var top = 76, gap = 10, cw = (CW - 2 * gap) / 3, h = BOTTOM - top;
+    var top = 76, gap = 10, cw = (CW - 2 * gap) / 3;
+    var solH = sol.slice(0, 5).reduce(function (t, p) { return t + textH(p, cw - 40, TSZ.body) + 6; }, 0);
+    var resH = res.reduce(function (t, r) { return t + 34 + textH(r.label, cw - 24, TSZ.body); }, 0);
+    var h = Math.min(BOTTOM - top, Math.max(textH(chal, cw - 24, TSZ.body) + 48, solH + 50, resH + 50, (BOTTOM - top) * 0.75));
     rect(els, CX, top, cw, h, T.ink, { color: T.white, width: 0.75 });
     text(els, CX + 12, top + 12, cw - 24, 14, s.challenge_label || 'The challenge', { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 1, color: T.white });
     text(els, CX + 12, top + 32, cw - 24, h - 44, chal, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.white });
@@ -3550,6 +3584,7 @@ var ENGINE = (function () {
       { tag: '66D_LAYOUT_CASE_STUDY_004', min: 0, max: 99, desc: 'success story on a dark photo: challenge, what we did (bullets), blue results column (one client)', words: 'challenge 30-50, solution 3-5 points' }],
     statement: [
       { tag: 'ENGINE_STATEMENT_POINTS', min: 0, max: 99, desc: 'statement on the left with up to 3 point cards on the right', words: 'statement 12-20' },
+      { tag: 'ENGINE_STATEMENT_BAND', min: 0, max: 99, desc: 'statement in a blue band, 2-3 point cards in a row below', words: 'statement 12-22, points 12-25' },
       { tag: '66D_LAYOUT_STATEMENT_001', min: 0, max: 99, needs: 'noPoints', desc: 'big 66 mark, the statement in a grey callout card, photo strip on the right (no points)', words: 'statement 10-18, text 20-35' },
       { tag: '66D_LAYOUT_STATEMENT_002', min: 0, max: 99, needs: 'noPoints', desc: 'full photo slide with the statement in large white type (no points); a powerful pause', words: 'statement 8-16, text 15-30' }],
     bullets: [
