@@ -158,7 +158,8 @@ function normalizeDiagramIr_(raw) {
       to: String(e.to),
       label: String(e.label || '').slice(0, 40),
       emphasize: !!e.emphasize,
-      dashed: !!e.dashed
+      dashed: !!e.dashed,
+      both: !!e.both
     });
   });
   ir.groups = Array.isArray(raw && raw.groups) ? raw.groups.slice(0, 12) : [];
@@ -522,7 +523,7 @@ function diagramNodeShape_(nodeType) {
   const t = String(nodeType || 'process').toLowerCase();
   if (t === 'decision') return 'FLOW_CHART_DECISION';
   if (t === 'terminator' || t === 'start' || t === 'end') return 'FLOW_CHART_TERMINATOR';
-  if (t === 'data' || t === 'io') return 'FLOW_CHART_DATA';
+  if (t === 'data' || t === 'io') return 'FLOW_CHART_INPUT_OUTPUT';
   return 'FLOW_CHART_PROCESS';
 }
 
@@ -683,7 +684,8 @@ function flowchartLayers_(ir) {
     });
     state[id] = 2;
   };
-  (starts.length ? starts : [nodes[0] && nodes[0].id]).forEach(function (id) { if (id && !state[id]) visit(id); });
+  const firsts = nodes.filter(function (n) { return String(n.kind || '') === 'start'; }).map(function (n) { return n.id; });
+  firsts.concat(starts.length ? starts : [nodes[0] && nodes[0].id]).forEach(function (id) { if (id && !state[id]) visit(id); });
   nodes.forEach(function (n) { if (!state[n.id]) visit(n.id); });
   const rank = {};
   nodes.forEach(function (n) { rank[n.id] = 0; });
@@ -723,8 +725,8 @@ function layoutFlowchart_(ir, area) {
   (ir.nodes || []).forEach(function (n) { byId[n.id] = n; });
   const pos = {};
   let dir = 'LR';
-  if (L > 7 && maxW === 1) dir = 'SNAKE';            // a long single chain wraps into rows
-  else if (L > 7 && L <= 12 && maxW <= 2) dir = 'TB2'; // long chain with a few branches: two bands
+  const perRowMax = Math.max(2, Math.floor((area.w + 26) / (84 + 26)));   // steps never narrower than ~84pt
+  if (L > perRowMax) dir = maxW === 1 || L > 12 ? 'SNAKE' : 'TB2';
   const gapX = 26, gapY = 18;
   const place = function (id, cx, cy, w, h) {
     const n = byId[id] || {};
@@ -748,7 +750,7 @@ function layoutFlowchart_(ir, area) {
     });
   } else {
     // rows of layers: SNAKE (one node per layer, alternate direction) or TB2 (two bands left to right)
-    const perRow = dir === 'SNAKE' ? Math.min(6, Math.ceil(L / Math.ceil(L / 6))) : Math.ceil(L / 2);
+    const perRow = dir === 'SNAKE' ? Math.min(perRowMax, Math.ceil(L / Math.ceil(L / perRowMax))) : Math.ceil(L / 2);
     const rows = Math.ceil(L / perRow);
     const colW = (area.w - gapX * (perRow - 1)) / perRow;
     const nodeW = Math.min(140, colW);
@@ -858,10 +860,12 @@ function applyDiagramIrToEngineOutput_(out, spec, tokens) {
     return out;
   }
   // The chart starts under the slide's own title and intro (found by their text, never a box label)
-  const norm = function (v) { return String(v || '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 24); };
+  const norm = function (v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); };
   const want = [norm(spec.title), norm(spec.lead)].filter(Boolean);
   const head = (out.els || []).filter(function (e) {
-    return e && e.t === 'text' && e.y != null && e.y < 120 && want.some(function (w) { return w && norm(e.text).indexOf(w.slice(0, 16)) === 0; });
+    if (!e || e.t !== 'text' || e.y == null || e.y >= 120) return false;
+    const t = norm(e.text);
+    return t.length > 0 && want.some(function (w) { return t === w || (t.length >= w.length * 0.9 && (t.indexOf(w) === 0 || w.indexOf(t) === 0)); });
   });
   let headBottom = 64;
   head.forEach(function (e) { headBottom = Math.max(headBottom, e.y + (e.vh || e.h || 0) + 6); });

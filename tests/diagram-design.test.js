@@ -288,7 +288,7 @@ test("Flowchart tab: a .pptx with two diagram pictures becomes slides right afte
     renderEngineSlide(slide, s) { rendered.push(s); },
     generationResult_: (msg, t, n) => ({ message: msg, count: n })
   });
-  const res = sandbox.runFlowchartGeneration({ prompt: "create a flowchart", files: [{ name: "Copy of FBM - AI (1).pptx", mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation", data: fbmLikePptx().toString("base64") }] });
+  const res = sandbox.runFlowchartGeneration({ prompt: "create a flowchart", slides: 2, files: [{ name: "Copy of FBM - AI (1).pptx", mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation", data: fbmLikePptx().toString("base64") }] });
   assert.equal(calls.length, 4, "two Vertex AI calls per picture");
   assert.deepEqual(inserted, [1, 2], "after slide 1, in order");
   assert.deepEqual(rendered.map((r) => r.title), ["First picture", "Second picture"]);

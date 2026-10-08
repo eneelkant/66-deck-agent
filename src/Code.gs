@@ -1898,7 +1898,7 @@ function sentenceCase_(t, minWords) {
   return words.map(function (w) {
     const bare = w.replace(/['’]s$/i, '').replace(/[^A-Za-z0-9]/g, '');
     let out = w;
-    const lowerable = function (b) { return !keep.test(b) && !/[0-9]/.test(b) && !/^[A-Z]{2,}$/.test(b); };
+    const lowerable = function (b) { return !keep.test(b) && !/[0-9]/.test(b) && !/^[A-Z]{2,}s?$/.test(b); };   // acronyms and their plurals (FDEs, APIs) keep capitals
     if (/-/.test(w)) {
       // "AI-Powered" -> "AI-powered", "Data-Driven" -> "Data-driven": each part of a hyphenated word on its own
       out = w.split('-').map(function (part, k) {
@@ -3368,6 +3368,7 @@ function runFlowchartGeneration(data) {
     const file = (Array.isArray(data.files) ? data.files : []).filter(function (f) { return f && f.data; })[0];
     if (!text && !file) throw new Error('Describe the steps, or upload a sketch or diagram file.');
     const wanted = data.diagramType && data.diagramType !== 'auto' ? String(data.diagramType) : '';
+    const slidesWanted = Math.max(1, Math.min(10, Math.round(Number(data.slides) || 1)));   // the panel's slide meter (1-10)
 
     // 1. Read: pictures (also the ones inside a .pptx), PDF pages, or a structured diagram file
     let items = [];
@@ -3397,7 +3398,8 @@ function runFlowchartGeneration(data) {
 
     // 2-3. diagram-design: type, budget, overview + detail, and the diagram spec (Vertex AI)
     progressStage_(ctx, 'flow_structure', 'active');
-    const read = diagramDesignRead_({ items: items }, { prompt: text, wantedType: wanted, budgetMs: 220000 }, ctx);
+    const read = diagramDesignRead_({ items: items }, { prompt: text, wantedType: wanted, slides: slidesWanted, budgetMs: 230000 }, ctx);
+    if (read.diagrams.length > slidesWanted) read.diagrams = read.diagrams.slice(0, slidesWanted);
     read.log.forEach(function (l) { ctx.log.push(l); });
     if (!read.diagrams.length) {
       throw new Error((file ? 'No diagram could be built from ' + file.name : 'A diagram could not be built from that description') +
@@ -3441,7 +3443,9 @@ function runFlowchartGeneration(data) {
     if (ctx.progress) { ctx.progress.state = 'done'; progressSave_(ctx); }
 
     const msg = 'SUCCESS: ' + (n > 1 ? n + ' diagram slides added as slides ' + (first + 1) + '-' + (first + n) : 'flowchart added as slide ' + (first + 1)) +
-      ' (' + read.diagrams.map(function (ir) { return ir.type + ', ' + ir.nodes.length + ' boxes'; }).join('; ') + ').' + (ctx.log.length ? '\n' + ctx.log.join('\n') : '');
+      ' (' + read.diagrams.map(function (ir) { return ir.type + ', ' + ir.nodes.length + ' boxes'; }).join('; ') + ').' +
+      (n < slidesWanted ? ' ' + n + ' of the ' + slidesWanted + ' slides asked for could be drawn without repeating content.' : '') +
+      (ctx.log.length ? '\n' + ctx.log.join('\n') : '');
     const res = generationResult_(msg, target, n);
     res.elapsedMs = Date.now() - t0;
     return res;
