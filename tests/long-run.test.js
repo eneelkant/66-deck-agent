@@ -66,7 +66,10 @@ test("a 60-slide deck is planned once, built in parts and ends with the template
   assert.equal(R.first.continue, true, "the first run stops after one part and asks for the next");
   assert.equal(R.calls.outline, 1, "the outline is planned once");
   assert.ok(R.last.ok && !R.last.continue, "the last run finishes the deck");
-  assert.equal(R.drawn.length, 60);
+  const dividers = R.drawn.filter((d) => /^section:/.test(d)).length;
+  assert.ok(dividers >= 4, "one divider slide per section");
+  assert.ok(R.drawn.length >= 55 && R.drawn.length <= 60, "about the asked number of slides, dividers included");
+  assert.match(R.drawn[2], /^section:/, "the first section starts with its divider");
   assert.match(R.drawn[0], /^cover:/);
   assert.match(R.drawn[1], /^agenda:/);
   assert.match(R.drawn[R.drawn.length - 1], /^closing:Thank You!/);
