@@ -117,6 +117,8 @@ function assertRequiredFiles() {
     "src/Engine.gs",
     "src/EngineRenderer.gs",
     "src/ShapeKit.gs",
+    "src/Diagram.gs",
+    "src/IconProvider.gs",
     "src/Generator.html",
     "assets/icons/manifest.json"
   ];
@@ -171,6 +173,11 @@ function assertClaspConfig() {
   } else {
     ok(".clasp.json push order includes core spec files");
   }
+  if (!/Diagram\.gs/.test(order) || !/IconProvider\.gs/.test(order)) {
+    fail(".clasp.json filePushOrder must include Diagram.gs and IconProvider.gs");
+  } else {
+    ok(".clasp.json push order includes Diagram and IconProvider");
+  }
 }
 
 function gasStubs() {
@@ -221,6 +228,8 @@ function assertGasSyntaxAndSymbols() {
   const files = [
     "src/Brand.gs",
     "src/ShapeKit.gs",
+    "src/IconProvider.gs",
+    "src/Diagram.gs",
     "src/Engine.gs",
     "src/EngineRenderer.gs",
     "src/Reference.gs",
@@ -264,7 +273,18 @@ function assertGasSyntaxAndSymbols() {
     "buildProductionMenu_",
     "ensureInitialSetup_",
     "runInitialSetup_",
-    "validateBrandIconManifest_"
+    "validateBrandIconManifest_",
+    "detectUploadCategory_",
+    "validateDiagramIr_",
+    "parseMermaidToIr_",
+    "parseDrawioToIr_",
+    "parseExcalidrawToIr_",
+    "parseSvgToIr_",
+    "attachDiagramsToPlan_",
+    "diagramIrToEngineElements_",
+    "resolveIconRequest_",
+    "sanitizeIconSvg_",
+    "resolveIconsForPlan_"
   ];
   for (const fn of requiredFns) {
     if (typeof sandbox[fn] !== "function") fail(`Missing global function: ${fn}`);
@@ -275,6 +295,10 @@ function assertGasSyntaxAndSymbols() {
   else ok("ENGINE layout object present");
   if (!sandbox.EngineRenderer) fail("Missing EngineRenderer object");
   else ok("EngineRenderer object present");
+  if (!sandbox.DiagramIR) fail("Missing DiagramIR object");
+  else ok("DiagramIR object present");
+  if (!sandbox.IconProvider) fail("Missing IconProvider object");
+  else ok("IconProvider object present");
   if (!sandbox.CONFIG) fail("Missing CONFIG");
   else ok("CONFIG present");
   if (!sandbox.SHAPE_KIT || !sandbox.SHAPE_KIT.b64) fail("Missing ShapeKit data");
@@ -593,6 +617,35 @@ function assertProductionMenu() {
   }
 }
 
+function assertDiagramAndIconIntelligence() {
+  const diagram = read("src/Diagram.gs");
+  const icons = read("src/IconProvider.gs");
+  const code = read("src/Code.gs");
+  const engine = read("src/Engine.gs");
+  if (!/function validateDiagramIr_/.test(diagram) || !/function parseMermaidToIr_/.test(diagram)) {
+    fail("Diagram.gs missing IR validation/parsers");
+  } else ok("Diagram IR parsers present");
+  if (!/function sanitizeIconSvg_/.test(icons) || !/api\.iconify\.design/.test(icons)) {
+    fail("IconProvider must sanitize SVG and use Iconify-compatible retrieval");
+  } else ok("IconProvider sanitization and Iconify adapter present");
+  if (/require\(|from ['"]bun|npx better-icons|mcpServers/.test(diagram + icons)) {
+    fail("Diagram/IconProvider must not require Node/Bun/MCP at runtime");
+  } else ok("No Node/Bun/MCP runtime dependency in diagram/icon modules");
+  if (!/progressStage_\(ctx, 'diagram'/.test(code) || !/progressStage_\(ctx, 'icons'/.test(code)) {
+    fail("Create pipeline must include diagram and icons progress stages");
+  } else ok("Create pipeline includes diagram/icons stages");
+  if (!/attachDiagramsToPlan_/.test(code) || !/resolveIconsForPlan_/.test(code)) {
+    fail("Create pipeline must attach diagrams and resolve icons");
+  } else ok("Create pipeline wires diagram and icon intelligence");
+  if (/architecture:\s*'bullets'|flowchart:\s*'bullets'|diagram:\s*'bullets'/.test(engine)) {
+    fail("ENGINE must not force architecture/flowchart/diagram to bullets");
+  } else ok("ENGINE routes architecture/flowchart to diagram layouts");
+  const createBlock = code.match(/create:\s*\[[\s\S]*?\],\s*create_beautiful:/);
+  if (!createBlock || !/\['diagram'/.test(createBlock[0]) || !/\['icons'/.test(createBlock[0])) {
+    fail("PROGRESS_STAGES.create must include diagram and icons");
+  } else ok("PROGRESS_STAGES.create includes diagram and icons");
+}
+
 function assertBrandIconAssets() {
   const rel = "assets/icons/manifest.json";
   let manifest;
@@ -657,6 +710,7 @@ function main() {
   assertSamePresentation();
   assertProductionMenu();
   assertBrandIconAssets();
+  assertDiagramAndIconIntelligence();
   assertGasSyntaxAndSymbols();
 
   if (failures > 0) {

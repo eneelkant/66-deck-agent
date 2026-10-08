@@ -38,16 +38,19 @@ function validateBrandIconManifest_(manifest) {
   if (!icons.length) errors.push('no icons listed');
   icons.forEach(function (ic) {
     if (!ic.id) errors.push('icon missing id');
-    if (!Array.isArray(ic.tags) || !ic.tags.length) errors.push((ic.id || '?') + ' missing tags');
+    const tags = Array.isArray(ic.semanticTags) && ic.semanticTags.length ? ic.semanticTags : ic.tags;
+    if (!Array.isArray(tags) || !tags.length) errors.push((ic.id || '?') + ' missing tags');
     if (!ic.files || typeof ic.files !== 'object') {
       errors.push((ic.id || '?') + ' missing files');
       return;
     }
     ['night_blue', 'white', 'accent_blue'].forEach(function (k) {
-      const p = ic.files[k];
+      const p = ic.files[k] || (ic.variants && ic.variants[k]);
       if (!p) errors.push(ic.id + ' missing ' + k);
       else if (String(p).indexOf('assets/icons/') !== 0) errors.push(ic.id + ' ' + k + ' path must be under assets/icons/');
     });
+    if (ic.provider && typeof ic.provider !== 'string') errors.push(ic.id + ' provider must be a string');
+    if (ic.iconId && typeof ic.iconId !== 'string') errors.push(ic.id + ' iconId must be a string');
   });
   return { ok: errors.length === 0, errors: errors };
 }

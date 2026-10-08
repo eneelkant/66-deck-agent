@@ -330,9 +330,9 @@ test("sidebar completion uses the returned active presentation URL", () => {
 
 test("pipeline stages stay in the V1_17 create order", () => {
   const sandbox = loadPipeline();
-  assert.equal(Array.from(sandbox.getPipelineStages()).join(","), "research,write,match,fit,brand,insert");
+  assert.equal(Array.from(sandbox.getPipelineStages()).join(","), "research,write,diagram,match,fit,icons,brand,insert");
   const stages = vm.runInContext("PROGRESS_STAGES.create.map(function (s) { return s[0]; }).join(',')", sandbox);
-  assert.equal(stages, "research,write,match,fit,brand,insert");
+  assert.equal(stages, "research,write,diagram,match,fit,icons,brand,insert");
 });
 
 test("overlayTextIfNeeded writes overlay boxes for fill-only shapes", () => {

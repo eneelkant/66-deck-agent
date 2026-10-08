@@ -19,7 +19,29 @@
         "night_blue": "assets/icons/night-blue/cloud-upload.svg",
         "white": "assets/icons/white/cloud-upload.svg",
         "accent_blue": "assets/icons/accent-blue/cloud-upload.svg"
-      }
+      },
+      "semanticTags": [
+        "cloud",
+        "data",
+        "infrastructure",
+        "storage",
+        "upload"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:cloud-upload",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/cloud-upload.svg",
+        "white": "assets/icons/white/cloud-upload.svg",
+        "accent_blue": "assets/icons/accent-blue/cloud-upload.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "cloud",
@@ -32,7 +54,28 @@
         "night_blue": "assets/icons/night-blue/cloud.svg",
         "white": "assets/icons/white/cloud.svg",
         "accent_blue": "assets/icons/accent-blue/cloud.svg"
-      }
+      },
+      "semanticTags": [
+        "cloud",
+        "infrastructure",
+        "platform",
+        "storage"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:cloud",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/cloud.svg",
+        "white": "assets/icons/white/cloud.svg",
+        "accent_blue": "assets/icons/accent-blue/cloud.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "shield",
@@ -46,7 +89,28 @@
         "night_blue": "assets/icons/night-blue/shield.svg",
         "white": "assets/icons/white/shield.svg",
         "accent_blue": "assets/icons/accent-blue/shield.svg"
-      }
+      },
+      "semanticTags": [
+        "compliance",
+        "risk",
+        "secure",
+        "security"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:shield",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/shield.svg",
+        "white": "assets/icons/white/shield.svg",
+        "accent_blue": "assets/icons/accent-blue/shield.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "lock",
@@ -59,7 +123,27 @@
         "night_blue": "assets/icons/night-blue/lock.svg",
         "white": "assets/icons/white/lock.svg",
         "accent_blue": "assets/icons/accent-blue/lock.svg"
-      }
+      },
+      "semanticTags": [
+        "lock",
+        "secure",
+        "security"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:lock",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/lock.svg",
+        "white": "assets/icons/white/lock.svg",
+        "accent_blue": "assets/icons/accent-blue/lock.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "chart",
@@ -73,7 +157,29 @@
         "night_blue": "assets/icons/night-blue/chart.svg",
         "white": "assets/icons/white/chart.svg",
         "accent_blue": "assets/icons/accent-blue/chart.svg"
-      }
+      },
+      "semanticTags": [
+        "analytics",
+        "chart",
+        "data",
+        "insight",
+        "metrics"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:bar-chart-3",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/chart.svg",
+        "white": "assets/icons/white/chart.svg",
+        "accent_blue": "assets/icons/accent-blue/chart.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "brain",
@@ -87,7 +193,28 @@
         "night_blue": "assets/icons/night-blue/brain.svg",
         "white": "assets/icons/white/brain.svg",
         "accent_blue": "assets/icons/accent-blue/brain.svg"
-      }
+      },
+      "semanticTags": [
+        "ai",
+        "innovation",
+        "ml",
+        "model"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:brain",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/brain.svg",
+        "white": "assets/icons/white/brain.svg",
+        "accent_blue": "assets/icons/accent-blue/brain.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "gear",
@@ -101,7 +228,28 @@
         "night_blue": "assets/icons/night-blue/gear.svg",
         "white": "assets/icons/white/gear.svg",
         "accent_blue": "assets/icons/accent-blue/gear.svg"
-      }
+      },
+      "semanticTags": [
+        "automation",
+        "process",
+        "settings",
+        "workflow"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:settings",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/gear.svg",
+        "white": "assets/icons/white/gear.svg",
+        "accent_blue": "assets/icons/accent-blue/gear.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "dollar",
@@ -116,7 +264,29 @@
         "night_blue": "assets/icons/night-blue/dollar.svg",
         "white": "assets/icons/white/dollar.svg",
         "accent_blue": "assets/icons/accent-blue/dollar.svg"
-      }
+      },
+      "semanticTags": [
+        "budget",
+        "cost",
+        "finance",
+        "revenue",
+        "savings"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:dollar-sign",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/dollar.svg",
+        "white": "assets/icons/white/dollar.svg",
+        "accent_blue": "assets/icons/accent-blue/dollar.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "growth",
@@ -130,7 +300,28 @@
         "night_blue": "assets/icons/night-blue/growth.svg",
         "white": "assets/icons/white/growth.svg",
         "accent_blue": "assets/icons/accent-blue/growth.svg"
-      }
+      },
+      "semanticTags": [
+        "growth",
+        "roi",
+        "scale",
+        "trend"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:trending-up",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/growth.svg",
+        "white": "assets/icons/white/growth.svg",
+        "accent_blue": "assets/icons/accent-blue/growth.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "team",
@@ -144,7 +335,28 @@
         "night_blue": "assets/icons/night-blue/team.svg",
         "white": "assets/icons/white/team.svg",
         "accent_blue": "assets/icons/accent-blue/team.svg"
-      }
+      },
+      "semanticTags": [
+        "collaboration",
+        "people",
+        "team",
+        "users"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:users",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/team.svg",
+        "white": "assets/icons/white/team.svg",
+        "accent_blue": "assets/icons/accent-blue/team.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "clock",
@@ -157,7 +369,27 @@
         "night_blue": "assets/icons/night-blue/clock.svg",
         "white": "assets/icons/white/clock.svg",
         "accent_blue": "assets/icons/accent-blue/clock.svg"
-      }
+      },
+      "semanticTags": [
+        "plan",
+        "roadmap",
+        "time"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:clock",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/clock.svg",
+        "white": "assets/icons/white/clock.svg",
+        "accent_blue": "assets/icons/accent-blue/clock.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
     },
     {
       "id": "lightbulb",
@@ -170,7 +402,45 @@
         "night_blue": "assets/icons/night-blue/lightbulb.svg",
         "white": "assets/icons/white/lightbulb.svg",
         "accent_blue": "assets/icons/accent-blue/lightbulb.svg"
-      }
+      },
+      "semanticTags": [
+        "idea",
+        "innovation",
+        "insight"
+      ],
+      "provider": "66degrees-local",
+      "collection": "66degrees",
+      "iconId": "lucide:lightbulb",
+      "license": "proprietary-66degrees",
+      "source": "bundled",
+      "variants": {
+        "night_blue": "assets/icons/night-blue/lightbulb.svg",
+        "white": "assets/icons/white/lightbulb.svg",
+        "accent_blue": "assets/icons/accent-blue/lightbulb.svg"
+      },
+      "brandVariants": [
+        "night_blue",
+        "white",
+        "accent_blue"
+      ]
+    }
+  ],
+  "providers": [
+    {
+      "id": "66degrees-local",
+      "license": "proprietary-66degrees",
+      "source": "assets/icons"
+    },
+    {
+      "id": "better-icons",
+      "license": "collection-dependent",
+      "source": "https://api.iconify.design",
+      "collectionsPreferred": [
+        "lucide",
+        "tabler",
+        "heroicons",
+        "ph"
+      ]
     }
   ]
 }

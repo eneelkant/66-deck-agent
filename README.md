@@ -97,9 +97,11 @@ class node_source_docs toneIndigo
 
 | File | Responsibility |
 |---|---|
-| `Code.gs` | Menu, settings, Create pipeline (research, plan, design choice, fit check), uploads, Gemini/Scite, orchestration |
-| `Engine.gs` | Layout engine: every slide design, type scale, fit measurement |
-| `EngineRenderer.gs` | Draws the engine layout into Google Slides (safe ShapeType / dimensions / text frames) |
+| `Code.gs` | Menu, settings, Create pipeline (research, plan, diagram, design choice, fit check, icons), uploads, Gemini/Scite, orchestration |
+| `Diagram.gs` | Diagram IR, upload detection, Mermaid/draw.io/Excalidraw/SVG parsers, vision extraction, brand transform |
+| `IconProvider.gs` | Semantic icon selection (local → better-icons/Iconify → fallback), SVG sanitize, brand recolor, cache |
+| `Engine.gs` | Layout engine: every slide design, type scale, fit measurement, diagram IR body merge |
+| `EngineRenderer.gs` | Draws the engine layout into Google Slides (safe ShapeType / dimensions / text frames / icons) |
 | `Reference.gs` | 2026 template reference library, harvest, design rotation, icon check |
 | `Brand.gs` | Brand colours, default brand profile, approved facts, Gemini/Vertex client |
 | `Rebrand.gs` | Rebrand mode: restyles existing slides to the brand |
@@ -109,11 +111,49 @@ class node_source_docs toneIndigo
 Pipeline (Create):
 
 ```
-research (Scite, else Gemini Search) → write plan → match 2026 template designs
-  → fit check (ENGINE.measure) → draw into getActivePresentation()
+research (Scite, else Gemini Search) → write plan → analyze/rebuild diagram
+  → match 2026 template designs → fit check → select icons
+  → draw into getActivePresentation()
 ```
 
 Rebrand applies the brand pass to the open deck in place.
+
+## Diagram & Icon Intelligence
+
+Uploaded diagrams can be reconstructed into **editable native Google Slides** shapes, connectors, and labels whenever structure can be recovered.
+
+Supported inputs (when structure is available):
+
+- Mermaid (`.mmd` / Mermaid text)
+- draw.io / diagrams.net (`.drawio` / compatible XML)
+- Excalidraw (`.excalidraw` / JSON)
+- SVG (text labels + approximate structure)
+- PNG/JPG AI-generated diagrams via Vertex visual extraction
+- Plain-language flow descriptions through the existing Gemini plan path
+
+Reconstruction flow:
+
+```
+upload → detect → extract/normalize IR → 66° brand transform
+  → Engine layout → EngineRenderer native shapes/connectors/icons
+```
+
+Icons are selected **semantically** (concept → candidate → brand color), not by asking Vertex to invent SVG paths:
+
+1. Local 66° curated icons (`assets/icons` + bundled geometry)
+2. better-icons / Iconify-compatible retrieval (`api.iconify.design`) for outline families (Lucide, Tabler, Heroicons, Phosphor)
+3. Safe fallback glyph / existing library/Drive icons
+
+Brand colors applied automatically:
+
+- Night Blue `#040A1B`
+- 66° White `#FFFDF9`
+- 66° Blue `#0052FF` (accent / highlight)
+- Shark Grey `#B3C5D0`
+
+Provider, collection, icon ID, and license/source metadata are retained when available. SVG payloads are sanitized before insertion. Failures never abort the deck: low-confidence diagrams keep the original image; missing icons fall back gracefully.
+
+Ordinary users do **not** install better-icons MCP, Bun, or any local icon server. Generation stays automatic from the Google Slides sidebar.
 
 ## Directory structure
 
@@ -130,6 +170,8 @@ Rebrand applies the brand pass to the open deck in place.
 │   ├── appsscript.json
 │   ├── Brand.gs
 │   ├── ShapeKit.gs
+│   ├── IconProvider.gs
+│   ├── Diagram.gs
 │   ├── Engine.gs
 │   ├── EngineRenderer.gs
 │   ├── Reference.gs

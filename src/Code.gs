@@ -293,7 +293,7 @@ function generatePresentationRun_(data, run) {
 
   // ---------- CREATE ----------
   const userPrompt = String(data.prompt || '').trim();
-  const sources = { text: '', pdfs: [], images: [] };
+  const sources = { text: '', pdfs: [], images: [], diagrams: [], diagramFallbacks: [] };
   if (data.sourceUrl && String(data.sourceUrl).trim()) readSourceDocument(String(data.sourceUrl).trim(), sources);
   // Uploaded files: one (data.upload, older panel) or several (data.files, current panel). A file that cannot be read
   // is skipped with a note; the run only stops when nothing at all is left to build from.
@@ -302,7 +302,7 @@ function generatePresentationRun_(data, run) {
   const skippedFiles = [];
   uploads.forEach(function (f) {
     try {
-      readUploadedFile_(f, sources);
+      readUploadedFile_(f, sources, ctx);
       ctx.log.push('Source file used: ' + f.name + '.');
     } catch (e) {
       skippedFiles.push(String(f.name || 'file') + ' (' + e.message + ')');
@@ -375,6 +375,19 @@ function generatePresentationRun_(data, run) {
   progressSlides_(ctx, plan.slides.map(specTitle_));
   checkCancel_(ctx);
 
+  // 1b-2. Reconstruct uploaded diagrams into editable IR and attach to the plan (graceful fallback).
+  progressStage_(ctx, 'diagram', 'active', 'Analyzing diagram');
+  try {
+    const attached = typeof attachDiagramsToPlan_ === 'function' ? attachDiagramsToPlan_(plan, sources, ctx) : 0;
+    if (attached) progressStage_(ctx, 'diagram', 'done', 'Rebuilding flowchart (' + attached + ')');
+    else if (sources.diagramFallbacks && sources.diagramFallbacks.length) progressStage_(ctx, 'diagram', 'done', 'Kept original diagram image');
+    else progressStage_(ctx, 'diagram', 'done', 'No diagram upload');
+  } catch (e) {
+    ctx.log.push('Diagram stage skipped: ' + (e && e.message ? e.message : String(e)));
+    progressStage_(ctx, 'diagram', 'done', 'Diagram stage skipped');
+  }
+  checkCancel_(ctx);
+
   // 1c. Match every planned slide to its 66degrees template reference (deterministic, no extra Gemini call)
   progressStage_(ctx, 'match', 'active', 'Choosing a 66degrees template layout for each slide');
   enforceQuoteRule(plan, userPrompt, sources);
@@ -397,6 +410,16 @@ function generatePresentationRun_(data, run) {
     if (fitRes.left) ctx.log.push('Fit check: ' + fitRes.left + ' text(s) still slightly long; the slide type was stepped down to fit.');
     checkCancel_(ctx);
   }
+
+  // 1e. Semantic icon selection (local → better-icons/Iconify → fallback). Never fails the deck.
+  try {
+    if (typeof resolveIconsForPlan_ === 'function') resolveIconsForPlan_(plan, ctx);
+    else progressStage_(ctx, 'icons', 'done', 'Icon provider unavailable');
+  } catch (e) {
+    ctx.log.push('Icon stage skipped: ' + (e && e.message ? e.message : String(e)));
+    progressStage_(ctx, 'icons', 'done', 'Icon stage skipped');
+  }
+  checkCancel_(ctx);
 
   // 2. Slides: drawn directly into the user's CURRENT presentation (default).
   let stats, tempId = null, copied;
@@ -472,18 +495,22 @@ const PROGRESS_STAGES = {
   create: [
     ['research', 'Research'],
     ['write', 'Writing the content'],
+    ['diagram', 'Analyzing diagram'],
     ['match', 'Choosing a 66degrees template design for each slide'],
     ['fit', 'Fitting the text to each design'],
+    ['icons', 'Selecting icons'],
     ['brand', 'Drawing the slides'],
     ['insert', 'Adding slides to your deck']
   ],
   create_beautiful: [
     ['research', 'Research'],
     ['write', 'Writing the content'],
+    ['diagram', 'Analyzing diagram'],
     ['match', 'Matching 66degrees template layouts'],
     ['design', 'Designing the slides'],
     ['import', 'Importing into Google Slides'],
     ['review', 'Reviewing every slide'],
+    ['icons', 'Selecting icons'],
     ['brand', 'Applying the 66degrees brand'],
     ['insert', 'Adding slides to your deck']
   ],
@@ -956,7 +983,7 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
   replaceDuplicateSlides_(plan, ctx);                                             // no two slides with the same content
   orderSlidesToRequest_(plan, ctx);                                               // body slides in the order the request lists its topics
   limitCardSlides_(plan.slides, n);                                               // at most 2 "cards" slides (more in long decks)
-  plan.slides.forEach(function (sp) { nameCaseClient_(sp, ctx); });               // a case study names its client                  // "24.69%" -> "25%" 
+  plan.slides.forEach(function (sp) { nameCaseClient_(sp, ctx); });               // a case study names its client
   plan.slides.forEach(function (sp) {                                            // brand rule: sentence-case titles
     const tt = String(sp.type).toLowerCase();
     if (sp.title && tt !== 'closing' && tt !== 'template') sp.title = sentenceCase_(sp.title, 2);
@@ -1597,6 +1624,7 @@ function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
     checkCancel_(ctx);
     progressSlide_(ctx, i, 'active');
     try {
+      ctx.currentSpec = specs[i];
       // Real template slides (client logos, leadership, industries) are copied from the template as they are
       const sp = specs[i] || {};
       if (String(sp.type || '').toLowerCase() === 'template' && sp.tag && insertTemplateSlide_(slide, sp.tag, ctx)) {
@@ -1612,6 +1640,7 @@ function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
     }
     progressSlide_(ctx, i, 'done');
   });
+  ctx.currentSpec = null;
 
   if (blankDeck) {
     const leftover = target.getSlides();
@@ -1656,7 +1685,7 @@ function drawSlidesFromPlan_(presId, specs, ctx) {
    PDF and images go to Gemini as they are; text, CSV and JSON are read directly;
    Word, Excel and PowerPoint files are converted by Google Drive, read as text, and the copy is deleted.
 ========================= */
-function readUploadedFile_(upload, sources) {
+function readUploadedFile_(upload, sources, ctx) {
   const name = String(upload.name || 'file');
   const ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1] ? name.match(/\.([a-z0-9]+)$/i)[1].toLowerCase() : '';
   const bytes = Utilities.base64Decode(String(upload.data));
@@ -1666,12 +1695,34 @@ function readUploadedFile_(upload, sources) {
     sources.text += (sources.text ? '\n\n' : '') + 'UPLOADED FILE "' + name + '":\n' + String(text).slice(0, CONFIG.maxSourceChars);
   };
 
+  // Diagram intelligence: structured diagram sources are normalized into editable IR when possible.
+  const category = typeof detectUploadCategory_ === 'function' ? detectUploadCategory_(upload) : '';
+  if (category === 'structured-diagram' ||
+      /^(mmd|mermaid|drawio|dio|excalidraw|svg)$/.test(ext) ||
+      mime === 'image/svg+xml') {
+    if (typeof ingestUploadedDiagram_ === 'function') {
+      const result = ingestUploadedDiagram_(upload, sources, ctx);
+      if (result && result.ok) return;
+      // Keep textual diagram sources available to the planner when reconstruction fails.
+      try { addText(Utilities.newBlob(bytes).getDataAsString()); } catch (e) {}
+      if (result && result.fallback) return;
+    }
+  }
+
   if (ext === 'pdf' || mime === 'application/pdf') { sources.pdfs.push(String(upload.data)); return; }
   if (/^(png|jpe?g|webp|gif)$/.test(ext) || /^image\//.test(mime)) {
-    sources.images.push({ mime: mime || ('image/' + (ext === 'jpg' ? 'jpeg' : ext)), data: String(upload.data) });
+    // Try diagram reconstruction for AI-generated flowchart/architecture images; keep image either way.
+    if (typeof ingestUploadedDiagram_ === 'function') {
+      try { ingestUploadedDiagram_(upload, sources, ctx); } catch (e) {
+        if (ctx) ctx.log.push('Diagram image analysis skipped: ' + e.message);
+      }
+    }
+    if (!(sources.images || []).some(function (img) { return img && img.data === String(upload.data); })) {
+      sources.images.push({ mime: mime || ('image/' + (ext === 'jpg' ? 'jpeg' : ext)), data: String(upload.data) });
+    }
     return;
   }
-  if (/^(txt|md|csv|tsv|json|xml|html?|rtf)$/.test(ext) || /^text\//.test(mime)) {
+  if (/^(txt|md|csv|tsv|json|xml|html?|rtf|mmd|mermaid)$/.test(ext) || /^text\//.test(mime)) {
     addText(Utilities.newBlob(bytes).getDataAsString());
     return;
   }
@@ -1684,7 +1735,7 @@ function readUploadedFile_(upload, sources) {
       'Please upload a PDF, CSV, text or image, or paste a Google Docs / Sheets / Slides link.'
     );
   }
-  throw new Error('This file type is not supported (' + name + '). Use PDF, CSV, text, an image, or a Google Docs/Sheets/Slides link.');
+  throw new Error('This file type is not supported (' + name + '). Use PDF, CSV, text, an image, Mermaid/draw.io/Excalidraw/SVG, or a Google Docs/Sheets/Slides link.');
 }
 
 // Kept for admin/Beautiful.ai callers that previously converted Office blobs.

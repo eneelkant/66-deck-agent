@@ -3597,6 +3597,8 @@ var ENGINE = (function () {
     steps: 'process', roadmap: 'timeline', list: 'bullets', thank_you: 'closing', title: 'cover', divider: 'section',
     case: 'case_study', checklist: 'next_steps', two_column: 'comparison',
     architecture: 'diagram', flowchart: 'diagram', cycle: 'diagram',
+    'org-chart': 'diagram', 'data-flow': 'diagram', dependency: 'diagram', 'database-schema': 'diagram',
+    swimlane: 'diagram', sequence: 'diagram', state: 'diagram', tree: 'diagram',
     leadership: 'team', people: 'team', contributors: 'team',
     clients: 'template', logos: 'template', client_logos: 'template', industries: 'template' };
 
@@ -3767,6 +3769,9 @@ var ENGINE = (function () {
         if (!over) break;
       }
       TSZ.body = TYPE_STEPS[0].body; TSZ.heading = TYPE_STEPS[0].heading;
+      if (s.diagram && typeof applyDiagramIrToEngineOutput_ === 'function') {
+        out = applyDiagramIrToEngineOutput_(out, s, ctx.tokens || null);
+      }
       if (!out.noFooter) footerMark(out.els, out.dark);
       out.type = type;
       out.notes = s.notes || '';

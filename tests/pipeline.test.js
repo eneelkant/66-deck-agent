@@ -134,7 +134,7 @@ test("bootstrap reports the active presentation URL", () => {
 test("pipeline stages follow the spec create flow", () => {
   const { getPipelineStages } = loadEngineStack();
   const stages = Array.from(getPipelineStages());
-  assert.equal(stages.join(","), "research,write,match,fit,brand,insert");
+  assert.equal(stages.join(","), "research,write,diagram,match,fit,icons,brand,insert");
 });
 
 test("ENGINE.cleanSpec strips stray color codes", () => {
