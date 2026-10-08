@@ -57,7 +57,7 @@ test("a 60-slide deck is planned once, built in parts and ends with the template
     };
     var ctx = { runId: 'r1', log: [] };
     loadRunContext_(ctx);
-    var first = startLongDeck_(ctx, deck, { userPrompt: 'A long deck', sources: { text: '', pdfs: [], images: [], research: [] }, presentationType: 'Custom', department: 'Other', n: 60, blankDeck: true }, Date.now() - 300000);
+    var first = startLongDeck_(ctx, deck, { userPrompt: 'A long deck', sources: { text: '', pdfs: [], images: [], research: [] }, presentationType: 'Custom', department: 'Other', n: 60, blankDeck: true }, Date.now() - 1000000);
     var res = first, guard = 0;
     while (res && res.continue && guard++ < 50) res = continueDeckGeneration('r1');
     RESULT = { first: first, last: res, drawn: DRAWN, calls: CALLS };
@@ -82,7 +82,7 @@ test("a large rebrand is done in parts of 10 slides", () => {
     SlidesApp = { getActivePresentation: function () { return deck; } };
     loadRunContext_ = function (ctx) { ctx.apiKey = 'vertex'; ctx.brand = { name: '66degrees', rules: [] }; ctx.assets = { icons: {} }; ctx.lib = null; };
     rebrandPresentation = function (id, ctx, o) { PARTS.push([o.start, o.end]); return { slides: o.end - o.start, fonts: 1 }; };
-    var t0 = Date.now() - 260000;
+    var t0 = Date.now() - 1000000;   // the first run is already past its time budget: it must stop after one part
     var res = rebrandStep_({ runId: 'rb', log: [] }, deck, { mode: 'rebrand', runId: 'rb', startedAt: t0, start: 0 }, t0), g = 0;
     var first = res;
     while (res && res.continue && g++ < 20) res = continueDeckGeneration('rb');
