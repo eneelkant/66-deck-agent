@@ -1738,13 +1738,31 @@ function readUploadedFile_(upload, sources, ctx) {
     addText(Utilities.newBlob(bytes).getDataAsString());
     return;
   }
+  if (ext === 'pptx' && typeof diagramUploadParts_ === 'function') {
+    // PowerPoint: the words of every slide go to the writer; the pictures are read as diagrams (diagram-design)
+    const parts = diagramUploadParts_(upload);
+    const words = (parts.slides || []).map(function (sl) { return sl.text ? 'Slide ' + sl.slide + ': ' + sl.text : ''; }).filter(Boolean).join('\n');
+    if (words) addText(words);
+    const pics = parts.items.filter(function (it) { return it.image; });
+    if (pics.length) {
+      progressStage_(ctx, 'diagram', 'active', 'Reading the diagrams in ' + name + ' (diagram-design)');
+      const got = diagramDesignRead_({ items: pics }, {}, ctx);
+      got.log.forEach(function (l) { ctx.log.push(l); });
+      sources.diagrams = sources.diagrams || [];
+      got.diagrams.forEach(function (ir) { sources.diagrams.push({ name: name, category: 'presentation', ir: ir }); });
+      if (got.diagrams.length && typeof noteDiagramsForPlanner_ === 'function') noteDiagramsForPlanner_(sources, got.diagrams, name);
+      got.notDiagram.forEach(function (it) { if (it.image && sources.images.length < 6) sources.images.push({ mime: it.image.mime, data: it.image.data }); });
+    }
+    if (!words && !pics.length) throw new Error('Nothing could be read from ' + name + '.');
+    return;
+  }
   if (/^(doc|docx|odt|xls|xlsx|ods|ppt|pptx|odp)$/.test(ext)) {
     // Office→Google conversion previously used Drive REST upload/export, which
     // triggers "Permission denied while enabling APIs: drive" for end users.
     // Accept PDF / text / CSV / images / Google Workspace links instead.
     throw new Error(
       'Uploaded .' + ext + ' files are not converted via the Drive REST API. ' +
-      'Please upload a PDF, CSV, text or image, or paste a Google Docs / Sheets / Slides link.'
+      'Please upload a PDF, PowerPoint (.pptx), CSV, text or image, or paste a Google Docs / Sheets / Slides link.'
     );
   }
   throw new Error('This file type is not supported (' + name + '). Use PDF, CSV, text, an image, Mermaid/draw.io/Excalidraw/SVG, or a Google Docs/Sheets/Slides link.');
@@ -3259,8 +3277,9 @@ function longDeckStep_(ctx, target, st, t0) {
       return written.slides[wk++];
     }).filter(Boolean) };
     // Diagram uploads (rebuilt once, on the first diagram slide of the deck) and branded icons, as in a short deck
-    if (!st.diagramsAttached && typeof attachDiagramsToPlan_ === 'function') {
-      try { if (attachDiagramsToPlan_(plan, st.sources, ctx)) st.diagramsAttached = true; } catch (e) { ctx.log.push('Diagram stage skipped: ' + e.message); }
+    // each uploaded diagram takes the slide whose topic matches it; anything left is placed in the last part
+    if (typeof attachDiagramsToPlan_ === 'function' && ((st.sources && st.sources.diagrams) || []).some(function (d) { return !d.attached; })) {
+      try { attachDiagramsToPlan_(plan, st.sources, ctx, { force: st.next + part.length >= all.length }); } catch (e) { ctx.log.push('Diagram stage skipped: ' + e.message); }
     }
     if (typeof resolveIconsForPlan_ === 'function') { try { resolveIconsForPlan_(plan, ctx); } catch (e) { ctx.log.push('Icon stage skipped: ' + e.message); } }
     dedupeDeckNumbers_(plan.slides, st.usedNumbers);                    // a figure is shown once in the whole deck
@@ -3331,42 +3350,11 @@ function rebrandStep_(ctx, target, st, t0) {
 
 /* =========================
    FLOWCHART TAB
-   One editable, on-brand flowchart slide from a description and/or a sketch or diagram file (photo, screenshot,
-   Mermaid, draw.io, Excalidraw, SVG). Always added as a new slide right after the slide the user is on; the layout
-   (direction, alignment, spacing) is chosen automatically (Diagram.gs flowchart layout).
+   Diagram slides from a description and/or an upload (picture, PDF, PowerPoint, Mermaid, draw.io, Excalidraw, SVG).
+   Everything goes through the diagram-design pipeline (DiagramDesign.gs): Vertex AI chooses the type with
+   diagram-design's selection table and budget, splits dense pictures into overview + detail, and describes each
+   diagram; the add-on draws it as editable shapes. The slides are always added right after the slide the user is on.
 ========================= */
-const FLOW_NODE_TYPES_ = ['start', 'end', 'process', 'decision', 'data'];
-
-// Gemini turns the description into the flowchart structure. With a diagram read from an upload, the description
-// corrects or adds to it (the upload is the starting point).
-function flowchartIrFromText_(text, baseIr, wantedType, ctx) {
-  const prompt = [
-    'You turn a process description into a clean flowchart for a ' + ctx.brand.name + ' slide.',
-    text ? 'DESCRIPTION: "' + String(text).slice(0, 3000) + '"' : 'No description: use the diagram below as it is.',
-    baseIr ? 'DIAGRAM READ FROM THE UPLOADED FILE (start from this; apply the description as corrections or additions):\n' +
-      JSON.stringify({ type: baseIr.type, nodes: baseIr.nodes.map(function (n) { return { id: n.id, type: n.type, label: n.label }; }), edges: baseIr.edges }) : '',
-    'DIAGRAM TYPE: ' + (wantedType || 'choose the best: flowchart, process, swimlane, architecture or org-chart') + '.',
-    'RULES:',
-    '- 3 to 16 nodes. Node "type": start, end, process, decision or data. A flowchart begins with one "start" and ends with "end" node(s).',
-    '- Labels are short (2-6 words), sentence case, no full stop. A decision label is a question ("Urgent?").',
-    '- Edges from a decision carry a short label ("Yes" / "No"). Other edges have no label unless the description names one.',
-    '- Keep the order of the description. Never add steps the description or the diagram does not imply.',
-    '- "title": the slide title, the key message in sentence case, max 58 characters. "lead": one sentence (max 110 characters) or "".',
-    'Return ONLY JSON: {"title":"","lead":"","type":"flowchart","nodes":[{"id":"n1","type":"start","label":""}],"edges":[{"from":"n1","to":"n2","label":""}]}'
-  ].filter(Boolean).join('\n');
-  const raw = callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.2) || {};
-  (raw.nodes || []).forEach(function (n) {
-    if (!n) return;
-    n.type = FLOW_NODE_TYPES_.indexOf(String(n.type || '').toLowerCase()) !== -1 ? String(n.type).toLowerCase() : 'process';
-    n.label = sentenceCase_(String(n.label || '').replace(/\.$/, ''), 1);
-    if (n.type === 'start' || n.type === 'end') n.type = 'terminator';
-  });
-  raw.type = wantedType && DIAGRAM_TYPES.indexOf(wantedType) !== -1 ? wantedType : (DIAGRAM_TYPES.indexOf(String(raw.type)) !== -1 ? raw.type : 'flowchart');
-  raw.source = baseIr ? 'upload+text' : 'text';
-  const ir = normalizeDiagramIr_(raw);
-  return { ir: ir, title: String(raw.title || ''), lead: String(raw.lead || '') };
-}
-
 function runFlowchartGeneration(data) {
   data = data || {};
   const t0 = Date.now();
@@ -3381,28 +3369,45 @@ function runFlowchartGeneration(data) {
     if (!text && !file) throw new Error('Describe the steps, or upload a sketch or diagram file.');
     const wanted = data.diagramType && data.diagramType !== 'auto' ? String(data.diagramType) : '';
 
-    // 1. The uploaded sketch or diagram file (if any) becomes the starting structure
-    let baseIr = null;
+    // 1. Read: pictures (also the ones inside a .pptx), PDF pages, or a structured diagram file
+    let items = [];
     if (file) {
-      const sources = { text: '', pdfs: [], images: [] };
-      const got = ingestUploadedDiagram_(file, sources, ctx);
-      if (got && got.ok) baseIr = got.ir;
-      else if (!text) throw new Error('No diagram could be read from ' + (file.name || 'the file') + '. Add a short description of the steps.');
-      else ctx.log.push('The upload could not be read as a diagram; the description was used.');
+      const parts = diagramUploadParts_(file);
+      if (parts.kind === 'unsupported') throw new Error(parts.reason);
+      if (parts.kind === 'structured') {
+        const sources = { text: '', pdfs: [], images: [] };
+        const got = ingestUploadedDiagram_(file, sources, ctx);
+        if (got && got.ok) {
+          items.push({ label: file.name, text: 'DIAGRAM READ FROM ' + file.name + ' (redraw it; keep every box and arrow): ' +
+            JSON.stringify({ type: got.ir.type, nodes: got.ir.nodes.map(function (n) { return { id: n.id, type: n.type, label: n.label }; }), edges: got.ir.edges }) });
+        } else if (!text) throw new Error('No diagram could be read from ' + file.name + '. Add a short description of the steps.');
+      } else {
+        items = parts.items.filter(function (it) { return it.image || it.pdf; });
+        if (!items.length) {
+          // a deck or text file without pictures: its words describe the diagram
+          const words = parts.items.map(function (it) { return it.text || ''; }).join('\n').trim();
+          if (words) items = [{ label: file.name, text: words }];
+        }
+        if (!items.length && !text) throw new Error('Nothing to draw was found in ' + file.name + '. Add a short description of the steps.');
+      }
     }
-    progressStage_(ctx, 'flow_read', 'done');
+    if (!items.length) items = [{ label: 'description', text: '' }];
+    progressStage_(ctx, 'flow_read', 'done', file ? file.name : 'Description');
     checkCancel_(ctx);
 
-    // 2. Structure (steps, decisions, arrows) and the slide title
+    // 2-3. diagram-design: type, budget, overview + detail, and the diagram spec (Vertex AI)
     progressStage_(ctx, 'flow_structure', 'active');
-    const made = flowchartIrFromText_(text, baseIr, wanted, ctx);
-    const check = validateDiagramIr_(made.ir);
-    if (!check.ok) throw new Error('A flowchart could not be built from that (' + check.errors.join('; ') + '). Try one step per line.');
-    progressStage_(ctx, 'flow_structure', 'done', made.ir.nodes.length + ' steps');
+    const read = diagramDesignRead_({ items: items }, { prompt: text, wantedType: wanted, budgetMs: 220000 }, ctx);
+    read.log.forEach(function (l) { ctx.log.push(l); });
+    if (!read.diagrams.length) {
+      throw new Error((file ? 'No diagram could be built from ' + file.name : 'A diagram could not be built from that description') +
+        '. ' + (read.log.slice(-1)[0] || 'Try describing the steps, one per line.'));
+    }
+    progressStage_(ctx, 'flow_structure', 'done', read.diagrams.length + ' diagram' + (read.diagrams.length > 1 ? 's' : ''));
     checkCancel_(ctx);
     progressStage_(ctx, 'flow_layout', 'active');
 
-    // 3. A new slide right after the slide the user is on
+    // 4. New slides right after the slide the user is on, in order
     let index = target.getSlides().length;
     try {
       const page = target.getSelection().getCurrentPage();
@@ -3411,27 +3416,37 @@ function runFlowchartGeneration(data) {
         target.getSlides().forEach(function (sl, i) { if (sl.getObjectId() === id) index = i + 1; });
       }
     } catch (e) {}
+    const first = index;
     progressStage_(ctx, 'flow_layout', 'done');
     progressStage_(ctx, 'flow_insert', 'active');
-    const slide = target.insertSlide(index, SlidesApp.PredefinedLayout.BLANK);
-    const title = sentenceCase_(made.title || (text ? text.split(/[\n.→>-]/)[0] : 'Process overview'), 2).slice(0, 80);
-    const spec = {
-      type: 'diagram', title: title, lead: made.lead || '', diagram: made.ir,
-      items: made.ir.nodes.slice(0, 8).map(function (n) { return { title: n.label, text: n.label }; }),
-      notes: 'Flowchart built by the 66° Deck Agent' + (file ? ' from ' + file.name : '') + '. Every box and arrow is an editable shape.'
-    };
     const dateLabel = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, yyyy');
-    renderEngineSlide(slide, spec, index + 1, ctx, target.getPageWidth(), target.getPageHeight(), dateLabel);
-    try { slide.selectAsCurrentPage(); } catch (e) {}
-    progressStage_(ctx, 'flow_insert', 'done', 'Slide ' + (index + 1));
+    let firstSlide = null;
+    read.diagrams.forEach(function (ir, k) {
+      checkCancel_(ctx);
+      const slide = target.insertSlide(index, SlidesApp.PredefinedLayout.BLANK);
+      if (!firstSlide) firstSlide = slide;
+      const fallback = text ? text.split(/[\n.→>]/)[0] : (ir.sourceLabel || 'Process overview');
+      const spec = {
+        type: 'diagram', title: sentenceCase_(ir.title || fallback, 2).slice(0, 80), lead: ir.lead || '', diagram: ir,
+        items: ir.nodes.slice(0, 8).map(function (n) { return { title: n.label, text: n.sub || n.label }; }),
+        notes: 'Diagram (' + ir.type + ') built by the 66\u00b0 Deck Agent with diagram-design' + (ir.sourceLabel && ir.sourceLabel !== 'description' ? ' from ' + ir.sourceLabel : '') +
+          '. Every box and arrow is an editable shape.'
+      };
+      renderEngineSlide(slide, spec, index + 1, ctx, target.getPageWidth(), target.getPageHeight(), dateLabel);
+      index++;
+    });
+    try { if (firstSlide) firstSlide.selectAsCurrentPage(); } catch (e) {}
+    const n = read.diagrams.length;
+    progressStage_(ctx, 'flow_insert', 'done', 'Slide ' + (first + 1) + (n > 1 ? '-' + (first + n) : ''));
     if (ctx.progress) { ctx.progress.state = 'done'; progressSave_(ctx); }
 
-    const msg = 'SUCCESS: flowchart added as slide ' + (index + 1) + ' (' + made.ir.nodes.length + ' steps).' + (ctx.log.length ? '\n' + ctx.log.join('\n') : '');
-    const res = generationResult_(msg, target, 1);
+    const msg = 'SUCCESS: ' + (n > 1 ? n + ' diagram slides added as slides ' + (first + 1) + '-' + (first + n) : 'flowchart added as slide ' + (first + 1)) +
+      ' (' + read.diagrams.map(function (ir) { return ir.type + ', ' + ir.nodes.length + ' boxes'; }).join('; ') + ').' + (ctx.log.length ? '\n' + ctx.log.join('\n') : '');
+    const res = generationResult_(msg, target, n);
     res.elapsedMs = Date.now() - t0;
     return res;
   } catch (e) {
-    if (e && e.cancelled) return generationResult_('CANCELLED: Stopped at your request. Nothing was added.', null, 0);
+    if (e && e.cancelled) return generationResult_('CANCELLED: Stopped at your request. Nothing more was added.', null, 0);
     throw e;
   }
 }

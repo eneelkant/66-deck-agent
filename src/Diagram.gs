@@ -2,13 +2,14 @@
  * Diagram intelligence — normalize uploaded / extracted diagrams into a brand-safe IR
  * and render that IR as editable Google Slides shapes via the Engine element model.
  *
- * Inspired by diagram-design (semantic types, layout grammar, accent restraint).
- * Does NOT import the HTML/SVG rendering layer from that project.
+ * Diagram types, reading and layout follow diagram-design (vendor/diagram-design, MIT): see DiagramDesign.gs.
+ * The HTML/SVG rendering layer of that project is not used; diagrams are drawn as editable Slides shapes.
  */
 
 var DIAGRAM_TYPES = [
   'flowchart', 'architecture', 'process', 'timeline', 'swimlane', 'sequence',
-  'state', 'tree', 'org-chart', 'data-flow', 'dependency', 'database-schema', 'comparison'
+  'state', 'tree', 'org-chart', 'data-flow', 'dependency', 'database-schema', 'comparison',
+  'layers', 'loop', 'nested', 'high-level'
 ];
 
 var DIAGRAM_BRAND = {
@@ -143,7 +144,10 @@ function normalizeDiagramIr_(raw) {
       width: Math.max(48, Number(n.width) || 120),
       height: Math.max(28, Number(n.height) || 48),
       emphasize: !!n.emphasize,
-      iconConcept: n.iconConcept ? String(n.iconConcept).slice(0, 60) : ''
+      iconConcept: n.iconConcept ? String(n.iconConcept).slice(0, 60) : '',
+      sub: n.sub ? String(n.sub).replace(/\s+/g, ' ').trim().slice(0, 40) : '',
+      kind: n.kind ? String(n.kind).toLowerCase() : '',
+      group: n.group ? String(n.group) : ''
     });
   });
   const edges = Array.isArray(raw && raw.edges) ? raw.edges : [];
@@ -153,7 +157,8 @@ function normalizeDiagramIr_(raw) {
       from: String(e.from),
       to: String(e.to),
       label: String(e.label || '').slice(0, 40),
-      emphasize: !!e.emphasize
+      emphasize: !!e.emphasize,
+      dashed: !!e.dashed
     });
   });
   ir.groups = Array.isArray(raw && raw.groups) ? raw.groups.slice(0, 12) : [];
@@ -179,12 +184,6 @@ function brandTransformDiagramIr_(ir) {
     n.fill = n.emphasize ? DIAGRAM_BRAND.accent : DIAGRAM_BRAND.panel;
     n.stroke = n.emphasize ? DIAGRAM_BRAND.accent : DIAGRAM_BRAND.shark;
     n.textColor = n.emphasize ? DIAGRAM_BRAND.white : DIAGRAM_BRAND.nightBlue;
-    if (i === 0 && ir.nodes.length > 2 && !ir.nodes.some(function (x) { return x.emphasize; })) {
-      n.emphasize = true;
-      n.fill = DIAGRAM_BRAND.accent;
-      n.stroke = DIAGRAM_BRAND.accent;
-      n.textColor = DIAGRAM_BRAND.white;
-    }
   });
   ir.edges.forEach(function (e) {
     e.color = e.emphasize ? DIAGRAM_BRAND.accent : DIAGRAM_BRAND.nightBlue;
@@ -402,6 +401,7 @@ function extractDiagramIrFromImage_(image, ctx) {
 
 function ingestUploadedDiagram_(upload, sources, ctx) {
   sources.diagrams = sources.diagrams || [];
+  sources.images = sources.images || [];
   const category = detectUploadCategory_(upload);
   const name = String(upload.name || 'file');
   if (category !== 'structured-diagram' && category !== 'image') {
@@ -421,7 +421,18 @@ function ingestUploadedDiagram_(upload, sources, ctx) {
     else if (looksLikeMermaid_(text)) ir = parseMermaidToIr_(text);
   }
 
-  if ((!ir || !validateDiagramIr_(ir).ok) && category === 'image') {
+  // Pictures are read by Vertex AI following diagram-design (type selection, budget, overview + detail split)
+  if ((!ir || !validateDiagramIr_(ir).ok) && category === 'image' && typeof diagramDesignRead_ === 'function' && typeof DIAGRAM_DESIGN_KIT !== 'undefined') {
+    if (ctx) progressStage_(ctx, 'diagram', 'active', 'Reading the diagram (diagram-design)');
+    const got = diagramDesignRead_(diagramUploadParts_(upload), {}, ctx || { log: [] });
+    if (ctx) got.log.forEach(function (l) { ctx.log.push(l); });
+    if (got.diagrams.length) {
+      got.diagrams.forEach(function (d) { sources.diagrams.push({ name: name, category: category, ir: d }); });
+      noteDiagramsForPlanner_(sources, got.diagrams, name);
+      return { ok: true, category: category, ir: got.diagrams[0], irs: got.diagrams };
+    }
+    ir = null;
+  } else if ((!ir || !validateDiagramIr_(ir).ok) && category === 'image') {
     if (ctx) progressStage_(ctx, 'diagram', 'active', 'Analyzing diagram');
     ir = extractDiagramIrFromImage_({ mime: mime || 'image/png', data: String(upload.data) }, ctx);
   }
@@ -438,48 +449,67 @@ function ingestUploadedDiagram_(upload, sources, ctx) {
   }
 
   sources.diagrams.push({ name: name, category: category, ir: ir });
+  noteDiagramsForPlanner_(sources, [ir], name);
   if (ctx) ctx.log.push('Diagram reconstructed from ' + name + ' (' + ir.type + ', ' + ir.nodes.length + ' nodes).');
   return { ok: true, category: category, ir: ir };
 }
 
-function attachDiagramsToPlan_(plan, sources, ctx) {
+/** The content writer is told which diagrams were uploaded, so the deck plans a slide for each. */
+function noteDiagramsForPlanner_(sources, irs, name) {
+  if (typeof sources.text !== 'string') return;
+  irs.forEach(function (ir) {
+    sources.text += (sources.text ? '\n\n' : '') + 'UPLOADED DIAGRAM "' + (ir.title || name) + '" (' + ir.type + '; gets its own diagram slide): ' +
+      ir.nodes.map(function (n) { return n.label; }).join(', ') + '.';
+  });
+}
+
+function diagramWords_(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(function (w) {
+    return w.length > 3 && ['with', 'from', 'into', 'that', 'this', 'your', 'their', 'over', 'what'].indexOf(w) === -1;
+  });
+}
+
+/**
+ * Every uploaded diagram gets a whole slide of its own: the slide whose topic matches it best (or an empty diagram
+ * slide the writer planned) becomes that diagram, with the diagram's title. opts.force: place it even without a match
+ * (short decks always; long decks on their last batch).
+ */
+function attachDiagramsToPlan_(plan, sources, ctx, opts) {
+  opts = opts || {};
   const diagrams = (sources && sources.diagrams) || [];
   if (!plan || !Array.isArray(plan.slides) || !diagrams.length) return 0;
+  const force = opts.force !== false;
   let attached = 0;
+  const skip = ['cover', 'closing', 'agenda', 'section', 'team', 'quote'];
   diagrams.forEach(function (entry, di) {
+    if (entry.attached) return;
     const ir = entry.ir;
-    let target = null;
-    for (let i = 0; i < plan.slides.length; i++) {
-      const t = String(plan.slides[i].type || '').toLowerCase();
-      if ((t === 'diagram' || t === 'flowchart' || t === 'architecture' || t === 'process') && !plan.slides[i].diagram) {
-        target = plan.slides[i];
-        break;
-      }
-    }
-    if (!target) {
-      // Prefer a mid-deck content slide rather than cover/closing.
-      for (let i = 0; i < plan.slides.length; i++) {
-        const t = String(plan.slides[i].type || '').toLowerCase();
-        if (['cover', 'closing', 'agenda', 'section'].indexOf(t) === -1 && !plan.slides[i].diagram) {
-          target = plan.slides[i];
-          break;
-        }
-      }
+    const want = diagramWords_((ir.title || '') + ' ' + ir.nodes.map(function (n) { return n.label; }).join(' '));
+    let target = null, best = 0;
+    plan.slides.forEach(function (sl) {
+      const t = String(sl.type || '').toLowerCase();
+      if (sl.diagram || skip.indexOf(t) !== -1) return;
+      if ((t === 'diagram' || t === 'flowchart' || t === 'architecture' || t === 'process') && best < 100) { target = sl; best = 100; return; }
+      const have = diagramWords_([sl.title, sl.lead, sl.subtitle].concat((sl.items || []).map(function (it) { return (it && (it.title || it.text)) || ''; })).join(' '));
+      const score = want.filter(function (w, i) { return want.indexOf(w) === i && have.indexOf(w) !== -1; }).length;
+      if (score > best) { best = score; target = sl; }
+    });
+    if (best < 2 && !force) return;
+    if (!target || best < 2) {
+      // no match: the first content slide after the agenda
+      target = plan.slides.filter(function (sl) { return !sl.diagram && skip.indexOf(String(sl.type || '').toLowerCase()) === -1; })[0] || null;
     }
     if (!target) return;
-    target.type = ir.type === 'process' ? 'process' : 'diagram';
+    target.type = 'diagram';
     target.diagram = ir;
-    target.visual = {
-      type: ir.type,
-      source: entry.name || 'uploaded-diagram',
-      iconRequests: (ir.iconRequests || []).slice()
-    };
+    target.visual = { type: ir.type, source: entry.name || 'uploaded-diagram', iconRequests: (ir.iconRequests || []).slice() };
+    if (ir.title) target.title = ir.title;
     if (!target.title) target.title = 'Solution overview';
-    if (!Array.isArray(target.items) || !target.items.length) {
-      target.items = ir.nodes.slice(0, 8).map(function (n) { return { title: n.label, text: n.label }; });
-    }
+    target.lead = ir.lead || '';
+    target.items = ir.nodes.slice(0, 8).map(function (n) { return { title: n.label, text: n.sub || n.label }; });
+    entry.attached = true;
     attached += 1;
-    if (ctx) ctx.log.push('Attached diagram ' + (di + 1) + ' to slide "' + (target.title || target.type) + '".');
+    if (ctx) ctx.log.push('Diagram ' + (di + 1) + ' (' + ir.type + ') drawn on slide "' + target.title + '".');
   });
   return attached;
 }
@@ -754,6 +784,7 @@ function flowchartToElements_(ir, area) {
   (ir.nodes || []).forEach(function (n) {
     const p = P[n.id];
     if (!p) return;
+    if (typeof ddNodeEl_ === 'function') { els.push(ddNodeEl_(n, p, false)); return; }
     const t = String(n.type || 'process').toLowerCase();
     const label = String(n.label || '');
     const size = label.length > 34 ? 9 : label.length > 22 ? 10 : 11;
@@ -768,13 +799,15 @@ function flowchartToElements_(ir, area) {
   });
   const seg = function (x1, y1, x2, y2, color, width, arrow) {
     if (Math.abs(x1 - x2) < 0.5 && Math.abs(y1 - y2) < 0.5) return;
-    els.push({ t: 'line', x1: x1, y1: y1, x2: x2, y2: y2, color: color, width: width, arrow: !!arrow });
+    els.push({ t: 'line', x1: x1, y1: y1, x2: x2, y2: y2, color: color, width: width, arrow: !!arrow, dash: !!dashNow });
   };
+  let dashNow = false;
   let loop = 0;
   (ir.edges || []).forEach(function (e) {
     const a = P[e.from], b = P[e.to];
     if (!a || !b) return;
-    const color = e.color || DIAGRAM_BRAND.nightBlue, width = e.width || 1.25;
+    const color = e.color || DIAGRAM_BRAND.nightBlue, width = e.dashed ? 0.75 : (e.width || 1.25);
+    dashNow = !!e.dashed;
     let lx, ly;
     if (L.back[e.from + '>' + e.to]) {
       // loop back: down from the step, along underneath the chart, up into the earlier step
@@ -824,24 +857,26 @@ function applyDiagramIrToEngineOutput_(out, spec, tokens) {
     out.notes = (out.notes ? out.notes + '\n' : '') + 'Diagram IR invalid; template layout kept. ' + check.errors.join('; ');
     return out;
   }
-  // The chart starts under the slide's own title and intro (never on top of them)
-  // header() draws the title first and the intro second: the chart starts under those two
-  let headBottom = 64, seen = 0;
-  (out.els || []).forEach(function (e) {
-    if (seen >= 2 || !e || e.t !== 'text' || e.y == null || e.y > 90) return;
-    seen++;
-    headBottom = Math.max(headBottom, e.y + (e.vh || e.h || 0) + 6);
+  // The chart starts under the slide's own title and intro (found by their text, never a box label)
+  const norm = function (v) { return String(v || '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 24); };
+  const want = [norm(spec.title), norm(spec.lead)].filter(Boolean);
+  const head = (out.els || []).filter(function (e) {
+    return e && e.t === 'text' && e.y != null && e.y < 120 && want.some(function (w) { return w && norm(e.text).indexOf(w.slice(0, 16)) === 0; });
   });
+  let headBottom = 64;
+  head.forEach(function (e) { headBottom = Math.max(headBottom, e.y + (e.vh || e.h || 0) + 6); });
   const area = { x: 40, y: headBottom, w: 640, h: Math.max(160, 352 - headBottom) };
   const ir = spec.diagram;
   const useFlow = (ir.edges || []).length > 0 && FLOW_TYPES_.indexOf(String(ir.type || 'flowchart')) !== -1;
-  const body = useFlow ? flowchartToElements_(ir, area) : diagramIrToEngineElements_(ir, area);
+  const body = typeof drawDiagramDesign_ === 'function' && (useFlow || ir.groups.length || ['layers', 'loop', 'tree', 'org-chart', 'nested', 'high-level', 'architecture'].indexOf(String(ir.type)) !== -1)
+    ? drawDiagramDesign_(ir, area)
+    : (useFlow ? flowchartToElements_(ir, area) : diagramIrToEngineElements_(ir, area));
   if (!body.length) return out;
   // Keep header/footer chrome from the template layout; replace body-ish elements.
   const chrome = (out.els || []).filter(function (e) {
     if (!e) return false;
     if (e.t === 'image' && /logo|mark|pattern/i.test(String(e.asset || ''))) return true;
-    if (e.t === 'text' && e.y != null && e.y < 110 && e.y + (e.vh || e.h || 0) <= headBottom) return true;
+    if (head.indexOf(e) !== -1) return true;
     if (e.t === 'rect' && e.y != null && e.h != null && e.y + e.h <= 56) return true;
     if (e.t === 'text' && e.y != null && e.y >= 370) return true;
     return false;

@@ -174,6 +174,11 @@ function overlayTextIfNeeded_(slide, shape, e, box) {
         ts.setForegroundColor(st.color || '#040A1B');
         ts.setBold(false);
       });
+      // diagram boxes: the detail line under the label is smaller
+      if (st.subSize && String(e.text).indexOf('\n') !== -1) {
+        const cut = String(e.text).indexOf('\n') + 1;
+        try { tr.getRange(cut, String(e.text).length).getTextStyle().setFontSize(Math.max(6, st.subSize * scale)); } catch (err2) {}
+      }
       tr.getParagraphStyle().setParagraphAlignment(st.align === 'left' ? SlidesApp.ParagraphAlignment.START : SlidesApp.ParagraphAlignment.CENTER);
       if (typeof target.setContentAlignment === 'function') target.setContentAlignment(SlidesApp.ContentAlignment.MIDDLE);
     } catch (err) {}
@@ -284,6 +289,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
         ln.setWeight(Math.max(0.5, finiteNumber_(e.width, 1) * s));
         ln.getLineFill().setSolidFill(e.color);
         if (e.arrow) { try { ln.setEndArrow(SlidesApp.ArrowStyle.FILL_ARROW); } catch (err) {} }   // flowchart connectors
+        if (e.dash) { try { ln.setDashStyle(SlidesApp.DashStyle.DASH); } catch (err) {} }          // optional / return flows
       } else if (e.t === 'image') {
         const id = engineAssetId(e.asset, ctx);
         if (id) {

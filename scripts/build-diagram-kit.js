@@ -1,0 +1,125 @@
+#!/usr/bin/env node
+"use strict";
+
+/*
+ * Builds src/DiagramDesignKit.gs from the vendored diagram-design skill (vendor/diagram-design, MIT, Cathryn Lavery).
+ * The kit holds the rules Vertex AI follows when it reads or plans a diagram: philosophy, type selection,
+ * complexity budget and the layout conventions / anti-patterns of each type the add-on can draw.
+ *
+ *   node scripts/build-diagram-kit.js          write src/DiagramDesignKit.gs
+ *   node scripts/build-diagram-kit.js --check  exit 1 if src/DiagramDesignKit.gs is out of date
+ */
+const fs = require("fs");
+const path = require("path");
+
+const ROOT = path.resolve(__dirname, "..");
+const VENDOR = path.join(ROOT, "vendor", "diagram-design");
+const OUT = path.join(ROOT, "src", "DiagramDesignKit.gs");
+
+// diagram-design types the add-on draws, and the reference file for each
+const TYPES = {
+  flowchart: "type-flowchart.md",
+  process: "type-process.md",
+  "data-flow": "type-data-flow.md",
+  state: "type-state.md",
+  dependency: "type-dependency.md",
+  timeline: "type-timeline.md",
+  swimlane: "type-swimlane.md",
+  architecture: "type-architecture.md",
+  "high-level": "type-high-level.md",
+  nested: "type-nested.md",
+  layers: "type-layers.md",
+  tree: "type-tree.md",
+  "org-chart": "type-org-chart.md",
+  loop: "type-loop.md"
+};
+// how the selection table names them
+const GUIDE_NAMES = {
+  flowchart: "Flowchart", process: "Process", "data-flow": "Data flow", state: "State machine", dependency: "Dependency graph",
+  timeline: "Timeline", swimlane: "Swimlane", architecture: "Architecture", "high-level": "High-Level", nested: "Nested",
+  layers: "Layer stack", tree: "Tree", "org-chart": "Org chart", loop: "Loop"
+};
+
+const read = (rel) => fs.readFileSync(path.join(VENDOR, rel), "utf8").replace(/\r\n/g, "\n");
+
+function stripMarkdown(s) {
+  return s
+    .replace(/```[\s\S]*?```/g, "")                 // code blocks (SVG / HTML) are for the web renderer, not for reading
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")        // links -> text
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function section(md, heading) {
+  const lines = md.split("\n");
+  const start = lines.findIndex((l) => l.replace(/^#+\s*/, "").toLowerCase().startsWith(heading.toLowerCase()) && /^#+\s/.test(l));
+  if (start === -1) return "";
+  const level = lines[start].match(/^#+/)[0].length;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const m = lines[i].match(/^(#+)\s/);
+    if (m && m[1].length <= level) { end = i; break; }
+  }
+  return lines.slice(start + 1, end).join("\n");
+}
+
+function cap(s, n) {
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n);
+  return cut.slice(0, Math.max(cut.lastIndexOf("\n"), n - 200)).trim();
+}
+
+function typeRule(file) {
+  const md = read("references/" + file);
+  const best = (md.match(/\*\*Best for:\*\*[^\n]*/) || [""])[0];
+  const parts = [best];
+  ["Layout conventions", "Layout", "1. Inputs", "3. Visual grammar", "Anti-patterns", "7. Anti-patterns"].forEach((h) => {
+    const body = section(md, h);
+    if (body && parts.join("").indexOf(body.slice(0, 40)) === -1) parts.push(h.replace(/^\d+\.\s*/, "").toUpperCase() + ":\n" + body);
+  });
+  return cap(stripMarkdown(parts.join("\n")), 2200);
+}
+
+function build() {
+  const skill = read("SKILL.md");
+  const budget = read("references/layout-budget.md");
+  const philosophy = stripMarkdown(section(skill, "1. Philosophy"));
+  const sel = section(skill, "3. Selection");
+  const triggers = sel.split("### Visual-type guide")[0].split("\n").filter((l) => /^\|/.test(l) && /→/.test(l)).map((l) => l.trim());
+  const guide = sel.split("\n").filter((l) => {
+    const m = l.match(/^\|[^|]+\|\s*\*\*([^*]+)\*\*/);
+    return m && Object.values(GUIDE_NAMES).indexOf(m[1].trim()) !== -1;
+  }).map((l) => l.replace(/\|\s*\[[^\]]+\]\([^)]+\)\s*\|\s*$/, "|").trim());
+  const thumbs = stripMarkdown((sel.split("Rules of thumb:")[1] || "").split("**Always load")[0]);
+  const universal = stripMarkdown(section(skill, "Complexity budget"));
+  const perType = budget.split("\n").filter((l) => /^\|\s*Max /.test(l) && /(swimlane|tree depth|org chart|layer stack|dependency|nesting)/i.test(l)).map((l) => l.trim());
+  const types = {};
+  Object.keys(TYPES).forEach((k) => { types[k] = typeRule(TYPES[k]); });
+  const kit = {
+    source: "diagram-design by Cathryn Lavery (MIT) - https://github.com/cathrynlavery/diagram-design",
+    commit: read("UPSTREAM_COMMIT").trim(),
+    philosophy: philosophy,
+    selection: "SEMANTIC PATTERN TRIGGERS:\n" + triggers.join("\n") + "\n\nVISUAL TYPE GUIDE:\n" + guide.join("\n") + "\n\nRULES OF THUMB:\n" + thumbs,
+    budget: universal + "\n" + perType.join("\n"),
+    types: types,
+    typeNames: GUIDE_NAMES
+  };
+  const license = read("LICENSE").trim().split("\n").map((l) => " * " + l).join("\n").replace(/ +$/gm, "");
+  return "/**\n * GENERATED by scripts/build-diagram-kit.js from vendor/diagram-design - do not edit by hand.\n" +
+    " * The diagram rules Vertex AI follows when it reads an uploaded diagram or plans a new one.\n *\n" +
+    " * diagram-design license:\n" + license + "\n */\n\n" +
+    "var DIAGRAM_DESIGN_KIT = " + JSON.stringify(kit, null, 2) + ";\n";
+}
+
+const out = build();
+if (process.argv.includes("--check")) {
+  const cur = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf8") : "";
+  if (cur !== out) { console.error("src/DiagramDesignKit.gs is out of date: run node scripts/build-diagram-kit.js"); process.exit(1); }
+  console.log("DiagramDesignKit.gs up to date");
+} else {
+  fs.writeFileSync(OUT, out);
+  console.log("wrote", path.relative(ROOT, OUT), out.length, "chars");
+}

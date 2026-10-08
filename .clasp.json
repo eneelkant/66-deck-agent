@@ -19,6 +19,8 @@
     "ShapeKit.gs",
     "IconProvider.gs",
     "Diagram.gs",
+    "DiagramDesignKit.gs",
+    "DiagramDesign.gs",
     "Engine.gs",
     "EngineRenderer.gs",
     "Reference.gs",
