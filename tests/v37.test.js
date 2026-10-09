@@ -140,3 +140,20 @@ test("V.1_37 review (Home Depot deck): library switch even when the client step 
   assert.match(code, /return \{ title: '', text: x \};/, "no headings cut from the first words of a sentence");
   assert.match(read("src/Engine.gs"), /capH\(it, capW, 3\) \+ 16 > rowH/, "half donut never overlaps captions");
 });
+
+test("Home Depot deck 2: base layouts cannot reach General designs in a Proposal Deck (diagram hub / ring chain)", () => {
+  const g = load();
+  const items = (n) => Array.from({ length: n }, (_, i) => ({ title: "Item " + i, text: "Some words about item " + i }));
+  [5, 6].forEach((n) => {
+    const general = render(g, { type: "diagram", title: "x", center: "AI", items: items(n) });
+    const proposal = render(g, { type: "diagram", deckLibrary: "proposal", title: "x", center: "AI", items: items(n) });
+    assert.ok(general.els.some((e) => e.t === "ellipse"), "General: hub / ring-chain circles");
+    assert.ok(!proposal.els.some((e) => e.t === "ellipse"), "Proposal: no General diagram design");
+  });
+  // and General decks keep every template design once a proposal slide was drawn
+  render(g, { type: "diagram", deckLibrary: "proposal", title: "x", items: items(6) });
+  assert.ok(render(g, { type: "diagram", title: "x", center: "AI", items: items(6) }).els.some((e) => e.t === "ellipse"));
+  const src = read("src/ProposalKit.gs");
+  assert.match(src, /wikipediaLogo_\(client\.name\)/);
+  assert.match(src, /no logo found: ' \+ LOGO_TRAIL_/, "the result message says what each logo source answered");
+});

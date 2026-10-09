@@ -1132,6 +1132,7 @@ var ENGINE = (function () {
   // Designs that belong to the Proposal Deck library (filled by the proposal batches); every other V design is General
   var PROPOSAL_TAGS_ = {};
   var FRAME_TYPES_ = { cover: 1, closing: 1, section: 1 };
+  var PROPOSAL_MODE_ = false;           // true while a Proposal Deck slide is laid out (see layoutSlide)
   Object.keys(COVER_VARIANTS_).forEach(function (k) { V[k] = function (s, ctx) { return COVER_VARIANTS_[k](s, ctx || {}); }; });
 
   function shape(els, kind, x, y, w, h, fill, ln) { els.push({ t: 'shape', shape: kind, x: x, y: y, w: w, h: h, fill: fill, line: ln || null }); }
@@ -3811,6 +3812,13 @@ var ENGINE = (function () {
     return out;
   }
   function layoutSlideOnce_(s, type, lctx) {
+    // While a Proposal Deck slide is drawn, every General template design is switched off - also the ones a base
+    // layout would call by itself (the base diagram layout draws the hub / ring-chain designs, for example)
+    var wasMode = PROPOSAL_MODE_;
+    PROPOSAL_MODE_ = s.deckLibrary === 'proposal';
+    try { return layoutSlideGuarded_(s, type, lctx); } finally { PROPOSAL_MODE_ = wasMode; }
+  }
+  function layoutSlideGuarded_(s, type, lctx) {
     var tag = s.reference && s.reference.tag;
     // Design libraries never mix: a Proposal Deck only uses proposal designs (frame slides have one strict design),
     // a General deck never uses a proposal design. Content without a design in its library uses the base layout.
@@ -3926,6 +3934,13 @@ var ENGINE = (function () {
         .map(function (a) { return { text: a.text, minChars: Math.floor(a.maxChars * 0.55), maxChars: Math.floor(a.maxChars * 0.85) }; })
     };
   }
+
+  // Every template design (V) answers null in a Proposal Deck unless it belongs to the proposal library, and never draws
+  // a proposal design in a General deck
+  Object.keys(V).forEach(function (k) {
+    var f = V[k];
+    V[k] = function () { return PROPOSAL_MODE_ === !!PROPOSAL_TAGS_[k] ? f.apply(null, arguments) : null; };
+  });
 
   function render(deck, ctx) {
     ctx = ctx || {};
