@@ -145,11 +145,12 @@ test("runFlowchartGeneration always adds a new slide right after the current sli
   const slides = [sl("s1"), sl("s2"), sl("s3")];
   const { sandbox, inserted, rendered } = loadCode(slides, 1);
   const res = sandbox.runFlowchartGeneration({ mode: "Flowchart", prompt: "Ticket opened, classify, if urgent page on-call else queue, resolve, close" });
-  assert.equal(inserted.length, 1);
-  assert.equal(inserted[0].i, 2, "inserted after slide 2");
-  assert.ok(inserted[0].s.selected, "new slide is selected");
-  assert.equal(rendered[0].type, "diagram");
-  assert.match(res.message, /^SUCCESS: flowchart added as slide 3/);
+  assert.equal(inserted.length, 3, "introduction, diagram, Thank-you");
+  assert.deepEqual(inserted.map((x) => x.i), [2, 3, 4], "inserted after slide 2, in order");
+  assert.ok(inserted[0].s.selected, "the introduction slide is selected");
+  assert.deepEqual(rendered.map((r) => r.type), ["cover", "diagram", "closing"]);
+  assert.equal(rendered[2].title, "Thank You!");
+  assert.match(res.message, /^SUCCESS: 3 slides added as slides 3-5: an introduction, 1 diagram slide and the Thank-you slide/);
 });
 
 test("runFlowchartGeneration with no current slide adds the flowchart at the end, and needs input", () => {
