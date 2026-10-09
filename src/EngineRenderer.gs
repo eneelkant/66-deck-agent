@@ -294,10 +294,13 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
         if (e.dash) { try { ln.setDashStyle(SlidesApp.DashStyle.DASH); } catch (err) {} }          // optional / return flows
         if (e.startArrow) { try { ln.setStartArrow(SlidesApp.ArrowStyle.FILL_ARROW); } catch (err) {} }   // two-way relationship
       } else if (e.t === 'image') {
-        const id = engineAssetId(e.asset, ctx);
-        if (id) {
+        const inline = typeof inlineAssetBlob_ === 'function' ? inlineAssetBlob_(e.asset) : null;
+        const id = inline ? null : engineAssetId(e.asset, ctx);
+        if (inline || id) {
           const box = safeBox_(e.x * s, e.y * s, e.w * s, e.h * s);
-          slide.insertImage(getBlobCached(id, ctx), box.x, box.y, box.w, box.h);
+          const blob = inline || getBlobCached(id, ctx);
+          if (e.fit === 'contain') insertContainedImage_(slide, blob, box, e, s, ctx);
+          else slide.insertImage(blob, box.x, box.y, box.w, box.h);
         }
       } else if (e.t === 'icon') {
         drawEngineIcon(slide, e, s, ctx);
@@ -349,7 +352,28 @@ function setSpeakerNotesSafe_(slide, notes) {
 }
 
 // Engine asset key -> Drive file id (design images in 01_Brand_Assets/03_Images/Design)
+// A logo inside its box at its own proportions (never stretched), aligned left / right; optional light tile behind it
+function insertContainedImage_(slide, blob, box, e, s, ctx) {
+  const img = slide.insertImage(blob);
+  const nw = img.getWidth() || 1, nh = img.getHeight() || 1;
+  const k = Math.min(box.w / nw, box.h / nh);
+  const w = nw * k, h = nh * k;
+  const x = e.align === 'right' ? box.x + box.w - w : e.align === 'center' ? box.x + (box.w - w) / 2 : box.x;
+  const y = e.valign === 'top' ? box.y : e.valign === 'bottom' ? box.y + box.h - h : box.y + (box.h - h) / 2;
+  if (e.tile) {
+    const pad = 5 * s;
+    let t = null;
+    try { t = insertRoundedBox_(slide, x - pad, y - pad, w + 2 * pad, h + 2 * pad, ctx, s); } catch (err) {}
+    if (!t) t = insertShapeSafe_(slide, 'RECTANGLE', x - pad, y - pad, w + 2 * pad, h + 2 * pad);
+    try { t.getFill().setSolidFill(ENGINE.TOKENS.white); t.getBorder().setTransparent(); } catch (err) {}
+  }
+  img.setLeft(x).setTop(y).setWidth(w).setHeight(h);
+  if (e.tile) { try { img.bringToFront(); } catch (err) {} }
+  return img;
+}
+
 function engineAssetId(asset, ctx) {
+  if (asset === 'client-logo') return (ctx.proposal && ctx.proposal.logoId) || null;
   const d = (ctx.assets && ctx.assets.design) || {};
   const logos = (ctx.assets && ctx.assets.logos) || {};
   const map = {

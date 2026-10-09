@@ -226,6 +226,15 @@ var ENGINE = (function () {
   function cardStyleOf(s) { return (s && s.reference && s.reference.cardStyle) || 'panel'; }
   function str(v) { return v == null ? '' : (typeof v === 'string' ? v : (v.title || v.text || '')); }
 
+  // Proposal Deck: the client's logo bottom-right, mirroring the 66° mark bottom-left (same line, ~16pt tall, max 80pt
+  // wide). On dark slides and on the blue agenda band it sits on a small light tile so any logo reads.
+  function clientCorner_(out, type) {
+    var band = type === 'agenda';
+    if (band) out.els.forEach(function (e) { if (e.t === 'image' && e.asset === 'band-pattern' && e.y >= 340) e.x = 520; });
+    var dark = band || !!out.dark;
+    var h = dark ? 18.8 : 16.2, y = dark ? 368 : 376.8;
+    out.els.push({ t: 'image', asset: 'client-logo', x: W - 22.3 - 80, y: y, w: 80, h: h, fit: 'contain', align: 'right', valign: 'middle', tile: dark });
+  }
   function footerMark(els, dark) {
     if (dark) image(els, 'mark-white', 22.3, 367.6, 28.2, 18.8);
     else image(els, 'mark-dark', 22.3, 376.8, 24.3, 16.2);
@@ -345,7 +354,9 @@ var ENGINE = (function () {
   // 66D_LAYOUT_COVER_001 (template slide 1)
   L.cover = function (s, ctx) {
     var els = [];
-    image(els, 'logo-dark', 19, 20.1, 68.8, 16.2);
+    // Proposal Deck (strict cover): the client's logo top-left; the 66degrees wordmark when no client is named
+    if (s.deckLibrary === 'proposal' && s.clientLogo) els.push({ t: 'image', asset: 'client-logo', x: 25.2, y: 16, w: 150, h: 44, fit: 'contain', align: 'left', valign: 'top' });
+    else image(els, 'logo-dark', 19, 20.1, 68.8, 16.2);
     image(els, 'cover-pattern', 560, 10, 92, 72);          // dot/dash texture top-right (skipped if the asset is missing)
     // Title SemiBold 28pt, left-middle; subtitle Medium 12pt below — no accent bar (template)
     var t = text(els, 25.2, 104, 500, 116, s.title, { weight: 600, max: 28, min: 22, maxLines: 3, color: T.title || T.ink, valign: 'bottom' });
@@ -418,6 +429,7 @@ var ENGINE = (function () {
   // No section number unless the spec carries one.
   L.section = function (s, ctx) {
     var els = [];
+    if (s.sectionStyle === 'light') return sectionLight_(s);
     if (s.number) text(els, 32.4, 118, 80, 36, s.number, { weight: 600, max: 28, min: 24, maxLines: 1, color: T.white });
     var t = text(els, 32.4, 164, 420, 80, s.title, { weight: 600, max: 28, min: 20, maxLines: 2, color: T.white });
     var ly = 164 + Math.max(t.height, lineHeight('sans', t.size || 28)) + 14;
@@ -425,6 +437,17 @@ var ENGINE = (function () {
     if (s.lead) text(els, 32.4, ly + 14, 420, 60, s.lead, { weight: 400, max: TSZ.body + 2, min: TSZ.body, maxLines: 3, color: T.white });
     return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true };
   };
+
+  // Proposal section divider, light (66degrees proposals): panel background, title and one subtitle line left-middle,
+  // the big light 66° watermark bottom-right. One divider style per deck (ProposalKit.gs).
+  function sectionLight_(s) {
+    var els = [];
+    els.push({ t: 'image', asset: 'watermark-66', x: 392, y: 118, w: 336, h: 224 });
+    if (s.number) text(els, 32.4, 118, 80, 36, s.number, { font: 'mono', weight: 500, max: 24, min: 20, maxLines: 1, color: T.blue });
+    var t = text(els, 32.4, 150, 400, 90, s.title, { weight: 500, max: 28, min: 20, maxLines: 2, color: T.ink, valign: 'bottom' });
+    if (s.lead) text(els, 32.4, 244, 380, 50, s.lead, { weight: 400, max: 12, min: 10, maxLines: 2, color: T.body });
+    return { bg: T.bgLight, els: els, noBalance: true };
+  }
 
   // 66D_LAYOUT_CARDS_* — card style from the slide's template reference (panel on white / white cards on panel / rule cards)
   // 66D_LAYOUT_CARDS_007 (template slide 42): grid of panel cards with mono numbers (or icons), one heading size and
@@ -1106,6 +1129,9 @@ var ENGINE = (function () {
    * does not suit it; the slide is then drawn with the type's default layout.
    * ================================================================================================ */
   var V = {};
+  // Designs that belong to the Proposal Deck library (filled by the proposal batches); every other V design is General
+  var PROPOSAL_TAGS_ = {};
+  var FRAME_TYPES_ = { cover: 1, closing: 1, section: 1 };
   Object.keys(COVER_VARIANTS_).forEach(function (k) { V[k] = function (s, ctx) { return COVER_VARIANTS_[k](s, ctx || {}); }; });
 
   function shape(els, kind, x, y, w, h, fill, ln) { els.push({ t: 'shape', shape: kind, x: x, y: y, w: w, h: h, fill: fill, line: ln || null }); }
@@ -3784,6 +3810,9 @@ var ENGINE = (function () {
   }
   function layoutSlideOnce_(s, type, lctx) {
     var tag = s.reference && s.reference.tag;
+    // Design libraries never mix: a Proposal Deck only uses proposal designs (frame slides have one strict design),
+    // a General deck never uses a proposal design. Content without a design in its library uses the base layout.
+    if (s.deckLibrary === 'proposal' ? (FRAME_TYPES_[type] || !PROPOSAL_TAGS_[tag]) : !!PROPOSAL_TAGS_[tag]) tag = null;
     var out = (tag && V[tag] && variantOf(type, tag)) ? V[tag](s, lctx) : null;
     if (out && contentCount_(out) === 0) out = null;
     out = out || L[type](s, lctx);
@@ -3929,6 +3958,7 @@ var ENGINE = (function () {
         out = applyDiagramIrToEngineOutput_(out, s, ctx.tokens || null);
       }
       if (!out.noFooter) footerMark(out.els, out.dark);
+      if (s.cobrand && type !== 'cover' && type !== 'closing') clientCorner_(out, type);
       out.type = type;
       out.notes = s.notes || '';
       slides.push(out);
@@ -3949,5 +3979,5 @@ var ENGINE = (function () {
       try { return !!V[tag](s1, {}); } catch (e) { return false; }
     },
     render: render, measure: measure, variantsFor: function (type) { return (VARIANTS[type] || []).slice(); }, cleanSpec: cleanSpec, cleanText: cleanText, designMenu: designMenu, layouts: Object.keys(L), VARIANTS: VARIANTS, BRAND: BRAND, TOKENS: T, W: W, H: H, INSET: INSET,
-    textWidth: textWidth, wrap: wrap, fit: fit, tableRowsThatFit: tableRowsThatFit, posSize: posSize, splitSpace: splitSpace, innerSize: innerSize, boxH: boxH };
+    textWidth: textWidth, wrap: wrap, fit: fit, tableRowsThatFit: tableRowsThatFit, PROPOSAL_TAGS: PROPOSAL_TAGS_, posSize: posSize, splitSpace: splitSpace, innerSize: innerSize, boxH: boxH };
 })();

@@ -351,14 +351,17 @@ const DESIGN_TOPICS_ = {
 // Template designs the layout engine can draw for a type (Engine.gs VARIANTS), filtered by item count
 function drawableDesigns_(type, n, spec) {
   const words = spec ? [spec.title, spec.lead, spec.statement].filter(Boolean).join(' ') : '';
+  const P = (typeof ENGINE !== 'undefined' && ENGINE.PROPOSAL_TAGS) || {};
+  const proposal = !!(spec && spec.deckLibrary === 'proposal');
   const all = ((typeof ENGINE !== 'undefined' && ENGINE.VARIANTS && ENGINE.VARIANTS[type]) || []).filter(function (v) {
+    if (proposal !== !!P[v.tag]) return false;      // libraries never mix (Proposal Deck <-> General)
     // a design with a meaning (warning badges) only for slides about that meaning
     if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words)) return false;
     // designs that need extra fields (e.g. the client journey needs spec.cases) are only offered when the slide has them
     return !v.needs || designNeedsMet_(v.needs, spec);
   });
   const fits = all.filter(function (v) { return !n || (n >= v.min && n <= v.max); });
-  return fits.length ? fits : all.slice(0, 1);
+  return fits.length ? fits : all.slice(0, 1);   // (empty for a Proposal Deck type without proposal designs: base layout)
 }
 
 // Design rotation between decks (per user): { type: index of the design used last }
