@@ -320,6 +320,8 @@ function generatePresentationRun_(data, run) {
   if (!run.runId && totalSlides > SINGLE_RUN_MAX_) totalSlides = SINGLE_RUN_MAX_;   // callers without a run id cannot continue
   ctx.presentationType = presentationType;
   ctx.department = department;
+  // Proposal Deck: the client (Gemini) and its logo, and the deck's section divider style - once per deck
+  if (typeof isProposalDeck_ === 'function' && isProposalDeck_(ctx)) { try { prepareProposal_(userPrompt, sources, ctx); } catch (e) { ctx.log.push('Client logo step skipped: ' + e.message); } }
   if (ctx.lib) ctx.lib = applyDepartmentFilter_(ctx.lib, department);
   const existing = target.getSlides();
   const blankDeck = isBlankDeck(existing);
@@ -1259,6 +1261,10 @@ function normalizeSpecialSlides_(slides, userPrompt, sources, ctx) {
     if (t === 'leadership' && Array.isArray(sp.people) && sp.people.length) t = sp.type = 'team';
     if (['template', 'clients', 'logos', 'client_logos', 'industries', 'leadership'].indexOf(t) !== -1) {
       const key = templateSlideKey_(Object.assign({ template: t === 'template' ? sp.template : t }, sp)) || templateSlideKey_(sp);
+      if (typeof isProposalDeck_ === 'function' && isProposalDeck_(ctx)) {   // General template slides are never used in a Proposal Deck
+        ctx.log.push('Left out a ' + (key || 'template') + ' slide: General template slides are not used in a Proposal Deck.');
+        return;
+      }
       if (!key || seen[key] || !TEMPLATE_SLIDE_TRIGGERS_[key].test(asked)) {
         ctx.log.push('Left out a ' + (key || 'template') + ' slide the request did not ask for.');
         return;
@@ -1856,6 +1862,7 @@ function createWorkingDeck_(title, count) {
 
 // Draws every planned slide with the layout engine in the design chosen for it; progress slide by slide
 function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
+  if (typeof applyProposalFrame_ === 'function') applyProposalFrame_(specs, ctx);
   const stats = { slides: specs.length, fonts: 0, colors: 0, icons: 0, removed: 0, redrawn: 0, normalized: 0, failed: 0, libraryIcons: 0, issues: 0 };
   const pageW = target.getPageWidth(), pageH = target.getPageHeight();
   const dateLabel = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, yyyy');
@@ -2233,6 +2240,7 @@ function designThumbnailParts_(ctx) {
    Score: overflow is heavily penalised, half-empty boxes are penalised, Gemini's choice and variety get a bonus.
 ========================= */
 function chooseDesignsByContent_(plan, ctx) {
+  if (typeof applyProposalFrame_ === 'function') applyProposalFrame_(plan.slides, ctx);   // proposal designs only in a Proposal Deck
   if (typeof ENGINE === 'undefined' || !ENGINE.variantsFor) return 0;
   let swaps = 0;
   // Long decks are built in batches: the variety state carries over from batch to batch (ctx.chooserState)
@@ -3581,7 +3589,7 @@ function startLongDeck_(ctx, target, p, started) {
   progressStage_(ctx, 'write', 'active', 'Gemini is planning the outline of ' + p.n + ' slides');
   const outline = planOutline_(p.userPrompt, p.presentationType, p.n, p.sources, ctx);
   const st = {
-    mode: 'create-long', runId: ctx.runId, startedAt: started, userPrompt: p.userPrompt, presentationType: p.presentationType,
+    mode: 'create-long', runId: ctx.runId, startedAt: started, userPrompt: p.userPrompt, presentationType: p.presentationType, proposal: ctx.proposal || null,
     department: p.department, n: p.n, sources: p.sources, outline: outline, next: 0, drawn: 0, phase: 'body', avgBatchMs: 0, usedNumbers: [],
     chooser: { used: {}, looksUsed: {}, prevTag: null, prevLook: null, prevDark: false, darkUsed: 0 }, log: ctx.log
   };
@@ -3605,6 +3613,7 @@ function startLongDeck_(ctx, target, p, started) {
 function prepareLongCtx_(ctx, st) {
   ctx.userPrompt = st.userPrompt;
   ctx.presentationType = st.presentationType;
+  ctx.proposal = st.proposal || null;
   ctx.department = st.department;
   ctx.deckSize = st.n;
   ctx.chooserState = st.chooser;
