@@ -170,7 +170,11 @@ function prepareProposal_(userPrompt, sources, ctx) {
 
 // Tags every slide spec of a Proposal Deck (idempotent): the engine then draws only proposal designs
 function applyProposalFrame_(slides, ctx) {
-  const p = ctx && ctx.proposal;
+  if (!ctx) return;
+  // The library switch never depends on the client step: a Proposal Deck is a Proposal Deck even when the client or
+  // its logo could not be found (or that step failed)
+  if (!ctx.proposal && isProposalDeck_(ctx)) ctx.proposal = { client: null, logoId: '', sectionStyle: 'dark' };
+  const p = ctx.proposal;
   if (!p) return;
   (slides || []).forEach(function (sp) {
     if (!sp) return;
@@ -179,7 +183,23 @@ function applyProposalFrame_(slides, ctx) {
     sp.cobrand = !!p.logoId && t !== 'cover' && t !== 'closing';
     if (t === 'cover') sp.clientLogo = !!p.logoId;
     if (t === 'section') sp.sectionStyle = p.sectionStyle;
+    if (p.client) restoreName_(sp, p.client);
   });
+}
+
+// The client's name keeps its own capitals everywhere ("a proposal for the home depot" -> "The Home Depot")
+function restoreName_(o, name) {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return;
+  const re = new RegExp('\\b' + words.map(function (w) { return w.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&'); }).join('\\s+') + '\\b', 'gi');
+  (function walk(v) {
+    if (!v || typeof v !== 'object') return;
+    Object.keys(v).forEach(function (k) {
+      if (k === 'reference' || k === 'notes') return;
+      if (typeof v[k] === 'string') v[k] = v[k].replace(re, name);
+      else if (typeof v[k] === 'object') walk(v[k]);
+    });
+  })(o);
 }
 
 /* ---------- 4. Built-in image: the big light 66° watermark (light section dividers) ---------- */

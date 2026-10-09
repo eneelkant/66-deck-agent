@@ -2299,6 +2299,8 @@ var ENGINE = (function () {
     ellipse(els, cx - r * 0.64, cy - r * 0.64, r * 1.28, r * 1.28, T.bgLight);
     text(els, cx - 40, cy - 14, 64, 28, s.center || '', { weight: 500, max: TSZ.heading, min: 10, maxLines: 2, align: 'center', color: T.ink });
     var capX = cx + r + 40, capW = CX + CW - capX, rowH = (BOTTOM - top) / n;
+    // captions must not run into each other (V.1_37: 5 three-line captions overlapped): otherwise another design is used
+    if (items.some(function (it) { return capH(it, capW, 3) + 16 > rowH; })) return null;
     items.forEach(function (it, i) {
       var start = -90 + i * sweep, mid = (start + sweep / 2) * Math.PI / 180;
       arc(els, 'ring', cx, cy, r, sweep, start, fills[i % 3]);
