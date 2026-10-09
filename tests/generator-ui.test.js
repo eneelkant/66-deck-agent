@@ -71,12 +71,13 @@ test("outer sidebar chrome is not titled 66° Deck Agent; inner heading remains"
   assert.match(html, /class="logo"[^>]*>66<span class="deg">/);
 });
 
-test("Generator payload carries mode, presentationType, department, slideCount, prompt, source and files", () => {
+test("Generator payload carries mode, presentationType, slideCount, prompt, source and files (no Department field)", () => {
   const html = read("src/Generator.html");
   assert.match(html, /\.runDeckGeneration\(payload\)/);
   assert.match(html, /mode:\s*state\.mode/);
   assert.match(html, /presentationType:\s*\$\("presentationType"\)\.value/);
-  assert.match(html, /department:\s*\$\("department"\)\.value/);
+  assert.doesNotMatch(html, /id="department"/, "the Department field is gone (V.1_36)");
+  assert.doesNotMatch(html, /\$\("department"\)/);
   assert.match(html, /slideCount:\s*Number\(\$\("slideCount"\)\.value\)/);
   assert.match(html, /prompt:\s*\$\("prompt"\)\.value\.trim\(\)/);
   assert.match(html, /sourceUrl:\s*\$\("sourceUrl"\)\.value\.trim\(\)/);
@@ -84,11 +85,11 @@ test("Generator payload carries mode, presentationType, department, slideCount, 
   assert.match(html, /\.cancelDeckGeneration\(runId\)/);
 });
 
-test("presentation type and department options come from the backend catalogs", () => {
+test("presentation type options show at once (in the page) and match the backend list", () => {
   const html = read("src/Generator.html");
   const sandbox = loadPipeline();
-  assert.match(html, /fillSelect\(\$\("presentationType"\), data\.presentationTypes\)/);
-  assert.match(html, /fillSelect\(\$\("department"\), data\.departments\)/);
+  ["Proposal Deck", "HR Leadership, Internal", "General", "Delivery Deck", "Solution Deck"].forEach((t) => assert.ok(html.includes('<option value="' + t + '">' + t + "</option>"), t));
+  assert.match(html, /fillSelect\(sel, data\.presentationTypes\)/);
   const boot = sandbox.getGeneratorBootstrap();
   assert.deepEqual(Array.from(boot.presentationTypes), ["Proposal Deck", "HR Leadership, Internal", "General", "Delivery Deck", "Solution Deck"]);
   assert.deepEqual(Array.from(boot.departments), Array.from(sandbox.DEPARTMENTS));

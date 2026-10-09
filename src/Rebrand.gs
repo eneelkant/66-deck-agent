@@ -135,9 +135,33 @@ function rebrandPresentation(presId, ctx, opts) {
         r.spec.title = 'Thank You!';
       }
     }
-    if (r.redraw && r.spec && !r.spec.reference && refs[i]) r.spec.reference = refs[i];
+    // V.1_36: a slide that is a title + a table is redrawn from the SOURCE table, cell by cell (every row, every column,
+    // merged groups kept) - Gemini's retyped copy of a table can drop or change data
+    if (!isCreate) {
+      const tEl = largestTable_(slides[i]);
+      const others = it.texts.filter(function (t) { return !OLD_BRAND_TEXT_RE_.test(t.text); });
+      if (tEl && others.length <= 2) {
+        const tbl = extractSourceTable_(tEl);
+        if (tbl.columns.length >= 2 && tbl.rows.length >= 1) {
+          const top = others.slice().sort(function (a, b) { return a.y - b.y; })[0];
+          const title = (r.redraw_spec && r.redraw_spec.title) || (top && top.text) || '';
+          r.redraw = true;
+          r.spec = { type: 'table', title: title, lead: (r.redraw_spec && r.redraw_spec.lead) || '', columns: tbl.columns, rows: tbl.rows, fromSource: true, reference: null,
+            notes: (r.redraw_spec && r.redraw_spec.notes) || '' };
+        }
+      }
+    }
+    if (r.redraw && r.spec) {
+      stripOldBrandText_(r.spec);                               // "#LetsGetYouThere" and other old taglines never come back
+      const kind2 = String(r.spec.type || '').toLowerCase();
+      if (kind2 !== 'closing') {
+        if (r.spec.title) r.spec.title = rebrandCase_(r.spec.title);
+        if (Array.isArray(r.spec.columns)) r.spec.columns = r.spec.columns.map(function (c) { return typeof c === 'string' ? rebrandCase_(c) : c; });
+      }
+    }
+    if (r.redraw && r.spec && !r.spec.reference && !r.spec.fromSource && refs[i]) r.spec.reference = refs[i];
     it.texts.forEach(function (t) {
-      if (/^(presenter name|your name|click to (add|edit)|lorem ipsum|subtitle here|title here)\b/i.test(t.text.trim()) &&
+      if ((/^(presenter name|your name|click to (add|edit)|lorem ipsum|subtitle here|title here)\b/i.test(t.text.trim()) || OLD_BRAND_TEXT_RE_.test(t.text)) &&
           r.delete_shapes.indexOf(t.id) === -1) r.delete_shapes.push(t.id);
     });
   });
@@ -145,6 +169,7 @@ function rebrandPresentation(presId, ctx, opts) {
   // ---- Batch: normalize every non-redrawn slide to the 2026 template ----
   progressStage_(ctx, 'brand', 'active', 'Applying colors, fonts and card styles to all slides');
   const requests = [];
+  const titleFixes = [];
   slides.forEach(function (page, i) {
     if (!inPart(i)) return;
     const r = review[i];
@@ -171,6 +196,16 @@ function rebrandPresentation(presId, ctx, opts) {
       }
     });
     normalizeElements(page.pageElements || [], requests, ctx.brand, stats, skip, roles, isCreate, S, pageW * pageH, bg);
+    if (!isCreate && roles.title) {
+      const tt = shapeText(roles.title.el), fixedT = rebrandCase_(tt);
+      if (fixedT !== tt && tt.length < 140) titleFixes.push({ replaceAllText: { containsText: { text: tt, matchCase: true }, replaceText: fixedT, pageObjectIds: [page.objectId] } });
+    }
+    // old brand corner marks (small triangles) left on the slide itself
+    flatten(page.pageElements || [], []).forEach(function (el) {
+      if (skip[el.objectId] || !el.shape || !/TRIANGLE/.test(el.shape.shapeType || '') || shapeText(el)) return;
+      const b = elementBounds(el);
+      if ((b.w * b.h) / (pageW * pageH) < 0.02) { requests.push({ deleteObject: { objectId: el.objectId } }); skip[el.objectId] = true; }
+    });
     positionTitle(requests, roles, S);
     styleCards(requests, page.objectId, roles, S, i, cardStyle);
     stats.normalized++;
@@ -190,6 +225,11 @@ function rebrandPresentation(presId, ctx, opts) {
     });
   });
   if (capsFixes.length) runBatches(presId, capsFixes, stats);
+  if (titleFixes.length) runBatches(presId, titleFixes, stats);
+  // ---- The file itself: old-brand decorations on the slide masters / layouts go, placeholders get the brand font ----
+  if (!isCreate && start === 0) {
+    try { cleanOldBrandLayouts_(presId, ctx, stats); } catch (e) { ctx.log.push('Layout clean-up skipped: ' + e.message); }
+  }
 
   // ---- SlidesApp phase: icons, patterns, footer mark, redraws ----
   const deck = SlidesApp.openById(presId);
@@ -204,8 +244,23 @@ function rebrandPresentation(presId, ctx, opts) {
 
     if (r.redraw) {
       try {
+        // A table that does not fit one slide continues on new slides right after it (same design, every row kept)
+        // (a run that rebrands only part of a large deck cannot add slides - the next part counts slides by position - so
+        //  there the table is drawn compact on one slide instead)
+        const parts = r.spec.fromSource ? (whole ? splitTableSpec_(r.spec) : [Object.assign({}, r.spec, { compact: true })]) : [r.spec];
         // Template section dividers carry no number (66D_LAYOUT_SECTION_001); a number is only shown if the spec has one.
-        renderEngineSlide(slide, r.spec, i + 1, ctx, pageW, pageH, dateLabel);
+        renderEngineSlide(slide, parts[0], i + 1, ctx, pageW, pageH, dateLabel);
+        let after = slide;
+        for (let k = 1; k < parts.length; k++) {
+          const ids = deck.getSlides().map(function (sl) { return sl.getObjectId(); });
+          const at = ids.indexOf(after.getObjectId()) + 1;
+          let ns;
+          try { ns = deck.insertSlide(at, SlidesApp.PredefinedLayout.BLANK); } catch (e) { ns = deck.insertSlide(at, after.getLayout()); }
+          renderEngineSlide(ns, parts[k], at + 1, ctx, pageW, pageH, dateLabel);
+          after = ns;
+          stats.redrawn++;
+        }
+        if (parts.length > 1) ctx.log.push('Slide ' + (i + 1) + ': the table continues on ' + (parts.length - 1) + ' more slide(s) so no row is left out.');
         stats.redrawn++;
       } catch (e) {
         ctx.log.push('Slide ' + (i + 1) + ' redraw failed: ' + e.message);
@@ -925,4 +980,159 @@ function addFooterMark(slide, elements, pageW, pageH, S, ctx) {
     img.setTitle('66 Mark');
     try { img.bringToFront(); } catch (e) {}
   } catch (e) { Logger.log('Footer mark failed: ' + e.message); }
+}
+
+
+/* ---------------- V.1_36: tables from the source, old-brand clean-up, sentence case ---------------- */
+
+// Old 66degrees brand taglines / marks that never come back after a rebrand
+const OLD_BRAND_TEXT_RE_ = /#\s*lets\s*get\s*you\s*there/i;
+
+function largestTable_(page) {
+  let best = null, area = 0;
+  flatten((page && page.pageElements) || [], []).forEach(function (el) {
+    if (!el.table) return;
+    const b = elementBounds(el), a = b.w * b.h;
+    if (!best || a > area) { best = el; area = a; }
+  });
+  return best;
+}
+
+// Every cell of a Slides API table as text; merged cells: the value sits in the first cell of the merge, the cells it
+// covers stay '' (the engine shows a first-column group once across its rows)
+function extractSourceTable_(el) {
+  const t = el.table || {};
+  const nr = t.rows || (t.tableRows || []).length, nc = t.columns || 0;
+  const grid = [];
+  for (let r = 0; r < nr; r++) { grid.push([]); for (let c = 0; c < nc; c++) grid[r].push(''); }
+  (t.tableRows || []).forEach(function (row, r) {
+    (row.tableCells || []).forEach(function (cell, k) {
+      const loc = cell.location || {};
+      const rr = loc.rowIndex != null ? loc.rowIndex : r, cc = loc.columnIndex != null ? loc.columnIndex : k;
+      const txt = ((cell.text && cell.text.textElements) || []).map(function (te) { return te.textRun ? te.textRun.content : ''; })
+        .join('').replace(/\s*\n\s*/g, ' ').replace(/\s+/g, ' ').trim();
+      if (grid[rr] && cc < nc) grid[rr][cc] = txt;
+    });
+  });
+  // drop fully empty rows / columns (spacers), keep everything else
+  const rows = grid.filter(function (r) { return r.some(function (v) { return v; }); });
+  const keepCol = [];
+  for (let c = 0; c < nc; c++) keepCol.push(rows.some(function (r) { return r[c]; }));
+  const trim = function (r) { return r.filter(function (v, c) { return keepCol[c]; }); };
+  const header = rows.length ? trim(rows[0]) : [];
+  return { columns: header, rows: rows.slice(1).map(trim) };
+}
+
+// A table spec split into slides that each fit; a group label carries onto the next slide
+function splitTableSpec_(spec) {
+  const rows = spec.rows || [];
+  const out = [];
+  let i = 0;
+  while (i < rows.length || !out.length) {
+    const rest = rows.slice(i);
+    if (rest.length && !String(rest[0][0] || '').trim()) {
+      for (let q = i - 1; q >= 0; q--) if (String(rows[q][0] || '').trim()) { rest[0] = [rows[q][0]].concat(rest[0].slice(1)); break; }
+    }
+    const part = Object.assign({}, spec, { rows: rest, title: out.length ? spec.title + ' (continued)' : spec.title });
+    const fit = rest.length ? Math.max(1, Math.min(rest.length, ENGINE.tableRowsThatFit(part))) : 0;
+    part.rows = rest.slice(0, fit);
+    out.push(part);
+    if (!fit) break;
+    i += fit;
+  }
+  return out;
+}
+
+function stripOldBrandText_(o) {
+  (function walk(v) {
+    if (!v || typeof v !== 'object') return;
+    Object.keys(v).forEach(function (k) {
+      if (typeof v[k] === 'string' && OLD_BRAND_TEXT_RE_.test(v[k])) v[k] = v[k].replace(/#\s*lets\s*get\s*you\s*there/ig, '').replace(/\s{2,}/g, ' ').trim();
+      else if (typeof v[k] === 'object') walk(v[k]);
+    });
+  })(o);
+}
+
+// Sentence case for rebranded titles and table headers WITHOUT touching names: only everyday words are lowered
+// ("Rate Card (INR)" -> "Rate card (INR)", "Burns & McDonnell India" stays). Each line keeps its first capital.
+const COMMON_WORDS_ = ('a an and or of for to in on at by with from the our your their its as is are be this that these those ' +
+  'rate rates card cards proposed proposal hourly weekly monthly daily annual yearly experience role roles skill skills level levels ' +
+  'cost costs price prices pricing total totals summary overview plan plans approach team teams project projects phase phases timeline ' +
+  'scope deliverables next steps step key data cloud platform platforms engineering engineer engineers development developer developers ' +
+  'application applications management manager services service solution solutions business strategy strategic results result impact ' +
+  'benefits benefit challenges challenge objectives objective goals goal agenda introduction about contact questions thank you ' +
+  'architecture security operations support model models process processes framework analysis report reports review status update ' +
+  'updates value values growth customer customers client clients partner partners partnership people resources resource budget budgets ' +
+  'estimate estimates rate-card schedule milestones milestone risks risk issues issue actions action owner owners table details detail ' +
+  'description descriptions name names type types category categories item items option options recommendation recommendations ' +
+  'current future state roadmap vision mission market markets product products feature features capability capabilities ' +
+  'implementation migration modernization transformation adoption training testing quality assurance analyst analysts consultant ' +
+  'consultants lead leads architect architects senior junior program programme delivery governance compliance performance metrics ' +
+  'kpis outcomes outcome success factors factor work working new our why how what who when where').split(' ');
+const COMMON_SET_ = {};
+COMMON_WORDS_.forEach(function (w) { COMMON_SET_[w] = true; });
+function rebrandCase_(text) {
+  const str = String(text || '');
+  if (str.length > 140) return str;
+  return str.split(/(\n)/).map(function (line) {
+    if (line === '\n') return line;
+    let first = true, prevName = false;
+    return line.split(/(\s+)/).map(function (w) {
+      if (/^\s+$/.test(w) || !w) return w;
+      const bare = w.replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '');
+      if (!bare) return w;
+      const isCap = /^[A-Z]/.test(bare), common = !!COMMON_SET_[bare.toLowerCase()];
+      if (first) { first = false; prevName = isCap && !common; return w; }
+      // a capitalised everyday word right after a name is part of the name ("Google Cloud", "Burns & McDonnell")
+      if (/^[A-Z][a-z]+$/.test(bare) && common && !prevName) { prevName = false; return w.replace(bare, bare.toLowerCase()); }
+      prevName = isCap && !common;
+      return w;
+    }).join('');
+  }).join('');
+}
+
+// Slide masters and layouts carry the OLD brand (taglines, corner triangles, Work Sans, old colors) and show through on
+// every slide. A deck that is not on the 2026 template loses every decoration on its masters / layouts (the rebrand
+// draws the 66° marks on the slides itself); a deck already on the template only loses explicit old-brand pieces.
+// Placeholders stay and get Plus Jakarta Sans in the brand ink color.
+function cleanOldBrandLayouts_(presId, ctx, stats) {
+  const p = Slides.Presentations.get(presId, { fields: 'masters(objectId,pageElements),layouts(objectId,pageElements)' });
+  const pages = (p.masters || []).concat(p.layouts || []);
+  const fontsOf = function (el) {
+    const out = [];
+    ((el.shape && el.shape.text && el.shape.text.textElements) || []).forEach(function (te) {
+      const f = te.textRun && te.textRun.style && te.textRun.style.fontFamily;
+      if (f) out.push(f);
+    });
+    return out;
+  };
+  // already the 2026 template? (brand font on the masters, or the brand blue)
+  let onTemplate = false;
+  pages.forEach(function (pg) {
+    flatten(pg.pageElements || [], []).forEach(function (el) {
+      if (fontsOf(el).some(function (f) { return /plus jakarta/i.test(f); })) onTemplate = true;
+      const fill = el.shape && el.shape.shapeProperties && solidRgb(el.shape.shapeProperties.shapeBackgroundFill);
+      if (fill && rgbObjToHex(fill) === '#0052FF') onTemplate = true;
+    });
+  });
+  const reqs = [];
+  let removed = 0;
+  pages.forEach(function (pg) {
+    (pg.pageElements || []).forEach(function (el) {
+      const isPh = !!(el.shape && el.shape.placeholder);
+      if (isPh) {
+        if (shapeText(el)) {
+          reqs.push({ updateTextStyle: { objectId: el.objectId, textRange: { type: 'ALL' },
+            style: { fontFamily: 'Plus Jakarta Sans', foregroundColor: { opaqueColor: apiColor(IPAY.ink) } }, fields: 'fontFamily,foregroundColor' } });
+        }
+        return;
+      }
+      const txt = shapeText(el);
+      const oldText = OLD_BRAND_TEXT_RE_.test(txt) || fontsOf(el).some(function (f) { return /work sans/i.test(f); });
+      const triangle = !!(el.shape && /TRIANGLE/.test(el.shape.shapeType || ''));
+      if (!onTemplate || oldText || triangle) { reqs.push({ deleteObject: { objectId: el.objectId } }); removed++; }
+    });
+  });
+  if (reqs.length) runBatches(presId, reqs, stats);
+  if (removed) ctx.log.push('Removed ' + removed + ' old-brand element(s) from the slide masters and layouts (taglines, corner marks, old fonts).');
 }
