@@ -39,13 +39,28 @@ function detectClient_(userPrompt, sources, ctx) {
       'Return ONLY JSON: {"client":"","domain":"","confident":true}'
     ].join('\n') }], ctx.apiKey, 0.1);
   } catch (e) {
-    ctx.log.push('Client check skipped: ' + e.message);
-    return null;
+    ctx.log.push('Client check (Gemini) failed: ' + e.message);
+    const fp = clientFromPrompt_(userPrompt);
+    return fp ? { name: fp, domain: '' } : null;
   }
-  const name = String((raw && raw.client) || '').replace(/\s+/g, ' ').trim();
-  if (!name || raw.confident === false || /^(66 ?degrees|google( cloud)?)$/i.test(name)) return null;
+  let name = String((raw && raw.client) || '').replace(/\s+/g, ' ').trim();
+  const fromPrompt = clientFromPrompt_(userPrompt);
+  if (/^(66 ?degrees|google( cloud)?)$/i.test(name)) name = '';
+  // Gemini unsure or failed, but the request names the client plainly ("a proposal for Apple to ..."): that name is used
+  if ((!name || raw.confident === false) && fromPrompt) { ctx.log.push('Client taken from the request: ' + fromPrompt + '.'); return { name: fromPrompt, domain: '' }; }
+  if (!name || raw.confident === false) { if (name) ctx.log.push('Client check: "' + name + '" was not certain enough.'); return null; }
   const domain = String(raw.domain || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
   return { name: name.slice(0, 60), domain: /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) ? domain : '' };
+}
+
+// "proposal for Apple to ...", "deck for The Home Depot on ...": the capitalised name right after for/to
+var NOT_CLIENT_ = /^(google|google cloud|66 ?degrees|gemini|vertex|ai|aws|azure|microsoft|the|a|an|our|your|their|my|enterprise|retail|customer|customers)$/i;
+function clientFromPrompt_(prompt) {
+  const p = String(prompt || '');
+  const m = p.match(/\b(?:proposal|deck|presentation|pitch|sow|rfp response|engagement)\s+(?:for|to)\s+((?:The\s+)?[A-Z0-9][\w&.'’-]*(?:\s+(?:&\s+)?[A-Z0-9][\w&.'’-]*){0,3})/);
+  if (!m) return '';
+  const name = m[1].replace(/[’']s$/, '').replace(/[.,]$/, '').trim();
+  return NOT_CLIENT_.test(name) ? '' : name;
 }
 
 /* ---------- 2. The client's logo ---------- */
@@ -187,6 +202,12 @@ function findClientLogo_(client, ctx) {
     blob = logoDevLogo_(guess);
     if (blob) client.domain = guess;
   }
+  if (!blob) {
+    // logo.dev name lookup ("Apple") when no domain worked
+    let token = LOGO_DEV_DEFAULT_TOKEN_;
+    try { token = PropertiesService.getScriptProperties().getProperty('LOGO_DEV_TOKEN') || token; } catch (e) {}
+    blob = fetchImage_('https://img.logo.dev/name/' + encodeURIComponent(client.name) + '?token=' + encodeURIComponent(token) + '&size=400&format=png&retina=true&fallback=404', 1200, 'logo.dev (name)');
+  }
   if (!blob) { blob = brandfetchLogo_(client.domain); source = 'Brandfetch'; }
   if (!blob) { blob = wikidataLogo_(client.name, client.domain); source = 'the official logo on Wikimedia Commons'; }
   if (!blob) { blob = wikipediaLogo_(client.name); source = 'Wikipedia'; }
@@ -196,10 +217,10 @@ function findClientLogo_(client, ctx) {
   try {
     const ext = /jpe?g/i.test(blob.getContentType()) ? '.jpg' : '.png';
     const file = clientLogoFolder_().createFile(blob.setName(client.name + ' logo' + ext));
-    return { id: file.getId(), source: source + ', saved to Drive' };
+    return { id: file.getId(), blob: blob, source: source + ', saved to Drive' };
   } catch (e) {
-    ctx.log.push('Client logo could not be saved to Drive: ' + e.message);
-    return null;
+    // not saved, but still used in this deck
+    return { id: 'inline', blob: blob, source: source + ' (not saved to Drive: ' + e.message + ')' };
   }
 }
 
@@ -214,7 +235,7 @@ function prepareProposal_(userPrompt, sources, ctx) {
   if (c) {
     p.client = c.name;
     const logo = findClientLogo_(c, ctx);
-    if (logo) { p.logoId = logo.id; ctx.log.push('Client: ' + c.name + ' (logo from ' + logo.source + ').'); }
+    if (logo) { p.logoId = logo.id; if (logo.blob) ctx.clientLogoBlob = logo.blob; ctx.log.push('Client: ' + c.name + ' (logo from ' + logo.source + ').'); }
     else ctx.log.push('Client: ' + c.name + ' (no logo found: ' + LOGO_TRAIL_.slice(0, 6).join('; ') + '. Add an image named "' + c.name + ' logo" to the "' + CLIENT_LOGO_FOLDER_ + '" folder in Drive and it is used next time).');
   } else {
     ctx.log.push('No client named — 66degrees logo used.');

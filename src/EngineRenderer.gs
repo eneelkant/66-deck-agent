@@ -298,7 +298,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
         const id = inline ? null : engineAssetId(e.asset, ctx);
         if (inline || id) {
           const box = safeBox_(e.x * s, e.y * s, e.w * s, e.h * s);
-          const blob = inline || getBlobCached(id, ctx);
+          const blob = inline || (e.asset === 'client-logo' && ctx.clientLogoBlob) || getBlobCached(id, ctx);
           if (e.fit === 'contain') insertContainedImage_(slide, blob, box, e, s, ctx);
           else slide.insertImage(blob, box.x, box.y, box.w, box.h);
         }

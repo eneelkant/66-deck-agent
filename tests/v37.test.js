@@ -171,3 +171,41 @@ test("logo.dev is used first (after Drive), with fallback=404 so no made-up mono
   assert.ok(g.logoDevLogo_("apple.com"));
   assert.match(fetched[0], /^https:\/\/img\.logo\.dev\/apple\.com\?token=pk_/);
 });
+
+test("Apple deck: client from the request when Gemini is unsure; the logo is used even if Drive cannot save it", () => {
+  const g = load();
+  assert.equal(g.clientFromPrompt_("Create a proposal for Apple to modernise their retail customer support with AI on Google Cloud."), "Apple");
+  assert.equal(g.clientFromPrompt_("Create a proposal for The Home Depot to modernise their customer service"), "The Home Depot");
+  assert.equal(g.clientFromPrompt_("Create a proposal to move a retail company's email to Google Workspace."), "");
+  assert.equal(g.clientFromPrompt_("A proposal for Google Cloud adoption"), "");
+  let answer = { client: "Apple", domain: "", confident: false };
+  const g2 = load({ callGeminiJSON: () => answer });
+  const ctx = { log: [] };
+  assert.deepEqual(JSON.parse(JSON.stringify(g2.detectClient_("Create a proposal for Apple to modernise support", {}, ctx))), { name: "Apple", domain: "" });
+  const src = read("src/ProposalKit.gs");
+  assert.match(src, /return \{ id: 'inline', blob: blob/);
+  assert.match(src, /img\.logo\.dev\/name\//);
+  assert.match(read("src/EngineRenderer.gs"), /e\.asset === 'client-logo' && ctx\.clientLogoBlob/);
+});
+
+test("Apple deck: every card has its own icon (none empty, no repeated bulbs); short timeline labels; no ranges in stat labels", () => {
+  const code = read("src/Code.gs");
+  const sb = { console, Math, JSON, Logger: { log() {} }, CONFIG: {} };
+  vm.createContext(sb);
+  vm.runInContext(read("src/Engine.gs") + ";" + code, sb);
+  const sp = { type: "cards", title: "The AI-powered customer journey", items: [
+    { title: "Initial query", text: "a", icon: "lightbulb" }, { title: "AI triage & self-service", text: "b", icon: "lightbulb" },
+    { title: "Personalized recommendations", text: "c" }, { title: "Agent handoff (contextual)", text: "d" },
+    { title: "Agent augmentation", text: "e", icon: "clock" }, { title: "Post-interaction feedback", text: "f" }] };
+  sb.distinctIcons_(sp);
+  const icons = sp.items.map((i) => i.icon);
+  assert.ok(icons.every(Boolean), "every card has an icon: " + icons);
+  assert.equal(new Set(icons).size, icons.length, "all different: " + icons);
+  assert.ok(!icons.includes("lightbulb"));
+  const tl = { type: "timeline", title: "Phased implementation", items: [{ label: "Phase 4: Scale & optimize", title: "Ongoing optimization", text: "x" }] };
+  const st = { type: "stats", title: "Impact", items: [{ value: "85%", label: "Containment rate through AI self-service (70-85% range)", text: "x" }, { value: "18%", label: "CSAT", text: "y" }, { value: "43%", label: "Response time", text: "z" }] };
+  sb.finalVoicePass_([tl, st], { userPrompt: "x" });
+  assert.equal(tl.items[0].label, "Phase 4");
+  assert.equal(st.items[0].label, "Containment rate through AI self-service");
+  assert.match(code, /No forecasts for years that have already passed/);
+});
