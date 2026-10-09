@@ -1175,19 +1175,25 @@ function iconConceptFor_(text, taken) {
   }
   return '';
 }
+// Last resort icons: ones the add-on can always draw (bundled), never the light bulb first
+const ICON_POOL_ = ['analytics', 'security', 'automation', 'team', 'growth', 'time', 'cloud', 'cost', 'lock', 'ai', 'chart', 'innovation'];
 function distinctIcons_(sp) {
   ['items', 'steps', 'layers'].forEach(function (k) {
     if (!Array.isArray(sp[k])) return;
+    const list = sp[k].filter(function (it) { return it && typeof it === 'object'; });
+    if (!list.length) return;
+    // a slide shows icons on every card or on none (V.1_37: three of six cards had none)
+    const wantsIcons = list.some(function (it) { return it.icon || it.material; }) || ['cards', 'diagram'].indexOf(String(sp.type || '').toLowerCase()) !== -1;
+    if (!wantsIcons) return;
     const taken = {};
-    sp[k].forEach(function (it) {
-      if (!it || typeof it !== 'object') return;
+    list.forEach(function (it) {
       let ic = String(it.icon || '').trim();
-      // a planned icon is kept when it is specific and not already used on the slide
-      if (ic && !WEAK_ICON_RE_.test(ic) && !taken[ic.toLowerCase()] && ic.split(/\s+/).length <= 3) { taken[ic.toLowerCase()] = true; return; }
       const head = String(it.title || it.label || '');
-      ic = iconConceptFor_(head, taken) || iconConceptFor_(head + ' ' + String(it.text || ''), taken);
-      if (ic) { it.icon = ic; taken[ic] = true; }
-      else if (it.icon && taken[String(it.icon).toLowerCase()]) delete it.icon;     // never the same icon twice
+      if (!ic || WEAK_ICON_RE_.test(ic) || taken[ic.toLowerCase()] || ic.split(/\s+/).length > 3) {
+        ic = iconConceptFor_(head, taken) || iconConceptFor_(head + ' ' + String(it.text || ''), taken) ||
+          ICON_POOL_.filter(function (x) { return !taken[x]; })[0] || '';
+      }
+      if (ic) { it.icon = ic; taken[ic.toLowerCase()] = true; delete it.material; }
     });
   });
 }
@@ -1213,6 +1219,14 @@ function finalVoicePass_(slides, ctx) {
       }
     }
     if (t === 'stats') statsOneKind_(sp);
+    if (Array.isArray(sp.items)) sp.items.forEach(function (it) {
+      if (!it || typeof it !== 'object') return;
+      // no figures or ranges in brackets in a stat label ("Containment rate (70-85% range)")
+      if (it.label && t === 'stats') it.label = String(it.label).replace(/\s*\([^)]*\d[^)]*\)\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      // a timeline label that repeats the step title is cut to its short form ("Phase 4: Scale & optimize" -> "Phase 4")
+      const lm = String(it.label || '').match(/^\s*((?:phase|stage|step|wave|sprint|month|week|quarter|q)\s*[\dIVX]+(?:\s*[-–]\s*\d+)?)\s*[:–—-]\s*\S/i);
+      if (lm && it.title) it.label = lm[1].replace(/\s+/g, ' ');
+    });
     if (t === 'table' && Array.isArray(sp.rows)) {
       sp.rows.forEach(function (r) { if (Array.isArray(r)) for (var c = 1; c < r.length; c++) if (typeof r[c] === 'string') r[c] = dropFillerTail_(r[c]); });
       if (Array.isArray(sp.columns) && sp.columns.length === 2 && /^(topic|item|area)$/i.test(String(sp.columns[0])) && /^(what it means|description|details)$/i.test(String(sp.columns[1]))) sp.columns = tableHeaders_(sp.title);
@@ -3834,7 +3848,11 @@ function clampSlideCount_(n) {
 var DECK_TYPES_ = ['Proposal Deck', 'HR Leadership, Internal', 'General', 'Delivery Deck', 'Solution Deck'];
 var DECK_TYPE_GUIDANCE_ = {
   'Proposal Deck': 'Client proposal: the client\'s need and goals, the proposed approach, scope and deliverables, timeline and ' +
-    'milestones, how success is measured, and the commercial shape if the request gives it. Written to the client ("you").',
+    'milestones, how success is measured, and the commercial shape if the request gives it. Written to the client ("you"). ' +
+    'Never state problems in the client\'s current operations as facts from blogs or forums: frame them as "what we typically see" or ' +
+    '"to confirm in discovery". No forecasts for years that have already passed ("by 2026" is not a forecast in 2026). Industry ' +
+    'figures are labelled as benchmarks ("Industry benchmark: ..."), the client\'s goals as targets ("Target: ..."), never as promises. ' +
+    'American English spelling throughout (modernize, optimize, organization).',
   'HR Leadership, Internal': 'Internal deck for HR and leadership: people, policy, organisation and culture topics; context, the ' +
     'change and why, what it means for teams and managers, decisions leadership needs to make, timeline and support. Internal ' +
     'audience: plain and direct, no sales tone, no client pitch, no 66degrees credentials, no market-size statistics.',
