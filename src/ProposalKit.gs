@@ -70,27 +70,49 @@ function findDriveLogo_(name) {
   return null;
 }
 
-function fetchImage_(url, minBytes) {
+var LOGO_TRAIL_ = [];   // what each logo source answered (shown in the result message when no logo was found)
+function fetchImage_(url, minBytes, label) {
   try {
-    const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
-    if (r.getResponseCode() !== 200) return null;
+    const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true, headers: { 'Api-User-Agent': '66DeckAgent/1.0 (Google Apps Script add-on)' } });
+    if (r.getResponseCode() !== 200) { LOGO_TRAIL_.push((label || 'image') + ': HTTP ' + r.getResponseCode()); return null; }
     const blob = r.getBlob();
     const type = String(blob.getContentType() || '');
-    if (!/^image\/(png|jpeg|jpg|gif|webp)/i.test(type)) return null;
-    if (blob.getBytes().length < (minBytes || 1500)) return null;
+    if (!/^image\/(png|jpeg|jpg|gif|webp)/i.test(type)) { LOGO_TRAIL_.push((label || 'image') + ': not an image (' + type + ')'); return null; }
+    if (blob.getBytes().length < (minBytes || 1500)) { LOGO_TRAIL_.push((label || 'image') + ': too small'); return null; }
     return blob;
-  } catch (e) { return null; }
+  } catch (e) { LOGO_TRAIL_.push((label || 'image') + ': ' + e.message); return null; }
+}
+function fetchJson_(url, label) {
+  try {
+    const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'Api-User-Agent': '66DeckAgent/1.0 (Google Apps Script add-on)' } });
+    if (r.getResponseCode() !== 200) { LOGO_TRAIL_.push(label + ': HTTP ' + r.getResponseCode()); return null; }
+    return JSON.parse(r.getContentText());
+  } catch (e) { LOGO_TRAIL_.push(label + ': ' + e.message); return null; }
+}
+
+// Wikipedia: the page's lead image is the company logo for most companies (the infobox logo)
+function wikipediaLogo_(name) {
+  const s = fetchJson_('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(String(name).replace(/ /g, '_')), 'Wikipedia');
+  if (!s || s.type === 'disambiguation') { if (s) LOGO_TRAIL_.push('Wikipedia: several pages with this name'); return null; }
+  const desc = String(s.description || '') + ' ' + String(s.extract || '').slice(0, 300);
+  if (!/compan|corporat|retailer|brand|business|bank|firm|organi[sz]ation|group|chain|manufacturer|provider|airline|university/i.test(desc)) { LOGO_TRAIL_.push('Wikipedia: page is not a company'); return null; }
+  const img = (s.originalimage && s.originalimage.source) || (s.thumbnail && s.thumbnail.source);
+  if (!img || !/logo|\.svg/i.test(img)) { LOGO_TRAIL_.push('Wikipedia: page image is not a logo'); return null; }
+  // SVG originals: ask for a PNG thumbnail
+  const png = /\.svg$/i.test(img) && s.thumbnail ? s.thumbnail.source.replace(/\/\d+px-/, '/800px-') : img;
+  return fetchImage_(png, 800, 'Wikipedia logo');
 }
 
 // Wikidata: the company's item (its official website must match the domain when we know it) -> "logo image" (P154)
 function wikidataLogo_(name, domain) {
   try {
-    const s = JSON.parse(UrlFetchApp.fetch('https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=6&search=' +
-      encodeURIComponent(name), { muteHttpExceptions: true }).getContentText());
+    const s = fetchJson_('https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=6&search=' +
+      encodeURIComponent(name), 'Wikidata search');
     const ids = ((s && s.search) || []).map(function (x) { return x.id; });
-    if (!ids.length) return null;
-    const e = JSON.parse(UrlFetchApp.fetch('https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims|descriptions&languages=en&ids=' +
-      ids.join('|'), { muteHttpExceptions: true }).getContentText());
+    if (!ids.length) { if (s) LOGO_TRAIL_.push('Wikidata: no match'); return null; }
+    const e = fetchJson_('https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims|descriptions&languages=en&ids=' +
+      ids.join('|'), 'Wikidata');
+    if (!e) return null;
     const val = function (ent, p) {
       const c = ent.claims && ent.claims[p];
       return c && c[0] && c[0].mainsnak && c[0].mainsnak.datavalue ? c[0].mainsnak.datavalue.value : null;
@@ -107,10 +129,10 @@ function wikidataLogo_(name, domain) {
       const orgOk = /compan|corporat|organi[sz]ation|business|firm|agency|bank|group|retailer|manufacturer|provider|university|hospital|news|airline|brand|enterprise|association|institut|government|department/i.test(desc);
       if (siteOk || (!domain && orgOk) || (domain && !site && orgOk)) pick = logo;
     });
-    if (!pick) return null;
+    if (!pick) { LOGO_TRAIL_.push('Wikidata: no logo for this company'); return null; }
     // Commons renders SVG logos as PNG thumbnails (transparent background)
-    return fetchImage_('https://commons.wikimedia.org/wiki/Special:FilePath/' + encodeURIComponent(pick) + '?width=800', 800);
-  } catch (e) { return null; }
+    return fetchImage_('https://commons.wikimedia.org/wiki/Special:FilePath/' + encodeURIComponent(pick) + '?width=800', 800, 'Wikimedia logo');
+  } catch (e) { LOGO_TRAIL_.push('Wikidata: ' + e.message); return null; }
 }
 
 function brandfetchLogo_(domain) {
@@ -132,11 +154,15 @@ function brandfetchLogo_(domain) {
 
 function findClientLogo_(client, ctx) {
   if (!client || !client.name) return null;
+  LOGO_TRAIL_ = [];
   const inDrive = findDriveLogo_(client.name);
   if (inDrive) return inDrive;
+  LOGO_TRAIL_.push('Drive: none');
   let blob = brandfetchLogo_(client.domain), source = 'Brandfetch';
   if (!blob) { blob = wikidataLogo_(client.name, client.domain); source = 'the official logo on Wikimedia Commons'; }
-  if (!blob && client.domain) { blob = fetchImage_('https://www.google.com/s2/favicons?sz=256&domain=' + encodeURIComponent(client.domain), 2500); source = 'the company website icon'; }
+  if (!blob) { blob = wikipediaLogo_(client.name); source = 'Wikipedia'; }
+  if (!blob && client.domain) { blob = fetchImage_('https://www.google.com/s2/favicons?sz=256&domain=' + encodeURIComponent(client.domain), 2500, 'Website icon'); source = 'the company website icon'; }
+  if (!blob && !client.domain) LOGO_TRAIL_.push('Website icon: no domain known');
   if (!blob) return null;
   try {
     const ext = /jpe?g/i.test(blob.getContentType()) ? '.jpg' : '.png';
@@ -160,7 +186,7 @@ function prepareProposal_(userPrompt, sources, ctx) {
     p.client = c.name;
     const logo = findClientLogo_(c, ctx);
     if (logo) { p.logoId = logo.id; ctx.log.push('Client: ' + c.name + ' (logo from ' + logo.source + ').'); }
-    else ctx.log.push('Client: ' + c.name + ' (no logo found; add an image named "' + c.name + ' logo" to the "' + CLIENT_LOGO_FOLDER_ + '" folder in Drive to use it next time).');
+    else ctx.log.push('Client: ' + c.name + ' (no logo found: ' + LOGO_TRAIL_.slice(0, 6).join('; ') + '. Add an image named "' + c.name + ' logo" to the "' + CLIENT_LOGO_FOLDER_ + '" folder in Drive and it is used next time).');
   } else {
     ctx.log.push('No client named — 66degrees logo used.');
   }
