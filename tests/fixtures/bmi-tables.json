@@ -1,0 +1,1946 @@
+[
+{
+"objectId": "t0",
+"size": {
+"width": {
+"magnitude": 2997200
+},
+"height": {
+"magnitude": 2997200
+}
+},
+"transform": {
+"scaleX": 1,
+"scaleY": 1,
+"translateX": 190500,
+"translateY": 952500
+},
+"table": {
+"rows": 13,
+"columns": 5,
+"tableRows": [
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 0
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Skill\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Experience\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Role\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Hourly Rate (INR)\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Weekly Rate (INR)\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 0
+},
+"rowSpan": 4,
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Agentic tech stack\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "0-3\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "AIML Developer\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹2,890\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹130,050\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "3-6\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "AIML Sr Developer\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹6,460\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹290,700\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "6-9\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "AIML Tech Lead\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹7,140\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹321,300\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "9-12\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "AIML Architect\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹9,605\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹432,225\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 0
+},
+"rowSpan": 4,
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Application Development - Python, Svelte, TailwindCSS, React, Django, TypeScrip, Node.js\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "0-3\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Jr Developer\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹1,700\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹76,500\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "3-6\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Sr Developer\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹3,995\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹179,775\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "6-9\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Tech Lead\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹5,780\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹260,100\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "9-12\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Software Architect\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹7,310\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹328,950\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 0
+},
+"rowSpan": 4,
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Platform Engineer : Google Cloud, Azure, AWS, Kubernetes, Docker.\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "0-3\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Cloud Developers\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹1,700\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹76,500\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "3-6\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Sr Cloud Developer\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹3,740\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹168,300\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "6-9\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Tech Lead - Cloud\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹5,780\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹260,100\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "9-12\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Cloud Architect\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹7,310\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹328,950\n"
+}
+}
+]
+}
+}
+]
+}
+]
+}
+},
+{
+"objectId": "t1",
+"size": {
+"width": {
+"magnitude": 2997200
+},
+"height": {
+"magnitude": 2997200
+}
+},
+"transform": {
+"scaleX": 1,
+"scaleY": 1,
+"translateX": 190500,
+"translateY": 952500
+},
+"table": {
+"rows": 13,
+"columns": 5,
+"tableRows": [
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 0
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Skill\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Experience\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Role\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Hourly Rate (INR)\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 0,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Weekly Rate (INR)\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 0
+},
+"rowSpan": 4,
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Selenium Automation QA\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "0-3\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Junior Testers\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹1,700\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 1,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹76,500\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "3-6\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Sr Testers\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹3,400\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 2,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹153,000\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "6-9\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Test Lead\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹3,740\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 3,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹168,300\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "9-12\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Test Manager\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹5,780\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 4,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹260,100\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 0
+},
+"rowSpan": 4,
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Business Analyst\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "0-3\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Jr Business Analyst\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹1,700\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 5,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹76,500\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "3-6\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Business Analyst\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹3,400\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 6,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹153,000\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "6-9\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Sr Business Analyst\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹3,740\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 7,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹168,300\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "9-12\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Business Consultant\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹5,015\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 8,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹225,675\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 0
+},
+"rowSpan": 4,
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Project Manager / Scrum Master\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "0-3\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Jr Scrum/Project Manager\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹1,700\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 9,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹76,500\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "3-6\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Scrum/Project Manager\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹3,740\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 10,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹168,300\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "6-9\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Sr Project Manager\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹4,420\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 11,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹198,900\n"
+}
+}
+]
+}
+}
+]
+},
+{
+"tableCells": [
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 0
+}
+},
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 1
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "9-12\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 2
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "Program Manager / PMO\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 3
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹6,545\n"
+}
+}
+]
+}
+},
+{
+"location": {
+"rowIndex": 12,
+"columnIndex": 4
+},
+"text": {
+"textElements": [
+{
+"textRun": {
+"content": "₹294,525\n"
+}
+}
+]
+}
+}
+]
+}
+]
+}
+}
+]

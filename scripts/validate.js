@@ -418,15 +418,16 @@ function assertSamePresentation() {
   } else {
     ok("Generator.html has product subtitle");
   }
-  if (!/presentationType:\s*\S/.test(html) || !/department:\s*\S/.test(html) || !/slideCount:\s*\S/.test(html)) {
-    fail("Generator.html must send presentationType, department, and slideCount to generatePresentation");
+  // V.1_36: the sidebar has no Department field (the server uses "Other" = every template slide)
+  if (!/presentationType:\s*\S/.test(html) || !/slideCount:\s*\S/.test(html)) {
+    fail("Generator.html must send presentationType and slideCount to generatePresentation");
   } else {
-    ok("Generator.html sends presentationType, department, and slideCount");
+    ok("Generator.html sends presentationType and slideCount");
   }
-  if (!/id="presentationType"/.test(html) || !/id="department"/.test(html)) {
-    fail("Generator.html missing presentation type / department controls");
+  if (!/id="presentationType"/.test(html)) {
+    fail("Generator.html missing the presentation type control");
   } else {
-    ok("Generator.html has presentation type and department controls");
+    ok("Generator.html has the presentation type control");
   }
   if (!/min="3"/.test(html) || !/max="200"/.test(html)) {
     fail("Generator.html slide count must be 3–200");

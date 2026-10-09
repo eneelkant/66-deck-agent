@@ -243,7 +243,7 @@
       #promptField { order: 1; }
       #sourceField { order: 2; }
       #filesField  { order: 3; }
-      #metaRow     { order: 4; }
+      #metaRow     { order: 4; grid-template-columns: 1fr; }   /* one field: Presentation Type, full width */
       #slidesField { order: 5; }
 
       /* Rebrand has no inputs, only this info card */
@@ -1138,15 +1138,17 @@
             <div class="err" id="filesErr"></div>
           </div>
 
-          <!-- Type & Department -->
+          <!-- Presentation Type (V.1_36: the options are in the page, so they show at once; no Department field) -->
           <div class="row" id="metaRow" data-only="create">
             <div class="field">
               <label for="presentationType">Presentation Type</label>
-              <select id="presentationType"></select>
-            </div>
-            <div class="field">
-              <label for="department">Department</label>
-              <select id="department"></select>
+              <select id="presentationType">
+                <option value="Proposal Deck">Proposal Deck</option>
+                <option value="HR Leadership, Internal">HR Leadership, Internal</option>
+                <option value="General">General</option>
+                <option value="Delivery Deck">Delivery Deck</option>
+                <option value="Solution Deck">Solution Deck</option>
+              </select>
             </div>
           </div>
 
@@ -1756,7 +1758,6 @@
         setSlides($("slideCountInput").value);
         run({
           mode: state.mode,
-          department: $("department").value,
           presentationType: $("presentationType").value,
           slideCount: Number($("slideCount").value),
           prompt: $("prompt").value.trim(),
@@ -1783,8 +1784,13 @@
           .withSuccessHandler(function (data) {
             data = data || {};
             if (data.stages && data.stages.length) { state.stages = data.stages; state.deckStages = data.stages; }
-            fillSelect($("department"), data.departments);
-            fillSelect($("presentationType"), data.presentationTypes);
+            // the list is already in the page; the server's list only replaces it if it differs (the choice is kept)
+            var sel = $("presentationType"), had = sel.value;
+            var now = Array.prototype.map.call(sel.options, function (o) { return o.value; }).join("|");
+            if (data.presentationTypes && data.presentationTypes.length && data.presentationTypes.join("|") !== now) {
+              fillSelect(sel, data.presentationTypes);
+              if (data.presentationTypes.indexOf(had) !== -1) sel.value = had;
+            }
             var pill = $("aiStatus");
             pill.className = "pill " + (data.hasVertexConfig ? "ok" : "warn");
             pill.innerHTML = "<i></i>";

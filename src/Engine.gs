@@ -498,57 +498,135 @@ var ENGINE = (function () {
     return { bg: T.white, els: els };
   };
 
+  // Tables (V.1_36): every column and every row the spec has is drawn - nothing is cut. Column widths come from the
+  // header (always on one line) and the content; number columns are right-aligned; a first-column group label that
+  // spans several rows (merged cells, or a blank cell under a label) is shown once across its rows. When the rows do not
+  // fit even at the smallest size, tableLayout_ reports how many fit and the caller continues the table on a new slide.
+  var TABLE_MAX_COLS = 8;
+  function tableCells_(s) {
+    var cellText = function (c) { return c == null ? '' : (typeof c === 'object' ? String(c.title || c.label || c.name || c.header || c.text || c.value || '') : String(c)); };
+    var cols = arr(s.columns, TABLE_MAX_COLS).map(cellText);
+    var rows = (Array.isArray(s.rows) ? s.rows : []).map(function (r) {
+      if (r && !Array.isArray(r) && typeof r === 'object') r = Object.keys(r).map(function (k) { return r[k]; });
+      var out = (Array.isArray(r) ? r : [r]).slice(0, Math.max(cols.length, 1)).map(cellText);
+      while (out.length < cols.length) out.push('');
+      return out;
+    });
+    if (!cols.length && rows.length) cols = rows[0].map(function () { return ''; });
+    return { cols: cols, rows: rows };
+  }
+  function isNumberCell_(v) { var t = String(v || '').trim(); return !!t && /\d/.test(t) && !/[A-Za-z]{2,}/.test(t.replace(/\b(INR|USD|EUR|GBP|k|m|bn|hrs?|pts?)\b/gi, '')); }
+  function tableLayout_(s, availH) {
+    var c = tableCells_(s), cols = c.cols, rows = c.rows, nc = cols.length;
+    var pad = 7, hSize = 10, minW = 34;
+    // a first column that groups rows: a label followed by blank cells (merged cells in the source)
+    var grouped = rows.length > 2 && !!rows[0][0] && rows.some(function (r, i) { return i > 0 && !String(r[0]).trim(); }) && nc > 1;
+    var numeric = cols.map(function (h, j) {
+      var vals = rows.map(function (r) { return r[j]; }).filter(function (v) { return String(v || '').trim(); });
+      return vals.length > 0 && vals.filter(isNumberCell_).length >= vals.length * 0.8;
+    });
+    // natural widths: the header on one line, the longest cell on one line (capped), numbers never wrap
+    var headW = cols.map(function (h) { return textWidth(String(h), 'sans', 500, hSize) + pad * 2 + 18; });   // + the text box inset: the header never shrinks or cuts
+    var cellW = cols.map(function (h, j) {
+      var mx = 0;
+      rows.forEach(function (r) { mx = Math.max(mx, textWidth(String(r[j] || ''), 'sans', j === 0 ? 500 : 400, 10) + pad * 2 + 18); });
+      return mx;
+    });
+    var want = cols.map(function (h, j) { return Math.max(minW, headW[j], numeric[j] ? cellW[j] : Math.min(cellW[j], 260)); });
+    var floor = cols.map(function (h, j) { return Math.max(minW, headW[j], numeric[j] ? cellW[j] : Math.min(cellW[j], 90)); });
+    var total = want.reduce(function (a, b) { return a + b; }, 0), widths;
+    if (total <= CW) {
+      // spare room goes to the text columns (numbers keep their width)
+      var textCols = cols.map(function (h, j) { return !numeric[j]; });
+      var tw0 = want.reduce(function (a, w, j) { return a + (textCols[j] ? w : 0); }, 0) || total;
+      widths = want.map(function (w, j) { return w + (textCols[j] || tw0 === total ? (CW - total) * w / tw0 : 0); });
+    } else {
+      // too wide: text columns shrink towards their floor (they wrap), numbers and headers keep theirs
+      var fixed = 0, flex = 0;
+      want.forEach(function (w, j) { if (numeric[j] || w <= floor[j]) fixed += w; else flex += w - floor[j]; });
+      var room = CW - fixed - cols.reduce(function (a, h, j) { return a + (numeric[j] || want[j] <= floor[j] ? 0 : floor[j]); }, 0);
+      widths = want.map(function (w, j) { return numeric[j] || w <= floor[j] ? w : floor[j] + Math.max(0, room) * (w - floor[j]) / (flex || 1); });
+      var sum = widths.reduce(function (a, b) { return a + b; }, 0);
+      if (sum > CW) widths = widths.map(function (w) { return w * CW / sum; });   // last resort: everything scales
+    }
+    var hdrH = 24, size, rowHs, fit = rows.length;
+    var minSize = s.compact ? 8 : 9;
+    for (size = 10; size >= minSize; size -= 0.5) {
+      rowHs = rows.map(function (r) {
+        var h = 0;
+        r.forEach(function (v, j) {
+          if (grouped && j === 0) return;                    // the group label spans its rows
+          h = Math.max(h, wrap(String(v || ''), widths[j] - pad * 2, 'sans', j === 0 ? 500 : 400, size).length * lineHeight('sans', size) + 8);
+        });
+        return Math.max(h, size + (s.compact ? 6 : 10));
+      });
+      if (grouped) {
+        // a group's rows must hold its (wrapped) label
+        for (var i = 0; i < rows.length; ) {
+          var k = i + 1; while (k < rows.length && !String(rows[k][0]).trim()) k++;
+          var need = wrap(String(rows[i][0]), widths[0] - pad * 2, 'sans', 500, size).length * lineHeight('sans', size) + 10;
+          var have = 0; for (var q = i; q < k; q++) have += rowHs[q];
+          if (have < need) for (q = i; q < k; q++) rowHs[q] += (need - have) / (k - i);
+          i = k;
+        }
+      }
+      if (hdrH + rowHs.reduce(function (a, b) { return a + b; }, 0) <= availH) break;
+    }
+    size = Math.max(size, minSize);
+    var acc = hdrH;
+    fit = 0;
+    for (var r = 0; r < rows.length; r++) { if (acc + rowHs[r] > availH + 0.5) break; acc += rowHs[r]; fit++; }
+    return { cols: cols, rows: rows, widths: widths, numeric: numeric, grouped: grouped, size: size, hdrH: hdrH, rowHs: rowHs, fit: Math.max(1, fit), pad: pad };
+  }
+
   L.table = function (s, ctx) {
     var els = [];
     var top = header(els, s);
-    var cellText = function (c) { return c == null ? '' : (typeof c === 'object' ? String(c.title || c.label || c.name || c.header || c.text || c.value || '') : String(c)); };
-    var cols = arr(s.columns, 5).map(cellText);
-    var rows = arr(s.rows, 8).map(function (r) {
-      if (r && !Array.isArray(r) && typeof r === 'object') r = Object.keys(r).map(function (k) { return r[k]; });
-      return arr(r, cols.length).map(cellText);
-    });
-    var weights = cols.map(function (c, j) {
-      var mx = String(c).length;
-      rows.forEach(function (r) { mx = Math.max(mx, String(r[j] || '').length); });
-      return Math.min(Math.max(mx, 8), 60);
-    });
-    var sumW = weights.reduce(function (a, b) { return a + b; }, 0);
-    var widths = weights.map(function (w) { return CW * w / sumW; });
-    var pad = 7, size = 10.5, hdrH, rowHs, availH = BOTTOM - top;
-    for (; size >= 10.5; size -= 0.5) {            // 10pt body / 10.5pt header minimum; longer text is shortened by the fit check
-      hdrH = 24; rowHs = [];
-      rows.forEach(function (r) {
-        var h = 0;
-        r.forEach(function (v, j) { h = Math.max(h, wrap(String(v || ''), widths[j] - pad * 2, 'sans', 400, size - 0.5).length * lineHeight('sans', size - 0.5) + 12); });
-        rowHs.push(Math.max(h, 22));
-      });
-      if (hdrH + rowHs.reduce(function (a, b) { return a + b; }, 0) <= availH) break;
-    }
-    size = Math.max(size, 10.5);
-    // Rows share the free space (table at least ~70% of the area), so the slide is not half empty
-    var used = hdrH + rowHs.reduce(function (a, b) { return a + b; }, 0);
+    var availH = BOTTOM - top;
+    var T0 = tableLayout_(s, availH);
+    var cols = T0.cols, rows = T0.rows.slice(0, T0.fit), widths = T0.widths, rowHs = T0.rowHs.slice(0, T0.fit), pad = T0.pad, size = T0.size;
+    // rows share the free space (table at least ~70% of the area), so the slide is not half empty
+    var used = T0.hdrH + rowHs.reduce(function (a, b) { return a + b; }, 0);
     if (rows.length && used < availH * 0.7) {
       var extra = (availH * 0.7 - used) / rows.length;
       rowHs = rowHs.map(function (h) { return h + extra; });
     }
     var x = CX, y = top;
     cols.forEach(function (c, j) {
-      rect(els, x + 1, y, widths[j] - 2, hdrH, T.blue);
-      text(els, x + pad, y + 6, widths[j] - pad * 2, hdrH - 10, c, { weight: 500, max: size, min: 10, maxLines: 1, color: T.white });
+      rect(els, x + 1, y, widths[j] - 2, T0.hdrH, T.blue);
+      text(els, x + pad, y, widths[j] - pad * 2, T0.hdrH, c, { weight: 500, max: 10, min: 9, maxLines: 1, valign: 'middle', align: T0.numeric[j] ? 'right' : 'left', color: T.white });
       x += widths[j];
     });
-    y += hdrH;
+    y += T0.hdrH;
+    var firstColW = widths[0];
     rows.forEach(function (r, i) {
       x = CX;
+      var groupStart = T0.grouped && String(r[0]).trim();
+      if (T0.grouped && groupStart) {
+        var k = i + 1, gh = rowHs[i];
+        while (k < rows.length && !String(rows[k][0]).trim()) { gh += rowHs[k]; k++; }
+        text(els, CX + pad, y, firstColW - pad * 2, gh, r[0], { weight: 500, max: size, min: 9, valign: 'middle', color: T.ink });
+      }
       r.forEach(function (v, j) {
-        text(els, x + pad, y + 6, widths[j] - pad * 2, rowHs[i] - 10, v, { weight: j === 0 ? 500 : 400, max: size - 0.5, min: 10, color: T.body, valign: 'middle' });
+        if (!(T0.grouped && j === 0)) {
+          text(els, x + pad, y, widths[j] - pad * 2, rowHs[i], v, { weight: j === 0 ? 500 : 400, max: size, min: 9, valign: 'middle', align: T0.numeric[j] ? 'right' : 'left', color: j === 0 ? T.ink : T.body });
+        }
         x += widths[j];
       });
       y += rowHs[i];
-      line(els, CX, y, CX + CW, y, T.cardLine, 0.75);
+      var lastOfGroup = !T0.grouped || i === rows.length - 1 || String(rows[i + 1][0]).trim();
+      // inside a group the line starts after the group column; between groups it runs the full width
+      line(els, lastOfGroup ? CX : CX + firstColW, y, CX + CW, y, T.cardLine, lastOfGroup ? 0.75 : 0.5);
     });
     return { bg: T.white, els: els };
   };
+  // How many body rows of this table fit on one slide (the rest continue on the next slide)
+  function tableRowsThatFit(spec) {
+    var s1 = cleanSpec(spec || {});
+    var els = [];
+    var top = header(els, s1);
+    return tableLayout_(s1, BOTTOM - top).fit;
+  }
 
   L.process = function (s, ctx) {
     var els = [];
@@ -2717,6 +2795,7 @@ var ENGINE = (function () {
   V['66D_LAYOUT_TABLE_003'] = function (s) {
     var rows = arr(s.rows, 8), cols = arr(s.columns, 2).map(function (c) { return typeof c === 'object' ? (c.title || c.label || '') : String(c); });
     if (rows.length < 2 || (rows[0] && Array.isArray(rows[0]) && rows[0].length !== 2)) return null;
+    if ((s.rows || []).length > 8 || (s.columns || []).length > 2 || s.fromSource) return null;    // V.1_36: never drop data
     var els = [];
     var top = header(els, s);
     var c1 = 160, ph = BOTTOM - top;
@@ -2745,6 +2824,8 @@ var ENGINE = (function () {
   V['66D_LAYOUT_TABLE_004'] = function (s) {
     var rows = arr(s.rows, 7), cols = arr(s.columns, 4).map(function (c) { return typeof c === 'object' ? (c.title || c.label || '') : String(c); });
     if (rows.length < 2 || cols.length < 3) return null;
+    // V.1_36: never drop data - a table with more rows / columns, or with grouped (merged) rows, uses the full table design
+    if ((s.rows || []).length > 7 || (s.columns || []).length > 4 || s.fromSource) return null;
     var els = [];
     var top = header(els, s);
     var ph = BOTTOM - top;
@@ -3868,5 +3949,5 @@ var ENGINE = (function () {
       try { return !!V[tag](s1, {}); } catch (e) { return false; }
     },
     render: render, measure: measure, variantsFor: function (type) { return (VARIANTS[type] || []).slice(); }, cleanSpec: cleanSpec, cleanText: cleanText, designMenu: designMenu, layouts: Object.keys(L), VARIANTS: VARIANTS, BRAND: BRAND, TOKENS: T, W: W, H: H, INSET: INSET,
-    textWidth: textWidth, wrap: wrap, fit: fit, posSize: posSize, splitSpace: splitSpace, innerSize: innerSize, boxH: boxH };
+    textWidth: textWidth, wrap: wrap, fit: fit, tableRowsThatFit: tableRowsThatFit, posSize: posSize, splitSpace: splitSpace, innerSize: innerSize, boxH: boxH };
 })();
