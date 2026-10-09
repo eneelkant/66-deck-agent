@@ -90,9 +90,9 @@ test("presentation type and department options come from the backend catalogs", 
   assert.match(html, /fillSelect\(\$\("presentationType"\), data\.presentationTypes\)/);
   assert.match(html, /fillSelect\(\$\("department"\), data\.departments\)/);
   const boot = sandbox.getGeneratorBootstrap();
-  assert.deepEqual(Array.from(boot.presentationTypes), Array.from(sandbox.PRESENTATION_TYPES));
+  assert.deepEqual(Array.from(boot.presentationTypes), ["Proposal Deck", "HR Leadership, Internal", "General", "Delivery Deck", "Solution Deck"]);
   assert.deepEqual(Array.from(boot.departments), Array.from(sandbox.DEPARTMENTS));
-  assert.ok(sandbox.PRESENTATION_TYPES.includes("Pitch"));
+  assert.match(html, /<label for="presentationType">Presentation Type<\/label>/);
   assert.ok(sandbox.DEPARTMENTS.includes("Sales"));
 });
 
@@ -124,9 +124,14 @@ test("server accepts the panel's payload: capitalised modes, several files, canc
 
 test("presentationType and department normalize and reach the planner", () => {
   const sandbox = loadPipeline();
-  assert.equal(sandbox.normalizePresentationType_("Pitch"), "Pitch");
-  assert.equal(sandbox.normalizePresentationType_("Sales Presentation"), "Sales");
-  assert.equal(sandbox.normalizePresentationType_("unknown"), "Custom");
+  assert.equal(sandbox.normalizePresentationType_("Solution Deck"), "Solution Deck");
+  assert.equal(sandbox.normalizePresentationType_("HR Leadership, Internal"), "HR Leadership, Internal");
+  assert.equal(sandbox.normalizePresentationType_("Pitch"), "Proposal Deck", "older saved labels map to the nearest new type");
+  assert.equal(sandbox.normalizePresentationType_("Sales Presentation"), "Proposal Deck");
+  assert.equal(sandbox.normalizePresentationType_("Report"), "Delivery Deck");
+  assert.equal(sandbox.normalizePresentationType_("Internal update"), "HR Leadership, Internal");
+  assert.equal(sandbox.normalizePresentationType_("unknown"), "General");
+  Object.keys(sandbox.DECK_TYPE_GUIDANCE_).forEach((k) => assert.ok(sandbox.DECK_TYPES_.includes(k), k));
   assert.equal(sandbox.normalizeDepartment_("Leadership"), "Leadership");
   assert.equal(sandbox.normalizeDepartment_("tech"), "Technology");
   assert.equal(sandbox.normalizeDepartment_(""), "Other");
@@ -144,7 +149,7 @@ test("bootstrap exposes type, department, and slide bounds for the same presenta
   const boot = sandbox.getGeneratorBootstrap();
   assert.equal(boot.presentationId, "active-id");
   assert.match(boot.url, /active-id/);
-  assert.deepEqual(Array.from(boot.presentationTypes), Array.from(sandbox.PRESENTATION_TYPES));
+  assert.deepEqual(Array.from(boot.presentationTypes), Array.from(sandbox.DECK_TYPES_));
   assert.deepEqual(Array.from(boot.departments), Array.from(sandbox.DEPARTMENTS));
   assert.equal(boot.minSlides, 3);
   assert.equal(boot.maxSlides, 200);
