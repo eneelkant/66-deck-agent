@@ -178,11 +178,12 @@ test("slide meter: N slides shared across the pictures, each told exactly how ma
   assert.match(code, /const slidesWanted = Math\.max\(1, Math\.min\(10, Math\.round\(Number\(data\.slides\) \|\| 1\)\)\)/);
 });
 
-test("panel: the type is a required single choice used for every slide, and a 1-10 slide meter is sent", () => {
+test("panel: the type is optional (Auto, a type, or nothing), a chosen type is used for every slide, and a 1-10 slide meter is sent", () => {
   const html = read("src/Generator.html");
-  assert.match(html, /id="flowTypes" role="radiogroup"/);
-  assert.equal((html.match(/role="radio" aria-checked="true"/g) || []).length, 1, "exactly one type selected at start");
-  assert.match(html, /Diagram type <span class="opt">\(choose one\)<\/span>/);
+  assert.match(html, /id="flowTypes" role="group"/);
+  assert.equal((html.match(/aria-pressed="true"/g) || []).length, 1, "Auto is chosen at the start");
+  assert.match(html, /Diagram type <span class="opt">\(optional\)<\/span>/);
+  assert.match(html, /var off = b && b\.classList\.contains\("active"\);/, "clicking the chosen chip clears it (nothing chosen = Auto)");
   assert.match(html, /id="flowSlides" type="range" min="1" max="10"/);
   assert.match(html, /id="flowSlidesInput" type="number" min="1" max="10"/);
   assert.match(html, /slides: state\.flow\.slides,/);

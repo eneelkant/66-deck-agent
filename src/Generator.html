@@ -1073,16 +1073,16 @@
           </div>
 
           <div class="field" id="flowTypeField">
-            <div class="label"><span>Diagram type <span class="opt">(choose one)</span></span></div>
-            <div class="chips" id="flowTypes" role="radiogroup" aria-label="Diagram type">
-              <button type="button" class="active" role="radio" aria-checked="true" data-type="auto">Auto</button>
-              <button type="button" role="radio" aria-checked="false" data-type="flowchart">Flowchart</button>
-              <button type="button" role="radio" aria-checked="false" data-type="process">Process</button>
-              <button type="button" role="radio" aria-checked="false" data-type="swimlane">Swimlane</button>
-              <button type="button" role="radio" aria-checked="false" data-type="architecture">Architecture</button>
-              <button type="button" role="radio" aria-checked="false" data-type="org-chart">Org chart</button>
-              <button type="button" role="radio" aria-checked="false" data-type="layers">Layers</button>
-              <button type="button" role="radio" aria-checked="false" data-type="loop">Loop</button>
+            <div class="label"><span>Diagram type <span class="opt">(optional)</span></span></div>
+            <div class="chips" id="flowTypes" role="group" aria-label="Diagram type (optional)">
+              <button type="button" class="active" aria-pressed="true" data-type="auto">Auto</button>
+              <button type="button" aria-pressed="false" data-type="flowchart">Flowchart</button>
+              <button type="button" aria-pressed="false" data-type="process">Process</button>
+              <button type="button" aria-pressed="false" data-type="swimlane">Swimlane</button>
+              <button type="button" aria-pressed="false" data-type="architecture">Architecture</button>
+              <button type="button" aria-pressed="false" data-type="org-chart">Org chart</button>
+              <button type="button" aria-pressed="false" data-type="layers">Layers</button>
+              <button type="button" aria-pressed="false" data-type="loop">Loop</button>
             </div>
             <div class="hint" id="flowTypeHint">Auto: diagram-design picks the best type for each slide.</div>
           </div>
@@ -1094,10 +1094,10 @@
               <input id="flowSlides" type="range" min="1" max="10" value="1" aria-label="Number of diagram slides" />
               <input id="flowSlidesInput" type="number" min="1" max="10" step="1" value="1" />
             </div>
-            <div class="hint" id="flowSlidesHint">1 diagram slide. Raise it to split a busy picture into an overview plus detail slides.</div>
+            <div class="hint" id="flowSlidesHint">1 diagram slide, plus an introduction and a Thank-you slide. Raise it to split a busy picture into an overview plus detail slides.</div>
           </div>
 
-          <div class="hint" style="margin-top:-6px">The slides are added right after the slide you are on, laid out and aligned automatically. With a file of several pictures, the slides are shared between them in order.</div>
+          <div class="hint" style="margin-top:-6px">The slides (introduction, diagrams, Thank-you) are added right after the slide you are on, laid out and aligned automatically. With a file of several pictures, the slides are shared between them in order.</div>
         </div>
 
         <div class="form" data-only="create">
@@ -1953,8 +1953,10 @@
         reader.readAsDataURL(file);
       }
 
-      // Diagram type: exactly one choice is always selected (radio group); the choice is used for every slide
+      // Diagram type (optional): pick Auto, pick a type, or click the chosen chip again to choose nothing.
+      // Auto and nothing both let diagram-design pick the type for each slide; a type is used for every slide.
       var TYPE_HINTS = {
+        none: "Nothing chosen: diagram-design picks the best type for each slide.",
         auto: "Auto: diagram-design picks the best type for each slide.",
         flowchart: "Every slide is drawn as a flowchart (steps, decisions, Yes / No branches).",
         process: "Every slide is drawn as a process (steps in order, supporting tools underneath).",
@@ -1967,25 +1969,18 @@
       function pick(groupId, attr, key) {
         var buttons = document.querySelectorAll("#" + groupId + " button");
         function choose(b) {
-          state.flow[key] = b.getAttribute(attr);
+          // clicking the chip that is already chosen clears the choice (nothing chosen = Auto)
+          var off = b && b.classList.contains("active");
+          state.flow[key] = off ? "auto" : b.getAttribute(attr);
           buttons.forEach(function (o) {
-            o.classList.toggle("active", o === b);
-            o.setAttribute("aria-checked", o === b ? "true" : "false");
-            o.tabIndex = o === b ? 0 : -1;
+            var on = !off && o === b;
+            o.classList.toggle("active", on);
+            o.setAttribute("aria-pressed", on ? "true" : "false");
           });
-          if (key === "type") $("flowTypeHint").textContent = TYPE_HINTS[state.flow.type] || TYPE_HINTS.auto;
+          if (key === "type") $("flowTypeHint").textContent = off ? TYPE_HINTS.none : (TYPE_HINTS[state.flow.type] || TYPE_HINTS.auto);
         }
-        buttons.forEach(function (b, i) {
+        buttons.forEach(function (b) {
           b.addEventListener("click", function () { choose(b); });
-          b.addEventListener("keydown", function (e) {
-            var step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
-            if (!step) return;
-            e.preventDefault();
-            var next = buttons[(i + step + buttons.length) % buttons.length];
-            choose(next);
-            next.focus();
-          });
-          b.tabIndex = b.classList.contains("active") ? 0 : -1;
         });
       }
       pick("flowTypes", "data-type", "type");
@@ -1999,8 +1994,8 @@
         $("flowSlides").value = v;
         $("flowSlidesInput").value = v;
         $("flowSlidesHint").textContent = v === 1
-          ? "1 diagram slide. Raise it to split a busy picture into an overview plus detail slides."
-          : v + " diagram slides: an overview, then detail slides that each zoom into a different part.";
+          ? "1 diagram slide, plus an introduction and a Thank-you slide. Raise it to split a busy picture into an overview plus detail slides."
+          : v + " diagram slides (an overview, then details that each zoom into a different part), plus an introduction and a Thank-you slide.";
       }
       $("flowSlides").addEventListener("input", function () { setFlowSlides(this.value); });
       $("flowSlidesInput").addEventListener("input", function () {

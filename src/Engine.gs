@@ -235,7 +235,7 @@ var ENGINE = (function () {
   // 10pt subtitle. Returns content top.
   function header(els, s, opts) {
     // Every content slide: title at the same place (y 24), subtitle below. No eyebrow / grey label bar (strict rule).
-    var ty = 24, tw = (opts && opts.maxW) || (W - 2 * X0);
+    var ty = 24, tw = (opts && opts.maxW) || HEADER_MAX_W || (W - 2 * X0);
     if (AUDIT && s.title && wrap(String(s.title), tw * 0.94, 'sans', 500, 20).length > 1) {
       var per = tw / Math.max(1, textWidth(String(s.title), 'sans', 500, 20) / String(s.title).length);
       AUDIT.push({ text: String(s.title), truncated: true, maxChars: Math.max(28, Math.floor(per * 0.9)), fill: 1, lines: 2, body: false, isTitle: true });
@@ -256,7 +256,7 @@ var ENGINE = (function () {
     var a = Number(avail), n = Number(need);
     if (!isFinite(a) || a < 1) a = 1;
     if (!isFinite(n) || n < 1) n = 1;
-    return Math.min(a, Math.max(n, a * 0.6));
+    return Math.min(a, Math.max(n, a * 0.7));                     // V.1_34: boxes reach further down (no empty bottom third)
   }
   var boxH_ = boxH;
   // Cuts a text at the last whole word that fits on one line (no ellipsis; trailing joining words are dropped)
@@ -380,7 +380,7 @@ var ENGINE = (function () {
         var col = i < rows ? 0 : 1, r = i < rows ? i : i - rows;
         var x = X0 - 4 + col * (colW2 + colGap), y = top2 + r * rowH2, bh = Math.min(20, rowH2 - 6);
         rect(els, x, y + (rowH2 - 4 - bh) / 2, 30, bh, T.slate);
-        text(els, x, y + (rowH2 - 4 - bh) / 2 + (bh - 14) / 2, 30, 14, pad2(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, align: 'center', maxLines: 1, color: onFill(T.slate) });
+        text(els, x, y + (rowH2 - 4 - bh) / 2 + (bh - 14) / 2, 30, 14, pad2(it.no || i + 1), { font: 'mono', weight: 500, max: 10, min: 10, align: 'center', maxLines: 1, color: onFill(T.slate) });
         text(els, x + 36, y - 1, tw2, rowH2 - 1, it.title, { weight: 500, max: tS, min: tS, maxLines: one ? 1 : 2, valign: 'middle', color: T.ink });
         if (r < rows - 1 && i < n - 1) line(els, x, y + rowH2 - 1, x + colW2, y + rowH2 - 1, T.cardLine, 0.5);
       });
@@ -401,7 +401,7 @@ var ENGINE = (function () {
     items.forEach(function (it, i) {
       var y = top + i * rowH, badgeH = 23;
       rect(els, X0 - 4, y, 32, badgeH, T.slate);
-      text(els, X0 - 4, y + 4.5, 32, 14, pad2(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, align: 'center', maxLines: 1, color: onFill(T.slate) });
+      text(els, X0 - 4, y + 4.5, 32, 14, pad2(it.no || i + 1), { font: 'mono', weight: 500, max: 10, min: 10, align: 'center', maxLines: 1, color: onFill(T.slate) });
       var th = lineHeight('sans', tSize) * (twoLine && wrap(String(it.title), tw, 'sans', 700, tSize).length > 1 ? 2 : 1);
       var ty = hasText || th > badgeH ? y : y + (badgeH - th) / 2;
       text(els, tx, ty, tw, th, it.title, { weight: 700, max: tSize, min: tSize, maxLines: tLines, color: T.ink });
@@ -896,7 +896,7 @@ var ENGINE = (function () {
     icon(els, { icon: 'warning risk', material: '' }, CX + 16, top + 16, 20, false);
     text(els, CX + 44, top + 16, cw - 60, 20, s.challenge_label || 'Business challenge', { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 1, color: T.ink });
     if (s.industry || s.client) {
-      text(els, CX + 16, top + 44, cw - 32, 14, String(s.industry || s.client), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, caps: true, color: T.blue });
+      text(els, CX + 16, top + 44, cw - 32, 14, String(s.industry || s.client), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, color: T.blue });
     }
     var cTop = top + (s.industry || s.client ? 66 : 50);
     var cSize = uniformSize([chal.join('\n\n')], cw - 32, BOTTOM - cTop - 14, { weight: 400, max: TSZ.body, min: TSZ.body });
@@ -936,7 +936,7 @@ var ENGINE = (function () {
     var els = [];
     rect(els, CX, 110, 5, 150, T.blue);
     var q = text(els, CX + 22, 110, 560, 170, s.quote || s.title, { weight: 600, max: 24, min: 15, maxLines: 6, color: T.ink });
-    if (s.attribution) text(els, CX + 22, 120 + q.height, 400, 14, s.attribution, { font: 'mono', weight: 500, max: 10, min: 10, caps: true, color: T.blue, maxLines: 1 });
+    if (s.attribution) text(els, CX + 22, 120 + q.height, 400, 14, s.attribution, { font: 'mono', weight: 500, max: 10, min: 10, color: T.blue, maxLines: 1 });
     return { bg: T.bgLight, els: els };
   };
 
@@ -1060,7 +1060,7 @@ var ENGINE = (function () {
   /* ---------------- Agenda ---------------- */
   function agendaItems(s) {
     return arr(s.items, 18).map(function (it) {
-      return typeof it === 'string' ? { title: it, text: '' } : { title: it.title || it.text || '', text: it.title ? (it.text || '') : '' };
+      return typeof it === 'string' ? { title: it, text: '' } : { title: it.title || it.text || '', text: it.title ? (it.text || '') : '', no: Number(it.no) || 0 };
     }).filter(function (it) { return it.title; });
   }
   function agendaBand(els) {
@@ -1104,7 +1104,7 @@ var ENGINE = (function () {
     items.forEach(function (it, i) {
       var c = i % cols, r = Math.floor(i / cols), x = X0 + c * (cw + gap), y = top + r * (ch + gap);
       rect(els, x, y, cw, ch, T.bgLight);
-      text(els, x + 12, y + 8, 40, 16, pad2(i + 1), { font: 'mono', weight: 500, max: 11, min: 10, maxLines: 1, color: T.blue });
+      text(els, x + 12, y + 8, 40, 16, pad2(it.no || i + 1), { font: 'mono', weight: 500, max: 11, min: 10, maxLines: 1, color: T.blue });
       text(els, x + 12, y + 26, tw, ch - 32, it.title, { weight: 500, max: tS, min: tS, maxLines: 2, color: T.ink });
     });
     agendaBand(els);
@@ -1143,7 +1143,7 @@ var ENGINE = (function () {
       ring(els, nx - 6, ny - 6, 12, T.white, T.blue, 1.5);
       ellipse(els, nx - 3, ny - 3, 6, 6, T.blue);
       roundrect(els, px, py, pillW, pillH, T.bgLight, { color: T.cardLine, width: 0.75 });
-      text(els, px + 10, py + 8, 26, 14, pad2(i + 1), { font: 'mono', weight: 600, max: 10, min: 10, maxLines: 1, color: T.blue });
+      text(els, px + 10, py + 8, 26, 14, pad2(it.no || i + 1), { font: 'mono', weight: 600, max: 10, min: 10, maxLines: 1, color: T.blue });
       text(els, px + 38, py, pillW - 48, pillH, it.title, { weight: 700, max: tSize, min: tSize, maxLines: 2, color: T.ink, valign: 'middle' });
     });
     agendaBand(els);
@@ -1565,7 +1565,7 @@ var ENGINE = (function () {
     var y0 = top;
     if (s.industry || s.client) {
       // The label fits whole: if "INDUSTRY | OFFERING" is too long for the column, only the industry is shown
-      var pill = String(s.industry || s.client).toUpperCase();
+      var pill = String(s.industry || s.client);                  // sentence case (brand rule: never ALL CAPS)
       var maxPw = Math.min(380, W - 2 * X0 - 200);
       if (textWidth(pill, 'mono', 500, 10) + 26 > maxPw) pill = pill.split('|')[0].trim();
       while (pill.length > 3 && textWidth(pill, 'mono', 500, 10) + 26 > maxPw) pill = pill.replace(/\s*\S+$/, '');
@@ -1585,7 +1585,7 @@ var ENGINE = (function () {
     var used = Math.max(textH(chal, colW, bSize), textH(sol, colW, bSize));
     var oy = Math.max(y0 + 22 + used + 20, BOTTOM - oh - 30);
     rect(els, CX, oy, 116, 20, T.blue);
-    text(els, CX + 9, oy + 4, 100, 12, 'THE OUTCOME', { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, color: T.white });
+    text(els, CX + 9, oy + 4, 100, 12, 'The outcome', { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, color: T.white });
     var outcome = outcome0;
     text(els, CX, oy + 26, lw, BOTTOM - oy - 26, outcome, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 4, color: T.body });
     return { bg: T.white, els: els };
@@ -1707,7 +1707,7 @@ var ENGINE = (function () {
     if (AUDIT && s.title && wrap(String(s.title), W - 2 * X0, 'sans', 500, 20).length > 1) {
       AUDIT.push({ text: String(s.title), truncated: true, maxChars: 58, fill: 1, lines: 1, body: false, isTitle: true });
     }
-    var t = text(els, X0, 24, W - 2 * X0, 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
+    var t = text(els, X0, 24, HEADER_MAX_W || (W - 2 * X0), 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
     if (s.lead || s.subtitle) text(els, X0, 24 + t.height + 4, W - 2 * X0 - 60, 28, s.lead || s.subtitle, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, color: T.white });
     rect(els, 0, bandH, W, H - bandH, T.bgLight);
     return bandH + 18;
@@ -1827,7 +1827,7 @@ var ENGINE = (function () {
     items.forEach(function (it, i) {
       var x = CX + i * (cw + 12), y = top;
       rect(els, x, y, cw, ch, T.bgLight);
-      var lab = String(it.label || it.eyebrow || '').toUpperCase().slice(0, 34);
+      var lab = String(it.label || it.eyebrow || '').slice(0, 34);
       if (lab) text(els, x + 18, y + 20, cw - 36, 13, lab, { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, color: T.blue });
       var yy = y + (lab ? 50 : 20);
       var h = text(els, x + 18, yy, iw, 34, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, color: T.ink });
@@ -2297,8 +2297,8 @@ var ENGINE = (function () {
     var r = Math.min(story ? 82 : 100, (BOTTOM - top) / 2 - 16);
     var cx = (x0 + x1) / 2, cy = top + (BOTTOM - top) / 2;
     var capW = Math.min(story ? 140 : 190, (x1 - x0) / 2 - r - gap);
-    var fills = [T.blue, T.ink, T.slate, T.blue];
-    items.forEach(function (it, i) { arc(els, 'ring', cx, cy, r, 90, -90 + i * 90, i === 3 ? T.panelAlt : fills[i]); });
+    var fills = [T.blue, T.ink, T.slate, T.ink];                 // every quarter visible: no near-white quarter
+    items.forEach(function (it, i) { arc(els, 'ring', cx, cy, r, 90, -90 + i * 90, fills[i]); });
     ellipse(els, cx - r * 0.42, cy - r * 0.42, r * 0.84, r * 0.84, T.white);
     text(els, cx - r * 0.38, cy - 14, r * 0.76, 28, s.center || '', { weight: 500, max: TSZ.heading, min: 10, maxLines: 2, align: 'center', color: T.ink });
     var rightX = cx + r + gap, leftX = cx - r - gap - capW;
@@ -2453,7 +2453,7 @@ var ENGINE = (function () {
     var items = items_(s, 4), n = items.length;
     if (n < 3) return null;
     var els = [];
-    text(els, X0, 24, W - 2 * X0, 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
+    text(els, X0, 24, HEADER_MAX_W || (W - 2 * X0), 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
     var top = 60;
     if (s.lead) { var l = text(els, X0, 56, 420, 30, s.lead, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, color: T.white }); top = 56 + l.height + 18; }
     var bw = 420, rowH = Math.min(70, (BOTTOM - top) / n);
@@ -2649,7 +2649,7 @@ var ENGINE = (function () {
     var stText = s.statement || '';
     if (!stText) return null;
     var els = [];
-    text(els, X0, 24, W - 2 * X0, 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
+    text(els, X0, 24, HEADER_MAX_W || (W - 2 * X0), 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
     var stFit = fit(String(stText), 380, 130, { weight: 500, max: 26, min: 18, maxLines: 4 });
     var stH = Math.max(stFit.height, wrap(String(stText), 380, 'sans', 500, stFit.size).length * lineHeight('sans', stFit.size)) + 6;
     text(els, X0, 110, 420, stH, stText, { weight: 500, max: stFit.size, min: stFit.size, maxLines: 4, color: T.white });
@@ -2820,7 +2820,7 @@ var ENGINE = (function () {
     var els = [];
     var crumb = ['Success story', s.industry || s.client].filter(Boolean).join('  |  ');
     text(els, X0, 14, 500, 14, crumb, { weight: 500, max: 10, min: 10, maxLines: 1, color: T.white });
-    text(els, X0, 34, W - 2 * X0, 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
+    text(els, X0, 34, HEADER_MAX_W || (W - 2 * X0), 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
     var top = 76, gap = 10, cw = (CW - 2 * gap) / 3;
     var solH = sol.slice(0, 5).reduce(function (t, p) { return t + textH(p, cw - 40, TSZ.body) + 6; }, 0);
     var resH = res.reduce(function (t, r) { return t + 34 + textH(r.label, cw - 24, TSZ.body); }, 0);
@@ -2876,7 +2876,7 @@ var ENGINE = (function () {
     var items = items_(s, 5), n = items.length;
     if (n < 4 || !s.statement) return null;
     var els = [];
-    if (dark) text(els, X0, 24, W - 2 * X0, 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
+    if (dark) text(els, X0, 24, HEADER_MAX_W || (W - 2 * X0), 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
     var top = dark ? 70 : header(els, s);
     var lw = 400, cols = 3, gap = 8, cw0 = (lw - 2 * gap) / cols;
     var cells = gridCells(n, cols, CX, top, lw, BOTTOM - top, gap, gap, 0);
@@ -3677,7 +3677,19 @@ var ENGINE = (function () {
       return e.t !== 'image' && y >= 64;
     }).length;
   }
+  // Dark designs on the stripes picture: titles are kept to the left part of the slide, where the picture is dark
+  var HEADER_MAX_W = 0;
   function layoutSlide(s, type, lctx) {
+    var mark = AUDIT ? AUDIT.length : 0;
+    var out = layoutSlideOnce_(s, type, lctx);
+    if (out && out.bgImage === 'section-bg' && ['cover', 'section', 'closing', 'agenda', 'template'].indexOf(type) === -1 && !HEADER_MAX_W) {
+      if (AUDIT) AUDIT.length = mark;
+      HEADER_MAX_W = 470;
+      try { out = layoutSlideOnce_(s, type, lctx); } finally { HEADER_MAX_W = 0; }
+    }
+    return out;
+  }
+  function layoutSlideOnce_(s, type, lctx) {
     var tag = s.reference && s.reference.tag;
     var out = (tag && V[tag] && variantOf(type, tag)) ? V[tag](s, lctx) : null;
     if (out && contentCount_(out) === 0) out = null;
@@ -3720,7 +3732,7 @@ var ENGINE = (function () {
     // Content that fills most of the area gets a small nudge; a compact design (rings, short rows) is centred
     // A third of the free space above the content, two thirds below (no wide band under the intro, no empty bottom
     // half); compact designs such as the ring chain are centred
-    var dy = out.center ? free / 2 : Math.min(free / 3, 26);
+    var dy = out.center ? free / 2 : Math.min(free / 2, 40);       // short content sits in the middle of the free area
     out.els.forEach(function (e) {
       var y = e.t === 'line' ? Math.min(e.y1, e.y2) : e.y;
       if (e.t === 'image' || y < CONTENT_TOP) return;
@@ -3750,6 +3762,21 @@ var ENGINE = (function () {
   }
 
   // Fit check for one planned slide at the standard type sizes: which texts do not fit, which boxes are mostly empty.
+  // How far down the content area a layout reaches (1 = to the footer). A design that leaves the bottom third empty for this
+  // content scores low, so the chooser prefers a design that fills the slide (no half-empty slides).
+  function coverageOf_(out) {
+    var top = 68, maxY = -Infinity;
+    (out.els || []).forEach(function (e) {
+      if (!e || e.t === 'image') return;
+      var y = e.t === 'line' ? Math.max(e.y1, e.y2) : (e.y || 0) + (e.t === 'text' ? (e.vh || e.h || 0) : (e.h || e.size || 0));
+      var y0 = e.t === 'line' ? Math.min(e.y1, e.y2) : (e.y || 0);
+      if (y0 < 60 || y0 > BOTTOM) return;
+      maxY = Math.max(maxY, Math.min(y, BOTTOM));
+    });
+    if (maxY === -Infinity) return 0;
+    return Math.max(0, Math.min(1, (maxY - top) / Math.max(1, BOTTOM - top)));
+  }
+
   function measure(spec, ctx) {
     ctx = ctx || {};
     if (ctx.tokens) Object.keys(ctx.tokens).forEach(function (k) { var v = ctx.tokens[k]; T[k] = Array.isArray(v) ? v.slice() : v; });
@@ -3769,6 +3796,7 @@ var ENGINE = (function () {
       dark: !!(lay && (lay.dark || lay.bgImage)),                       // photo or dark design (for the deck rhythm)
       content: lay ? contentCount_(lay) : 0,                            // 0 = the design shows nothing under the title
       fill: fill,
+      coverage: lay ? coverageOf_(lay) : 0,                             // share of the content area the design actually uses
       overflow: res.filter(function (a) { return a.truncated; }).map(function (a) { return { text: a.text, maxChars: a.maxChars, isTitle: !!a.isTitle }; }),
       underfill: res.filter(function (a) { return !a.truncated && a.body && a.fill < 0.6; })
         .map(function (a) { return { text: a.text, minChars: Math.floor(a.maxChars * 0.55), maxChars: Math.floor(a.maxChars * 0.85) }; })
