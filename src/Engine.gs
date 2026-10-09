@@ -232,8 +232,9 @@ var ENGINE = (function () {
     var band = type === 'agenda';
     if (band) out.els.forEach(function (e) { if (e.t === 'image' && e.asset === 'band-pattern' && e.y >= 340) e.x = 520; });
     var dark = band || !!out.dark;
-    var h = dark ? 18.8 : 16.2, y = dark ? 368 : 376.8;
-    out.els.push({ t: 'image', asset: 'client-logo', x: W - 22.3 - 80, y: y, w: 80, h: h, fit: 'contain', align: 'right', valign: 'middle', tile: dark });
+    // centred on the 66° mark's line; up to 20pt tall so a square logo (an icon) is not tiny, max 80pt wide
+    var mh = dark ? 18.8 : 16.2, my = dark ? 368 : 376.8, h = 20;
+    out.els.push({ t: 'image', asset: 'client-logo', x: W - 22.3 - 80, y: my + mh / 2 - h / 2, w: 80, h: h, fit: 'contain', align: 'right', valign: 'middle', tile: dark });
   }
   function footerMark(els, dark) {
     if (dark) image(els, 'mark-white', 22.3, 367.6, 28.2, 18.8);

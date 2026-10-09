@@ -57,7 +57,7 @@ test("corners: 66° bottom-left and client logo bottom-right from agenda to befo
   assert.ok(l && m);
   assert.equal(l.align, "right");
   assert.ok(Math.abs((l.x + l.w) - (g.ENGINE.W - m.x)) < 0.5, "mirrors the 66° mark");
-  assert.ok(Math.abs(l.y - m.y) < 0.5 && Math.abs(l.h - m.h) < 0.5, "same line, same height");
+  assert.ok(Math.abs((l.y + l.h / 2) - (m.y + m.h / 2)) < 0.5 && l.h >= m.h && l.h <= 20, "same line, square logos up to 20pt");
   const agenda = render(g, { type: "agenda", deckLibrary: "proposal", cobrand: true, title: "Agenda", items: [{ title: "Introduction", no: 1 }, { title: "Thank you", no: 2 }] });
   assert.ok(logos(agenda)[0].tile, "on the blue band: light tile");
   assert.ok(agenda.els.find((e) => e.asset === "band-pattern").x + 94 <= logos(agenda)[0].x, "band pattern moves out of the way");
@@ -156,4 +156,18 @@ test("Home Depot deck 2: base layouts cannot reach General designs in a Proposal
   const src = read("src/ProposalKit.gs");
   assert.match(src, /wikipediaLogo_\(client\.name\)/);
   assert.match(src, /no logo found: ' \+ LOGO_TRAIL_/, "the result message says what each logo source answered");
+});
+
+test("logo.dev is used first (after Drive), with fallback=404 so no made-up monogram; domain from Wikidata or name.com", () => {
+  const src = read("src/ProposalKit.gs");
+  const i = (k) => src.indexOf(k);
+  assert.ok(i("findDriveLogo_(client.name)") < i("logoDevLogo_(client.domain)") && i("logoDevLogo_(client.domain)") < i("wikidataLogo_(client.name, client.domain)"));
+  assert.match(src, /img\.logo\.dev\/' \+ encodeURIComponent\(domain\)/);
+  assert.match(src, /fallback=404/);
+  assert.match(src, /LOGO_DEV_TOKEN/);
+  const fetched = [];
+  const g = load({ UrlFetchApp: { fetch: (u) => { fetched.push(u); return { getResponseCode: () => 200, getBlob: () => ({ getContentType: () => "image/png", getBytes: () => new Array(5000), setName() { return this; } }) }; } },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }) } });
+  assert.ok(g.logoDevLogo_("apple.com"));
+  assert.match(fetched[0], /^https:\/\/img\.logo\.dev\/apple\.com\?token=pk_/);
 });
