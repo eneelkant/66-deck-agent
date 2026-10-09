@@ -1059,7 +1059,7 @@ var ENGINE = (function () {
 
   /* ---------------- Agenda ---------------- */
   function agendaItems(s) {
-    return arr(s.items, 18).map(function (it) {
+    return arr(s.items, 20).map(function (it) {      // up to 20: Introduction, the topics, Thank you
       return typeof it === 'string' ? { title: it, text: '' } : { title: it.title || it.text || '', text: it.title ? (it.text || '') : '', no: Number(it.no) || 0 };
     }).filter(function (it) { return it.title; });
   }
@@ -2021,7 +2021,8 @@ var ENGINE = (function () {
       var c = cells[i];
       rect(els, c.x, c.y, c.w, c.h, T.white, { color: T.cardLine, width: 0.75 });
       ellipse(els, c.x + 14, c.y + 14, 18, 18, T.blue);
-      text(els, c.x + 14, c.y + 16, 18, 14, '!', { weight: 500, max: 10, min: 10, maxLines: 1, align: 'center', color: T.white, noFill: true });
+      // V.1_35: the badge carries the card's own icon (white on blue); "!" only when no icon can be found
+      icon(els, autoIcon(it), c.x + 17, c.y + 17, 12, true, '!');
       text(els, c.x + 42, c.y + 14, iw, hBlock, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, color: T.ink });
       cardBody(els, c.x + 14, c.y + 22 + Math.max(hBlock, 18), c.w - 28, c.h - hBlock - 34, it, TSZ.body, items);
     });
@@ -2232,7 +2233,7 @@ var ENGINE = (function () {
   // Slide 103 (DIAGRAM_008): tree. A trunk with circles (icons) that grow towards the base, captions left and right
   V['66D_LAYOUT_DIAGRAM_008'] = function (s) {
     var items = items_(s, 6), n = items.length;
-    if (n < 4) return null;
+    if (n < 4 || n % 2) return null;                 // pairs left and right: an odd count leaves one caption alone (V.1_35)
     var els = [];
     var top = header(els, s);
     var cx = W / 2, rows = Math.ceil(n / 2), rowH = (BOTTOM - top - 30) / rows, capW = 190;
@@ -2372,18 +2373,29 @@ var ENGINE = (function () {
     if (pts.length < 3 || !s.callout) return null;
     var els = [];
     var top = header(els, s);
-    var lw = 250, rowH = Math.min(34, (BOTTOM - top) / pts.length);
-    pts.forEach(function (p, i) {
-      var y = top + 6 + i * rowH, on = i === 0;
-      rect(els, CX, y, lw, rowH - 8, on ? T.blue : T.white);
-      ellipse(els, CX + 6, y + (rowH - 8) / 2 - 9, 18, 18, on ? T.white : T.blue);
-      text(els, CX + 6, y + (rowH - 8) / 2 - 7, 18, 14, String(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, align: 'center', color: on ? T.blue : T.white, noFill: true });
-      text(els, CX + 32, y, lw - 40, rowH - 8, p.replace(/:\s.*$/, ''), { weight: on ? 500 : 400, max: TSZ.body, min: TSZ.body, maxLines: 1, valign: 'middle', color: on ? T.white : T.ink });
+    // "Label: explanation" points show their explanation under the label, and the menu fills the slide height
+    // (V.1_35: a menu of bare labels left half the slide empty)
+    var rows = pts.map(function (p) { var k = p.indexOf(': '); return k > 0 && k < 48 ? { label: p.slice(0, k), text: p.slice(k + 2) } : { label: p, text: '' }; });
+    var withText = rows.filter(function (r) { return r.text; }).length >= Math.ceil(rows.length / 2);
+    var lw = withText ? 300 : 250, gapR = 8;
+    var rowH = withText ? Math.min(70, (BOTTOM - top - 6) / pts.length) : Math.min(34, (BOTTOM - top) / pts.length);
+    rows.forEach(function (r, i) {
+      var y = top + 6 + i * rowH, on = i === 0, bh = rowH - gapR;
+      rect(els, CX, y, lw, bh, on ? T.blue : T.white);
+      var oy = withText ? y + 10 : y + bh / 2 - 9;
+      ellipse(els, CX + 8, oy, 18, 18, on ? T.white : T.blue);
+      text(els, CX + 8, oy + 2, 18, 14, String(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, align: 'center', color: on ? T.blue : T.white, noFill: true });
+      if (withText) {
+        var lh = text(els, CX + 34, y + 6, lw - 44, 22, r.label, { weight: 500, max: TSZ.body, min: TSZ.body, maxLines: 1, valign: 'middle', color: on ? T.white : T.ink });
+        if (r.text) text(els, CX + 34, y + 6 + Math.max(lh.height, 18), lw - 44, bh - 8 - Math.max(lh.height, 18), r.text, { weight: 400, max: TSZ.body, min: 9, maxLines: 3, color: on ? T.white : T.body });
+      } else {
+        text(els, CX + 34, y, lw - 42, bh, r.label, { weight: on ? 500 : 400, max: TSZ.body, min: TSZ.body, maxLines: 1, valign: 'middle', color: on ? T.white : T.ink });
+      }
     });
-    var px = CX + lw + 30, pw = CW - lw - 30;
+    var px = CX + lw + 24, pw = CW - lw - 24;
     var c = s.callout, cy0 = top + 34;
     var needP = 34 + linesBlock([c.title || c.label || ''], pw - 48, TSZ.heading + 2, 500, 2) + 10 + textH(c.text || '', pw - 48, TSZ.body) + 30;
-    var ph = Math.min(BOTTOM - top - 10, Math.max(needP, pts.length * rowH - 2, 120));
+    var ph = Math.min(BOTTOM - top - 10, Math.max(needP, pts.length * rowH - gapR, 120));
     rect(els, px, top + 6, pw, ph, T.white, { color: T.blue, width: 0.75 });
     rect(els, px + pw / 2 - 30, top + 2, 60, 8, T.blue);
     var ht = text(els, px + 24, cy0, pw - 48, 40, c.title || c.label || '', { weight: 500, max: TSZ.heading + 2, min: TSZ.heading, maxLines: 2, color: T.ink });

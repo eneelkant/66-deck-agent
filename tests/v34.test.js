@@ -67,9 +67,11 @@ test("deck 8 replay: no line through any box or lane name, arrows between lanes 
 test("Flowchart run: introduction slide, the diagram slides, then the template Thank-you slide", () => {
   const code = read("src/Code.gs");
   const run = code.slice(code.indexOf("function runFlowchartGeneration"), code.indexOf("function getPipelineStages"));
-  assert.match(run, /const specs = \[\{ type: 'cover', title: coverTitle/);
-  assert.match(run, /specs\.push\(\{ type: 'closing', title: 'Thank You!'/);
-  assert.match(run, /generic = \/\^\\s\*\(please\\s\+\)\?\(create\|make\|draw/, "\"create a flowchart\" is not used as the cover title");
+  assert.match(run, /const specs = flowchartDeckSpecs_\(text, read/);
+  const helper = code.slice(code.indexOf("function flowchartDeckSpecs_"), code.indexOf("function sentenceCase_"));
+  assert.match(helper, /const specs = \[\{ type: 'cover', title: coverTitle/);
+  assert.match(helper, /specs\.push\(\{ type: 'closing', title: 'Thank You!'/);
+  assert.match(helper, /generic = \/\^\\s\*\(please\\s\+\)\?\(create\|make\|draw/, "\"create a flowchart\" is not used as the cover title");
 });
 
 /* ---------- Create (deck 7) ---------- */
@@ -137,14 +139,15 @@ test("writer rules: Google Cloud terms, FinOps phases in order, metric names and
   assert.match(code, /Never put a figure or a\s+range in a card or step heading/);
 });
 
-test("agenda numbers are the slide numbers", () => {
+test("agenda runs from 01 Introduction to Thank you, numbered in order (V.1_35)", () => {
   const g = loadCode();
-  const slides = [{ type: "cover", title: "c" }, { type: "agenda", title: "Agenda", items: [] }, { type: "cards", title: "First topic" }, { type: "stats", title: "Second topic" }, { type: "closing", title: "Thank You!" }];
+  const slides = [{ type: "cover", title: "c", subtitle: "Why it matters" }, { type: "agenda", title: "Agenda", items: ["Introduction", "First topic", "Second topic"] }, { type: "cards", title: "First topic" }, { type: "stats", title: "Second topic" }, { type: "closing", title: "Thank You!" }];
   g.syncAgendaToSlides_(slides);
-  assert.deepEqual(Array.from(slides[1].items.map((i) => i.no)), [3, 4]);
+  assert.deepEqual(Array.from(slides[1].items.map((i) => i.title)), ["Introduction", "First topic", "Second topic", "Thank you"]);
+  assert.deepEqual(Array.from(slides[1].items.map((i) => i.no)), [1, 2, 3, 4]);
   const out = g.ENGINE.render({ slides: [slides[1]] }, { dateLabel: "x" })[0];
   const nums = out.els.filter((e) => e.t === "text" && /^0\d$/.test(e.text)).map((e) => e.text);
-  assert.deepEqual(Array.from(nums), ["03", "04"]);
+  assert.deepEqual(Array.from(nums), ["01", "02", "03", "04"]);
 });
 
 test("design fixes: four-part donut has no near-white quarter; tags are not forced to capitals; titles on dark picture slides stay left", () => {

@@ -65,7 +65,7 @@ test("measure reports a look so similar designs are grouped", () => {
 test("the design chooser shuffles, uses history for looks and saves one step per deck", () => {
   const src = read("src/Code.gs");
   assert.match(src, /Math\.random\(\) \* 35/);
-  assert.match(src, /score -= 220 \* \(used\[d\.tag\] \|\| 0\)/);
+  assert.match(src, /score -= 360 \* \(used\[d\.tag\] \|\| 0\)/);
   assert.match(src, /function lookRecencyScore_/);
   assert.match(src, /saveDesignUsage_\(Object\.keys\(used\), Object\.keys\(looksUsed\)\)/);
   assert.doesNotMatch(src, /try \{ saveDesignUsage_\(\[tag\]\); \} catch/);

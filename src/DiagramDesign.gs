@@ -124,13 +124,15 @@ function ddSelect_(item, opts, ctx) {
     '- "is_diagram": true when the input shows (or describes) a process, flow, system, hierarchy, cycle, layers or zones that a diagram can redraw.',
     '  false for photos, logos, charts of numbers, or plain documents with no structure.',
     '- "shows": one sentence on what the diagram is about.',
+    '- "topic": a presentation title for these diagrams, 3-8 words, sentence case, naming the subject (e.g. "Governed AI development with an agent factory").',
+    '  Never start with "The diagram", "This diagram" or "Overview of"; no full stop.',
     '- "type": the best key from the list (dominant axis; follow the selection table).',
     '- "elements": how many distinct boxes / steps the full content has.',
     item.slides ? '- "slides": EXACTLY ' + item.slides + ' diagram' + (item.slides > 1 ? 's' : '') + ' (the user chose this number). ' +
       (item.slides > 1 ? 'The first is the overview; each other one zooms into a DIFFERENT part of it (never redraw the overview or repeat another slide).' : 'Fit the whole picture on one slide: keep the main blocks, merge the rest.')
       : '- "slides": the diagrams to draw. One item when it fits the budget (max ' + DD_MAX_NODES_ + ' boxes per slide). Over budget: an overview + 1 detail diagram (max 2), the detail zooms into one part and never repeats the overview.',
     '  Each item: a short title, its type, and its focus (which part it covers).',
-    'Return ONLY JSON: {"is_diagram":true,"shows":"","type":"","elements":0,"slides":[{"title":"","type":"","focus":""}]}'
+    'Return ONLY JSON: {"is_diagram":true,"shows":"","topic":"","type":"","elements":0,"slides":[{"title":"","type":"","focus":""}]}'
   ].filter(function (l) { return l !== ''; }).join('\n');
   const raw = callGeminiJSON([{ text: prompt }].concat(ddInputParts_(item)), ctx.apiKey, 0.1) || {};
   const slides = (Array.isArray(raw.slides) ? raw.slides : []).slice(0, item.slides || 2).map(function (s) {
@@ -138,7 +140,7 @@ function ddSelect_(item, opts, ctx) {
     return { title: String(s && s.title || ''), type: t, focus: String(s && s.focus || '') };
   });
   if (!slides.length) slides.push({ title: '', type: forced || (DD_TYPES_.indexOf(String(raw.type)) !== -1 ? String(raw.type) : 'flowchart'), focus: '' });
-  return { isDiagram: raw.is_diagram !== false, shows: String(raw.shows || ''), type: slides[0].type, elements: Number(raw.elements) || 0, slides: slides };
+  return { isDiagram: raw.is_diagram !== false, shows: String(raw.shows || ''), topic: String(raw.topic || ''), type: slides[0].type, elements: Number(raw.elements) || 0, slides: slides };
 }
 
 /** Step 3: the diagrams themselves, following each chosen type's conventions. */
@@ -154,6 +156,7 @@ function ddSpecify_(item, sel, opts, ctx) {
     opts.prompt ? 'USER REQUEST: "' + String(opts.prompt).slice(0, 3000) + '"' : '',
     'WHAT IT SHOWS: ' + sel.shows,
     'DIAGRAMS TO DRAW (in this order): ' + JSON.stringify(sel.slides),
+    opts.drawn && opts.drawn.length ? 'ALREADY ON EARLIER SLIDES (never redraw these pictures; draw only what is new in this input): ' + opts.drawn.join(' | ').slice(0, 1500) : '',
     '',
     'RULES:',
     '- Use the words in the input. Copy the words of labels exactly (keep symbols such as &, /, Q&A) but write them in sentence case even when the picture uses CAPITALS.',
@@ -166,7 +169,8 @@ function ddSpecify_(item, sel, opts, ctx) {
     '  Shape carries type: start/end ovals, decision diamonds (a question label, max 3 exits, every exit labelled), store = database.',
     '- "focal": true on 1-2 nodes at most (the primary integration point, key decision or happy-path end). Never more.',
     '- "groups": the zones / lanes / layers the type uses, in reading order.',
-    '  architecture / high-level / nested: up to 4 zones, optionally one group with kind "hub" (the centre of a hub-and-spoke picture).',
+    '  architecture / high-level / nested: 2-4 zones (each holding 2+ boxes: who uses it, the platform, the data, the outputs...), optionally one group with kind "hub" (the centre of a hub-and-spoke picture).',
+    '  Something that wraps or governs the whole picture ("governance wrapper", "security perimeter") is NOT a box: put its name in "wrapper".',
     '  swimlane, process, data-flow with actors: kind "lane", max 5, each lane an actor / role / team holding 2+ boxes.',
     '  A lane or zone name never repeats the label of a box inside it. layers: kind "layer", top to bottom, max 6.',
     '  Supporting controls or tools that feed several steps (governance, CI/CD, security...): kind "service", no group; they are drawn in a row under the main flow.',
@@ -175,8 +179,9 @@ function ddSpecify_(item, sel, opts, ctx) {
     '- "edges": arrows in the direction of flow. "style": "solid", or "dashed" for optional / return / write-back flows. "label": 1-2 words or "".',
     '  A two-way relationship is ONE edge with "both": true (never two opposite edges). Give a label only when it adds meaning; never repeat the same label on many arrows.',
     '- "direction": "LR" (default for slides) or "TB" for trees and org charts.',
-    '- "title": the slide title, the key message in sentence case, max 58 characters. "lead": one sentence, max 110 characters, or "".',
-    'Return ONLY JSON: {"diagrams":[{"title":"","lead":"","type":"","direction":"LR","groups":[{"id":"g1","label":"","kind":"zone"}],' +
+    '- "title": the slide title, the key message in sentence case, max 58 characters. "lead": one complete sentence, max 110 characters, or "".',
+    '  The lead states the point (what happens / why it matters); never start with "This diagram", "The diagram" or "This slide"; sentence case, no words in capitals.',
+    'Return ONLY JSON: {"diagrams":[{"title":"","lead":"","type":"","direction":"LR","wrapper":"","groups":[{"id":"g1","label":"","kind":"zone"}],' +
       '"nodes":[{"id":"n1","label":"","sub":"","kind":"step","group":"g1","focal":false}],"edges":[{"from":"n1","to":"n2","label":"","style":"solid","both":false}]}]}'
   ].filter(function (l) { return l !== ''; }).join('\n');
   const raw = callGeminiJSON([{ text: prompt }].concat(ddInputParts_(item)), ctx.apiKey, 0.15) || {};
@@ -221,6 +226,85 @@ function ddCase_(raw) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/**
+ * Slide sentences (leads, cover lines) in the brand voice:
+ *  - no "This diagram illustrates..." opener (the slide already is the diagram),
+ *  - no SHOUTED words ("IDEA, DESIGN, BUILD" -> "idea, design, build") and no Title Case runs mid-sentence ("Agent Factory" -> "agent factory"),
+ *  - never cut mid-word: trimmed to the last whole sentence / clause / word that fits, ending with a full stop.
+ */
+var DD_FILLER_LEAD_RE_ = /^\s*(?:this|the|our)\s+(?:high-level\s+|overall\s+|following\s+)?(?:diagram|picture|image|flow ?chart|chart|slide|figure|view|overview|architecture|framework|graphic|drawing|sketch)\s+(?:illustrates|outlines|shows|depicts|describes|presents|displays|represents|highlights|details|captures|summari[sz]es|maps(?: out)?|visuali[sz]es|explains|demonstrates|provides|gives|offers)\s+(?:an?\s+overview\s+of\s+|how\s+)?/i;
+var DD_TAIL_WORDS_RE_ = /\s+(?:the|a|an|of|and|or|to|for|with|in|on|at|by|from|into|including|such as|as|its|their|our|is|are|that|which|where|while|across|between|through|via)$/i;
+function ddStripFiller_(s) {
+  let out = String(s || '').replace(/\s+/g, ' ').trim();
+  const m = out.match(DD_FILLER_LEAD_RE_);
+  if (m) out = out.slice(m[0].length);
+  out = out.replace(/^(?:it|this)\s+(?:shows|illustrates|outlines|depicts)\s+/i, '');
+  return out ? out.charAt(0).toUpperCase() + out.slice(1) : out;
+}
+function ddTextCase_(s) {
+  const words = String(s || '').split(' ');
+  const keepWord = function (w) {
+    const b = w.replace(/[^A-Za-z0-9&/]/g, '');
+    return !b || /[0-9]/.test(b) || DD_ACRONYMS_.some(function (a) { return a === b || a + 's' === b; }) || /[a-z][A-Z]/.test(b) ||
+      /^(Google|Gemini|Vertex|BigQuery|Looker|Workspace|Cloud|Kubernetes|Microsoft|Azure|AWS|SAP|Salesforce|66degrees|I)$/.test(b);
+  };
+  const isTitle = function (w) { const b = w.replace(/[^A-Za-z-]/g, ''); return /^[A-Z][a-z]+(?:-[A-Za-z]+)*$/.test(b) && !keepWord(w); };
+  const out = words.map(function (w, i) {
+    const b = w.replace(/[^A-Za-z]/g, '');
+    const sentenceStart = i === 0 || /[.!?:]$/.test(words[i - 1] || '');
+    if (b.length >= 3 && b === b.toUpperCase() && !keepWord(w)) {                       // SHOUTED word
+      const low = w.toLowerCase();
+      return sentenceStart ? low.charAt(0).toUpperCase() + low.slice(1) : low;
+    }
+    const prevTitle = i > 0 && !/[.!?:]$/.test(words[i - 1]) && isTitle(words[i - 1]) && !(i - 1 === 0 || /[.!?:]$/.test(words[i - 2] || ''));
+    if (!sentenceStart && isTitle(w) && (prevTitle || isTitle(words[i + 1] || '') && !/[.!?:,;]$/.test(w))) return w.toLowerCase();
+    return w;
+  }).join(' ');
+  return typeof PRODUCT_NAMES_RE_ !== 'undefined' ? out.replace(PRODUCT_NAMES_RE_, function (m) { return PRODUCT_NAMES_[m.toLowerCase()] || m; }) : out;
+}
+/** Trim to max characters without cutting a word; asSentence adds the closing full stop. */
+function ddTrimText_(s, max, asSentence) {
+  let t = String(s || '').replace(/\s+/g, ' ').trim();
+  if (!t) return t;
+  if (t.length > max) {
+    const head = t.slice(0, max + 1);
+    const sentEnd = Math.max(head.lastIndexOf('. '), head.lastIndexOf('; '));
+    const clause = Math.max(head.lastIndexOf(', '), head.lastIndexOf(' - '), head.lastIndexOf(' – '));
+    if (sentEnd >= max * 0.5) t = head.slice(0, sentEnd);
+    else if (clause >= max * 0.6) t = head.slice(0, clause);
+    else t = head.slice(0, Math.max(head.lastIndexOf(' '), 1));
+    for (var k = 0; k < 4 && DD_TAIL_WORDS_RE_.test(t); k++) t = t.replace(DD_TAIL_WORDS_RE_, '');
+    t = t.replace(/[,;:\-–\s]+$/, '');
+  }
+  if (asSentence) t = /[!?]$/.test(t) ? t : t.replace(/[.]*$/, '') + '.';
+  else t = t.replace(/[.;:,]+$/, '');
+  return t;
+}
+/** Diagram lead: one clean sentence (no filler opener, brand case, whole words, full stop). */
+function ddLead_(s, max) {
+  const t = ddTextCase_(ddStripFiller_(s));
+  return t ? ddTrimText_(t, max || 150, true) : '';
+}
+/** A short title from a description sentence ("The diagram illustrates an IT-managed AI governance framework for ..."). */
+function ddTitleFromSentence_(s, max, isTitle) {
+  let t = ddTextCase_(ddStripFiller_(s)).replace(/^(?:an?|the)\s+/i, '');
+  t = t.split(isTitle ? /[.;:(]/ : /,\s|\s(?:that|which|where|including|showing|with|for)\s|[.;:(]/)[0];
+  t = t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+  return ddTrimText_(t, max || 70, false);
+}
+
+/** How much two diagrams repeat each other: shared box labels over the smaller picture's boxes (0..1). */
+function ddSameness_(a, b) {
+  const key = function (n) { return String(n.label || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); };
+  const A = {}, B = {};
+  (a.nodes || []).forEach(function (n) { A[key(n)] = true; });
+  (b.nodes || []).forEach(function (n) { B[key(n)] = true; });
+  const ka = Object.keys(A), kb = Object.keys(B);
+  if (ka.length < 4 || kb.length < 4) return 0;          // tiny pictures are never called repeats
+  const shared = ka.filter(function (k) { return B[k]; }).length;
+  return shared / Math.min(ka.length, kb.length);
+}
+
 /** Spec from Vertex AI -> the add-on's diagram IR (kept compatible with Diagram.gs). */
 function ddSpecToIr_(d, fallbackType, sourceLabel) {
   if (!d || !Array.isArray(d.nodes) || !d.nodes.length) return null;
@@ -247,6 +331,11 @@ function ddSpecToIr_(d, fallbackType, sourceLabel) {
       emphasize: isFocal
     };
   });
+  // a repository / database / registry is a store (cylinder), not an input-output parallelogram
+  nodes.forEach(function (n) {
+    if ((n.kind === 'data' || n.kind === 'step') && /\b(repositor(y|ies)|database|registry|warehouse|data lake|lakehouse|bucket|storage|vault|data store)\b/i.test(n.label)) { n.kind = 'store'; n.type = 'store'; }
+  });
+  const groupLabels = groups.map(function (g) { return g.label; });
   // diagram-design: deletion
   const normL = function (v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); };
   groups.slice().forEach(function (g) {
@@ -281,6 +370,18 @@ function ddSpecToIr_(d, fallbackType, sourceLabel) {
     }
     edges.push(e);
   });
+  // a box with no arrows that wraps everything ("Unified governance & risk management wrapper") becomes a frame round the diagram
+  const linked = {};
+  edges.forEach(function (e) { linked[e.from] = true; linked[e.to] = true; });
+  let wrapper = '';
+  nodes.slice().forEach(function (n) {
+    if (linked[n.id] || nodes.length <= 3) return;
+    const isWrap = /\b(wrapper|umbrella|overlay|overarching|cross-cutting|across all|end-to-end governance)\b/i.test(n.label) ||
+      groupLabels.some(function (l) { return l && normL(l) === normL(n.label); });
+    if (!isWrap || wrapper) return;
+    wrapper = n.label;
+    nodes.splice(nodes.indexOf(n), 1);
+  });
   const seenLabel = {};
   edges.forEach(function (e) {
     if (!e.label) return;
@@ -296,7 +397,9 @@ function ddSpecToIr_(d, fallbackType, sourceLabel) {
   };
   const ir = normalizeDiagramIr_(raw);
   ir.title = String(d.title || '').slice(0, 80);
-  ir.lead = String(d.lead || '').slice(0, 140);
+  ir.lead = ddLead_(d.lead || '', 150);
+  if (!wrapper && d.wrapper) wrapper = sc(String(d.wrapper).replace(/\.$/, '')).slice(0, 60);
+  if (wrapper) ir.wrapper = wrapper;
   ir.sourceLabel = sourceLabel || '';
   return ir;
 }
@@ -334,10 +437,18 @@ function diagramDesignRead_(input, opts, ctx) {
         res.notDiagram.push(item);
         return;
       }
-      const irs = ddSpecify_(item, sel, opts, ctx);
+      const drawn = res.diagrams.map(function (ir) { return (ir.title || '') + ': ' + ir.nodes.map(function (n) { return n.label; }).join(', '); });
+      const irs = ddSpecify_(item, sel, Object.assign({}, opts, { drawn: drawn }), ctx)
+        .filter(function (ir) {
+          // a picture that repeats one already drawn (same boxes) is left out
+          const twin = res.diagrams.filter(function (d) { return ddSameness_(d, ir) >= 0.7; })[0];
+          if (twin) res.log.push('Left out "' + (ir.title || ir.type) + '": it repeats "' + (twin.title || twin.type) + '".');
+          return !twin;
+        });
       if (!irs.length) { res.log.push('No diagram could be built from ' + item.label + '.'); res.notDiagram.push(item); return; }
       irs.forEach(function (ir) { res.diagrams.push(ir); });
       if (sel.shows) (res.shows = res.shows || []).push(sel.shows);
+      if (sel.topic) (res.topics = res.topics || []).push(sel.topic);
       if (item.slides && irs.length < item.slides) res.log.push(item.label + ': ' + irs.length + ' of ' + item.slides + ' slides could be drawn without repeating.');
       res.log.push(item.label + ': ' + irs.map(function (ir) { return ir.type + ' (' + ir.nodes.length + ' boxes)'; }).join(', ') + ' - diagram-design.');
     } catch (e) {
@@ -419,6 +530,108 @@ function ddZoneEls_(z, label, kind) {
   return els;
 }
 
+function ddCombEls_(all, boxes, isSide, inBus, put, st, labelJobs) {
+  const ids = Object.keys(boxes);
+  const combs = [];
+  all.forEach(function (p, i) {
+    const aSide = !!isSide[p.e.from], bSide = !!isSide[p.e.to];
+    if (aSide === bSide) return;
+    const s = aSide ? p.a : p.b, m = aSide ? p.b : p.a;
+    if (s.y < m.y + m.h + 16) return;
+    // a rising arrow must not pass behind another box between the step and the supporting row
+    const blocked = ids.some(function (k) {
+      const q = boxes[k];
+      return q !== m && q !== s && !isSide[k] && q.y >= m.y + m.h - 1 && q.y < s.y && q.x < m.x + m.w - 1 && q.x + q.w > m.x + 1;
+    });
+    if (blocked) return;
+    combs.push({ i: i, p: p, s: s, m: m, sid: aSide ? p.e.from : p.e.to, mid: aSide ? p.e.to : p.e.from, up: aSide });
+  });
+  if (!combs.length) return;
+  const mainBottom = Math.max.apply(null, combs.map(function (c) { return c.m.y + c.m.h; }));
+  const rowTop = Math.min.apply(null, combs.map(function (c) { return c.s.y; }));
+  if (rowTop - mainBottom < 16) return;
+  combs.forEach(function (c) { inBus[c.i] = true; });
+  const cx = function (q) { return q.x + q.w / 2; };
+  // ports under each step: one per arrow, ordered like the supporting boxes below (fewest crossings), >= 12pt apart
+  const byMain = {};
+  combs.forEach(function (c) { (byMain[c.mid] = byMain[c.mid] || []).push(c); });
+  Object.keys(byMain).forEach(function (k) {
+    const lst = byMain[k].sort(function (a, b) { return cx(a.s) - cx(b.s); });
+    const m = lst[0].m;
+    if (lst.length === 1) {
+      const c = lst[0];
+      // straight up when the supporting box sits under the step
+      c.px = Math.max(m.x + 12, Math.min(m.x + m.w - 12, Math.max(c.s.x + 12, Math.min(c.s.x + c.s.w - 12, cx(m)))));
+    } else lst.forEach(function (c, j) { c.px = m.x + m.w * (j + 1) / (lst.length + 1); });
+    lst.forEach(function (c) { c.px = Math.round(c.px); });
+  });
+  // one stem per supporting box, aimed under its targets (straight when it has one target right above)
+  const sids = [];
+  combs.forEach(function (c) { if (sids.indexOf(c.sid) === -1) sids.push(c.sid); });
+  const svc = sids.map(function (sid) {
+    const cs = combs.filter(function (c) { return c.sid === sid; });
+    const s = cs[0].s;
+    const mean = cs.reduce(function (t, c) { return t + c.px; }, 0) / cs.length;
+    const sx = Math.round(Math.max(s.x + 12, Math.min(s.x + s.w - 12, cs.length === 1 ? cs[0].px : mean)));
+    const xs = cs.map(function (c) { return c.px; }).concat([sx]);
+    return { sid: sid, s: s, cs: cs, sx: sx, lo: Math.min.apply(null, xs), hi: Math.max.apply(null, xs), straight: cs.length === 1 && cs[0].px === sx };
+  });
+  // channel order with the fewest crossings (k <= 6: try every order)
+  const bent = svc.filter(function (v) { return !v.straight; });
+  const k = bent.length;
+  const step = k > 1 ? Math.max(6, Math.min(12, (rowTop - mainBottom - 16) / (k - 1))) : 0;
+  const chanY = function (j) { return k === 1 ? Math.round((mainBottom + rowTop) / 2) : Math.round(mainBottom + 8 + step * j); };
+  const cost = function (order) {
+    let n = 0;
+    order.forEach(function (A, ja) {
+      const yA = chanY(ja);
+      svc.forEach(function (B) {
+        if (B === A) return;
+        const jb = order.indexOf(B);
+        if (jb === -1) {                                   // a straight arrow: crossed wherever A's run spans it
+          if (B.sx > A.lo && B.sx < A.hi) n++;
+          return;
+        }
+        const yB = chanY(jb);
+        if (B.sx > A.lo && B.sx < A.hi && yA > yB) n++;   // A's run crosses B's stem (the stem rises from the row to yB)
+        B.cs.forEach(function (c) { if (c.px > A.lo && c.px < A.hi && yA < yB) n++; });   // ...or B's rising arrows (above yB)
+      });
+    });
+    return n;
+  };
+  let best = bent.slice(), bestCost = cost(best);
+  if (k > 1 && k <= 6) {
+    const permute = function (arr, l) {
+      if (l === arr.length) { const c = cost(arr); if (c < bestCost) { bestCost = c; best = arr.slice(); } return; }
+      for (var i = l; i < arr.length; i++) {
+        var t = arr[l]; arr[l] = arr[i]; arr[i] = t;
+        permute(arr, l + 1);
+        t = arr[l]; arr[l] = arr[i]; arr[i] = t;
+      }
+    };
+    permute(bent.slice(), 0);
+  }
+  svc.forEach(function (v) {
+    const style = st(v.cs[0].p.e);
+    const anyDown = v.cs.some(function (c) { return !c.up || c.p.e.both; });
+    if (v.straight) {
+      const c = v.cs[0];
+      const g = { x1: v.sx, y1: v.s.y, x2: c.px, y2: c.m.y + c.m.h };
+      put(g, style, c.up || c.p.e.both, !c.up || c.p.e.both);
+      if (c.p.e.label) labelJobs.push({ label: c.p.e.label, segs: [g] });
+      return;
+    }
+    const y = chanY(best.indexOf(v));
+    put({ x1: v.sx, y1: y, x2: v.sx, y2: v.s.y }, style, anyDown, false);                       // stem (head only for a step -> support arrow)
+    if (v.hi - v.lo >= 1) put({ x1: v.lo, y1: y, x2: v.hi, y2: y }, style, false, false);       // run
+    v.cs.forEach(function (c) {
+      const g = { x1: c.px, y1: y, x2: c.px, y2: c.m.y + c.m.h };
+      put(g, style, c.up || c.p.e.both, false);                                                  // rising arrow into the step
+      if (c.p.e.label) labelJobs.push({ label: c.p.e.label, segs: [g] });
+    });
+  });
+}
+
 /**
  * Connectors, following diagram-design's mandatory connector rules:
  * orthogonal only, perpendicular exits, one port per arrow on a side (aligned with the far end so straight runs stay
@@ -454,9 +667,14 @@ function ddEdgeEls_(edges, boxes, opts) {
     drawn.push(g);
   };
   const labelJobs = [];
+  const inBus = {};
+
+  // 0. comb: the supporting row under a flow (controls, tools, boards). Each supporting box gets ITS OWN channel between the
+  //    two rows - one stem up, one horizontal run, one rising arrow into a separate port under each step it feeds - so no two
+  //    arrows ever share a line and nothing loops around the outside. The channel order is the one with the fewest crossings.
+  if (opts.upward) ddCombEls_(all, boxes, opts.upward, inBus, put, st, labelJobs);
 
   // 1. buses: 3+ arrows into (or out of) one side from boxes all on the far side share one trunk and one arrow head
-  const inBus = {};
   const busOf = function (keyFn, end) {
     const groups = {};
     all.forEach(function (p, i) {
@@ -470,7 +688,10 @@ function ddEdgeEls_(edges, boxes, opts) {
     });
     Object.keys(groups).forEach(function (k) {
       const list = groups[k];
-      if (list.length < 3) return;
+      // 3+ arrows share a trunk; so do 2 that both leave the side's height (a clean fork instead of two jogged arrows)
+      const hubBox = end === 'b' ? all[list[0]].b : all[list[0]].a;
+      const offSide = list.every(function (i) { const o = end === 'b' ? all[i].a : all[i].b; const oc = o.y + o.h / 2; return oc < hubBox.y + 8 || oc > hubBox.y + hubBox.h - 8; });
+      if (list.length < 2 || (list.length === 2 && !offSide)) return;
       const side = k.split('|').pop();
       const hub = end === 'b' ? all[list[0]].b : all[list[0]].a;
       const hy = hub.y + hub.h / 2, hx = side === 'left' ? hub.x : hub.x + hub.w;
@@ -581,7 +802,16 @@ function ddEdgeEls_(edges, boxes, opts) {
     if (horizA && horizB) {
       if (Math.abs(A.y - B.y) < 1) cands.push({ pts: [A, { x: B.x, y: A.y }], off: 0 });
       offs.forEach(function (o) { const xm = dd4_((A.x + B.x) / 2) + o; cands.push({ pts: [A, { x: xm, y: A.y }, { x: xm, y: B.y }, B], off: 0 }); });
+      // a jog of a few points is never worth it: straight across when either port can slide to meet the other
+      if (Math.abs(A.y - B.y) < 14) {
+        if (A.y >= b.y + 6 && A.y <= b.y + b.h - 6) cands.push({ pts: [A, { x: B.x, y: A.y }], off: 0 });
+        if (B.y >= a.y + 6 && B.y <= a.y + a.h - 6) cands.push({ pts: [{ x: A.x, y: B.y }, B], off: 0 });
+      }
     } else if (!horizA && !horizB) {
+      if (Math.abs(A.x - B.x) < 14) {
+        if (A.x >= b.x + 6 && A.x <= b.x + b.w - 6) cands.push({ pts: [A, { x: A.x, y: B.y }], off: 0 });
+        if (B.x >= a.x + 6 && B.x <= a.x + a.w - 6) cands.push({ pts: [{ x: B.x, y: A.y }, B], off: 0 });
+      }
       if (Math.abs(A.x - B.x) < 1) cands.push({ pts: [A, { x: A.x, y: B.y }], off: 0 });
       offs.forEach(function (o) { const ym = dd4_((A.y + B.y) / 2) + o; cands.push({ pts: [A, { x: A.x, y: ym }, { x: B.x, y: ym }, B], off: 0 }); });
     } else cands.push({ pts: [A, { x: B.x, y: A.y }, B], off: 0 });
@@ -595,6 +825,26 @@ function ddEdgeEls_(edges, boxes, opts) {
         const miss = (sa === p.sa ? 0 : 1) + (sb === p.sb ? 0 : 1);
         [[P1, { x: Q1.x, y: P1.y }, Q1], [P1, { x: P1.x, y: Q1.y }, Q1], [P1, { x: mx, y: P1.y }, { x: mx, y: Q1.y }, Q1], [P1, { x: P1.x, y: my }, { x: Q1.x, y: my }, Q1]]
           .forEach(function (mid) { cands.push({ pts: [P].concat(mid, [Q]), off: miss }); });
+      });
+    });
+    // 2b. corridors: the free gaps between rows / columns of boxes (a short way through the middle beats a long way round)
+    const gapYs = [], gapXs = [];
+    const allQ = others.concat(ends);
+    allQ.forEach(function (q) {
+      allQ.forEach(function (r) {
+        const gy = r.y - (q.y + q.h), gx = r.x - (q.x + q.w);
+        if (gy >= 16) { const v = dd4_(q.y + q.h + gy / 2); if (gapYs.indexOf(v) === -1) gapYs.push(v); }
+        if (gx >= 16) { const v = dd4_(q.x + q.w + gx / 2); if (gapXs.indexOf(v) === -1) gapXs.push(v); }
+      });
+    });
+    Object.keys(SIDE_DIR).forEach(function (sa) {
+      Object.keys(SIDE_DIR).forEach(function (sb) {
+        const P = sa === p.sa ? A : sideMid(a, sa), Q = sb === p.sb ? B : sideMid(b, sb);
+        const da = SIDE_DIR[sa], db = SIDE_DIR[sb];
+        const P1 = { x: P.x + da.x * 12, y: P.y + da.y * 12 }, Q1 = { x: Q.x + db.x * 12, y: Q.y + db.y * 12 };
+        const miss = (sa === p.sa ? 0 : 1) + (sb === p.sb ? 0 : 1);
+        gapYs.forEach(function (gy) { cands.push({ pts: [P, P1, { x: P1.x, y: gy }, { x: Q1.x, y: gy }, Q1, Q], off: miss }); });
+        gapXs.forEach(function (gx) { cands.push({ pts: [P, P1, { x: gx, y: P1.y }, { x: gx, y: Q1.y }, Q1, Q], off: miss }); });
       });
     });
     // 3. channels above / below everything in between
@@ -638,7 +888,10 @@ function ddEdgeEls_(edges, boxes, opts) {
       if (!outward(a, { x: first.x1, y: first.y1 }, first)) bad++;
       if (!outward(b, { x: last.x2, y: last.y2 }, rev)) bad++;
       if (Math.abs(last.x2 - last.x1) + Math.abs(last.y2 - last.y1) < 8) bad++;
-      const score = boxHits * 1000 + blocked * 400 + (bad + uturn) * 500 + cross * 40 + len * 0.05 + segs.length * 6 + c.off * 25 + ci * 0.01;
+      // a jog of a few points in the middle of a run reads as a drawing error: an L into another side is better
+      let jog = 0;
+      segs.forEach(function (g, gi) { if (gi > 0 && gi < segs.length - 1 && Math.abs(g.x2 - g.x1) + Math.abs(g.y2 - g.y1) < 6) jog++; });
+      const score = boxHits * 1000 + blocked * 400 + (bad + uturn) * 500 + cross * 40 + jog * 20 + len * 0.05 + segs.length * 6 + c.off * 25 + ci * 0.01;
       if (!best || score < best.score) best = { score: score, segs: segs, detour: !!c.detour || c.off > 0 };
     });
     return best;
@@ -906,7 +1159,8 @@ function ddFlowLayout_(ir, area) {
   const overL = area.x - row[0].x;
   if (overL > 0) row.forEach(function (r) { r.x += overL; });
   const mainBottom = Math.max.apply(null, mainIr.nodes.map(function (n) { return boxes[n.id].y + boxes[n.id].h; }));
-  const y = dd4_(Math.min(area.y + area.h - sh, mainBottom + 56));
+  // room for one channel per supporting box between the rows (each box's arrows run on their own line)
+  const y = dd4_(Math.min(area.y + area.h - sh, mainBottom + Math.max(56, 24 + 10 * side.length)));
   row.forEach(function (r) { boxes[r.n.id] = { x: dd4_(r.x), y: y, w: dd4_(sw), h: sh }; });
   return { boxes: ddFit_(boxes, area), upward: isSide };
 }
@@ -1007,8 +1261,50 @@ function ddLoopLayout_(ir, area) {
 }
 
 /** Diagram IR -> engine elements in the area, by diagram-design type. */
+/**
+ * One label size on a slide: a row of boxes whose longest label would drop to 9pt grows a little taller (up to 20pt) so
+ * every label stays at 10pt, as long as the row still clears the boxes above and below and stays inside its zone.
+ */
+function ddGrowForText_(ir, boxes, zoneBoxes) {
+  const ids = Object.keys(boxes);
+  const node = {};
+  ir.nodes.forEach(function (n) { node[n.id] = n; });
+  const rows = {};
+  ids.forEach(function (k) { const b = boxes[k]; (rows[Math.round(b.y) + '|' + Math.round(b.h)] = rows[Math.round(b.y) + '|' + Math.round(b.h)] || []).push(k); });
+  Object.keys(rows).forEach(function (key) {
+    const row = rows[key];
+    const fits = function (extra) {
+      return row.every(function (k) { const n = node[k]; if (!n) return true; const b = boxes[k];
+        return ddFitText_({ label: n.label, kind: n.kind, type: n.type }, { x: b.x, y: b.y - extra / 2, w: b.w, h: b.h + extra }).size >= 10; });
+    };
+    if (fits(0)) return;
+    for (let extra = 4; extra <= 20; extra += 4) {
+      const ok = row.every(function (k) {
+        const b = boxes[k], nb = { x: b.x, y: b.y - extra / 2, w: b.w, h: b.h + extra };
+        const clash = ids.some(function (j) { const q = boxes[j]; return row.indexOf(j) === -1 && nb.x < q.x + q.w + 6 && q.x < nb.x + nb.w + 6 && nb.y < q.y + q.h + 8 && q.y < nb.y + nb.h + 8; });
+        const outZone = zoneBoxes.some(function (z) {
+          const inside = b.x >= z.x && b.y >= z.y && b.x + b.w <= z.x + z.w && b.y + b.h <= z.y + z.h;
+          return inside && (nb.y < z.y + 16 || nb.y + nb.h > z.y + z.h - 4);
+        });
+        return !clash && !outZone;
+      });
+      if (!ok) return;
+      if (fits(extra)) {
+        row.forEach(function (k) { const b = boxes[k]; boxes[k] = { x: b.x, y: b.y - extra / 2, w: b.w, h: b.h + extra }; });
+        return;
+      }
+    }
+  });
+}
+
 function drawDiagramDesign_(ir, area) {
   const type = String(ir.type || 'flowchart');
+  let frame = null;
+  if (ir.wrapper) {
+    // the wrapper is a frame round the whole picture with its name in the corner; the diagram sits inside it
+    frame = { x: area.x, y: area.y, w: area.w, h: area.h };
+    area = { x: area.x + 12, y: area.y + 22, w: area.w - 24, h: area.h - 30 };
+  }
   const lanes = ir.groups.filter(function (g) { return g.kind === 'lane'; });
   let L;
   if (type === 'loop') L = ddLoopLayout_(ir, area);
@@ -1019,12 +1315,19 @@ function drawDiagramDesign_(ir, area) {
   else if (ir.edges.length) L = ddFlowLayout_(ir, area);           // flowchart family
   else if (ir.groups.length) L = ddZonesLayout_(ir, area);
   else L = ddLayersLayout_({ nodes: ir.nodes.map(function (n) { return Object.assign({}, n, { group: 'all' }); }), edges: [], groups: [{ id: 'all', label: '', kind: 'layer' }] }, area);
+  ddGrowForText_(ir, L.boxes, (L.zones || []).map(function (z) { return z.box; }));
   const els = [];
+  if (frame) {
+    const nested = (L.zones || []).length > 0;
+    els.push({ t: 'rect', x: frame.x, y: frame.y, w: frame.w, h: frame.h, fill: nested ? DD_COLORS_.paper : DD_COLORS_.panel, line: nested ? { color: DD_COLORS_.rule, width: 0.75 } : null, zone: true });
+    els.push({ t: 'text', text: ir.wrapper, x: frame.x + 6 - 7.2, y: frame.y + 5 - 7.2, w: frame.w - 12 + 14.4, h: 14 + 14.4, size: 8, weight: 500, font: 'sans',
+      color: DD_COLORS_.ink, align: 'left', valign: 'top', spacing: 1 });
+  }
   (L.under || []).forEach(function (e) { els.push(e); });
   (L.zones || []).forEach(function (z) { ddZoneEls_(z.box, z.label, z.kind).forEach(function (e) { els.push(e); }); });
   if (!L.noEdges) ddEdgeEls_(L.edges || ir.edges, L.boxes, { vertical: L.vertical, obstacles: L.obstacles, blockers: L.blockers, upward: L.upward, laneOf: L.laneOf }).forEach(function (e) { els.push(e); });
   (L.over || []).forEach(function (e) { els.push(e); });
-  const inZone = function (id) { const n = ir.nodes.filter(function (x) { return x.id === id; })[0]; return !!(n && n.group) || !!L.under; };
+  const inZone = function (id) { const n = ir.nodes.filter(function (x) { return x.id === id; })[0]; return !!(n && n.group) || !!L.under || (!!frame && !(L.zones || []).length); };
   const nodeEls = ir.nodes.filter(function (n) { return L.boxes[n.id]; }).map(function (n) { return ddNodeEl_(n, L.boxes[n.id], inZone(n.id)); });
   // one label size for the plain boxes; diamonds and slanted data shapes may go smaller on their own
   const special = function (e) { return e.shape === 'FLOW_CHART_DECISION' || e.shape === 'FLOW_CHART_INPUT_OUTPUT'; };
