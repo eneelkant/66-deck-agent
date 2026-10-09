@@ -135,6 +135,27 @@ function wikidataLogo_(name, domain) {
   } catch (e) { LOGO_TRAIL_.push('Wikidata: ' + e.message); return null; }
 }
 
+// logo.dev (publishable token; script property LOGO_DEV_TOKEN overrides the built-in one). fallback=404 so an
+// unknown company never gets a generated monogram instead of its real logo.
+var LOGO_DEV_DEFAULT_TOKEN_ = 'pk_fr2f38609959838aac17b3';
+function logoDevLogo_(domain) {
+  if (!domain) return null;
+  let token = LOGO_DEV_DEFAULT_TOKEN_;
+  try { token = PropertiesService.getScriptProperties().getProperty('LOGO_DEV_TOKEN') || token; } catch (e) {}
+  return fetchImage_('https://img.logo.dev/' + encodeURIComponent(domain) + '?token=' + encodeURIComponent(token) +
+    '&size=400&format=png&retina=true&fallback=404', 1200, 'logo.dev');
+}
+// The company's website from Wikidata when Gemini did not give one ("Apple" -> apple.com)
+function wikidataDomain_(name) {
+  const s = fetchJson_('https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=6&search=' + encodeURIComponent(name), 'Wikidata search');
+  const ids = ((s && s.search) || []).filter(function (x) { return /compan|corporat|retailer|business|bank|brand|group|organi[sz]ation|manufacturer|provider|airline|university|chain/i.test(String(x.description || '')); }).map(function (x) { return x.id; });
+  if (!ids.length) return '';
+  const e = fetchJson_('https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims&ids=' + ids[0], 'Wikidata');
+  const c = e && e.entities && e.entities[ids[0]] && e.entities[ids[0]].claims && e.entities[ids[0]].claims.P856;
+  const url = c && c[0] && c[0].mainsnak && c[0].mainsnak.datavalue ? c[0].mainsnak.datavalue.value : '';
+  return String(url || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+}
+
 function brandfetchLogo_(domain) {
   try {
     const key = PropertiesService.getScriptProperties().getProperty('BRANDFETCH_API_KEY');
@@ -158,7 +179,15 @@ function findClientLogo_(client, ctx) {
   const inDrive = findDriveLogo_(client.name);
   if (inDrive) return inDrive;
   LOGO_TRAIL_.push('Drive: none');
-  let blob = brandfetchLogo_(client.domain), source = 'Brandfetch';
+  if (!client.domain) { client.domain = wikidataDomain_(client.name) || ''; if (client.domain) LOGO_TRAIL_.push('domain from Wikidata: ' + client.domain); }
+  let blob = logoDevLogo_(client.domain), source = 'logo.dev';
+  if (!blob && !client.domain) {
+    // last try: the plain .com of the name ("Home Depot" -> homedepot.com); logo.dev answers 404 when it is not a company
+    const guess = String(client.name).toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]+/g, '') + '.com';
+    blob = logoDevLogo_(guess);
+    if (blob) client.domain = guess;
+  }
+  if (!blob) { blob = brandfetchLogo_(client.domain); source = 'Brandfetch'; }
   if (!blob) { blob = wikidataLogo_(client.name, client.domain); source = 'the official logo on Wikimedia Commons'; }
   if (!blob) { blob = wikipediaLogo_(client.name); source = 'Wikipedia'; }
   if (!blob && client.domain) { blob = fetchImage_('https://www.google.com/s2/favicons?sz=256&domain=' + encodeURIComponent(client.domain), 2500, 'Website icon'); source = 'the company website icon'; }
