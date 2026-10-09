@@ -475,7 +475,8 @@ function generatePresentationRun_(data, run) {
   }
 
   const secs = Math.round((Date.now() - started) / 1000);
-  let msg = 'SUCCESS: ' + copied + ' branded slides added to this presentation (' + secs + 's). ' + summarizeStats(stats);
+  let msg = 'SUCCESS: ' + copied + ' branded slides added to this presentation (' + secs + 's). ' + summarizeStats(stats) +
+    '\n' + AGENT_VERSION_ + ' · Presentation type: ' + (ctx.presentationType || 'General') + '.';
   if (ctx.roundIssue) msg += '\nRounded boxes: not available (' + ctx.roundIssue + '); square boxes were used.';
   if (ctx.arcIssue) msg += '\nDiagram rings and pie segments: not drawn (' + ctx.arcIssue + ').';
   if (ctx.iconAttempts && !ctx.libraryIconsPlaced) {
@@ -2767,7 +2768,8 @@ function statementNeedsPoints_(sp) {
   if (sents.length < 2) return sp;
   sp.points = sents.map(function (x) {
     const words = x.replace(/[.!?]$/, '').split(' ');
-    return { title: words.slice(0, 4).join(' ').replace(/[,;:]$/, ''), text: x };
+    // (V.1_37: no heading cut from the first words of the sentence - "This shift mandates a" - the point is text only)
+    return { title: '', text: x };
   });
   return sp;
 }
@@ -3339,6 +3341,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
+const AGENT_VERSION_ = '66° Deck Agent V.1_37';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck

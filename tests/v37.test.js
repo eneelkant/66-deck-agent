@@ -124,3 +124,19 @@ test("client logo: Drive first, then the official logo (no key), then the websit
   assert.match(code, /General template slides are not used in a Proposal Deck/);
   assert.match(code, /proposal: ctx\.proposal \|\| null/, "long decks keep the client between runs");
 });
+
+test("V.1_37 review (Home Depot deck): library switch even when the client step failed; client name keeps its capitals", () => {
+  const g = load();
+  const ctx = { presentationType: "Proposal Deck", log: [] };          // prepareProposal_ never ran / failed
+  const slides = [{ type: "cover", subtitle: "A proposal for the home depot" }, { type: "cards", title: "x", items: [{ title: "the home depot today", text: "t" }] }];
+  g.applyProposalFrame_(slides, ctx);
+  assert.equal(slides[1].deckLibrary, "proposal");
+  ctx.proposal.client = "The Home Depot";
+  g.applyProposalFrame_(slides, ctx);
+  assert.equal(slides[0].subtitle, "A proposal for The Home Depot");
+  assert.equal(slides[1].items[0].title, "The Home Depot today");
+  const code = read("src/Code.gs");
+  assert.match(code, /AGENT_VERSION_ \+ ' · Presentation type: '/, "the result message names the version and type");
+  assert.match(code, /return \{ title: '', text: x \};/, "no headings cut from the first words of a sentence");
+  assert.match(read("src/Engine.gs"), /capH\(it, capW, 3\) \+ 16 > rowH/, "half donut never overlaps captions");
+});
