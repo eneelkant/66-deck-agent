@@ -300,9 +300,11 @@ function generatePresentationRun_(data, run) {
   const uploads = [].concat(data.upload && data.upload.data ? [data.upload] : [], Array.isArray(data.files) ? data.files : [])
     .filter(function (f) { return f && f.data; }).slice(0, 10);
   const skippedFiles = [];
+  // Normal Create: raster images stay reference material. Diagram reconstruction is Flowchart-only
+  // (or an explicit allowDiagramIngest opt-in). Structured Mermaid/draw.io/Excalidraw/SVG still ingest.
   uploads.forEach(function (f) {
     try {
-      readUploadedFile_(f, sources, ctx);
+      readUploadedFile_(f, sources, ctx, { allowDiagramIngest: false, mode: 'create' });
       ctx.log.push('Source file used: ' + f.name + '.');
     } catch (e) {
       skippedFiles.push(String(f.name || 'file') + ' (' + e.message + ')');
@@ -320,8 +322,13 @@ function generatePresentationRun_(data, run) {
   if (!run.runId && totalSlides > SINGLE_RUN_MAX_) totalSlides = SINGLE_RUN_MAX_;   // callers without a run id cannot continue
   ctx.presentationType = presentationType;
   ctx.department = department;
-  // Proposal Deck: the client (Gemini) and its logo, and the deck's section divider style - once per deck
-  if (typeof isProposalDeck_ === 'function' && isProposalDeck_(ctx)) { try { prepareProposal_(userPrompt, sources, ctx); } catch (e) { ctx.log.push('Client logo step skipped: ' + e.message); } }
+  // Proposal Deck: the client (Gemini or sidebar) and its logo, and the deck's section divider style - once per deck
+  if (typeof isProposalDeck_ === 'function' && isProposalDeck_(ctx)) {
+    ctx.clientName = String(data.clientName || '').trim();
+    ctx.clientDomain = String(data.clientDomain || '').trim();
+    try { prepareProposal_(userPrompt, sources, ctx, { clientName: ctx.clientName, clientDomain: ctx.clientDomain }); }
+    catch (e) { ctx.log.push('Client logo step skipped: ' + e.message); }
+  }
   if (ctx.lib) ctx.lib = applyDepartmentFilter_(ctx.lib, department);
   const existing = target.getSlides();
   const blankDeck = isBlankDeck(existing);
@@ -377,13 +384,15 @@ function generatePresentationRun_(data, run) {
   progressSlides_(ctx, plan.slides.map(specTitle_));
   checkCancel_(ctx);
 
-  // 1b-2. Reconstruct uploaded diagrams into editable IR and attach to the plan (graceful fallback).
-  progressStage_(ctx, 'diagram', 'active', 'Analyzing diagram');
+  // 1b-2. Attach only diagrams that were explicitly ingested (structured uploads). Raster images in
+  // Create are references and never enter this path automatically.
+  progressStage_(ctx, 'diagram', 'active', 'Checking for structured diagram uploads');
   try {
-    const attached = typeof attachDiagramsToPlan_ === 'function' ? attachDiagramsToPlan_(plan, sources, ctx) : 0;
-    if (attached) progressStage_(ctx, 'diagram', 'done', 'Rebuilding flowchart (' + attached + ')');
-    else if (sources.diagramFallbacks && sources.diagramFallbacks.length) progressStage_(ctx, 'diagram', 'done', 'Kept original diagram image');
-    else progressStage_(ctx, 'diagram', 'done', 'No diagram upload');
+    const hasDiagrams = ((sources.diagrams || []).length > 0);
+    const attached = hasDiagrams && typeof attachDiagramsToPlan_ === 'function' ? attachDiagramsToPlan_(plan, sources, ctx) : 0;
+    if (attached) progressStage_(ctx, 'diagram', 'done', 'Structured diagram attached (' + attached + ')');
+    else if (sources.diagramFallbacks && sources.diagramFallbacks.length) progressStage_(ctx, 'diagram', 'done', 'Kept original diagram source');
+    else progressStage_(ctx, 'diagram', 'done', hasDiagrams ? 'Diagram not attached' : 'No structured diagram upload');
   } catch (e) {
     ctx.log.push('Diagram stage skipped: ' + (e && e.message ? e.message : String(e)));
     progressStage_(ctx, 'diagram', 'done', 'Diagram stage skipped');
@@ -1961,7 +1970,15 @@ function drawSlidesFromPlan_(presId, specs, ctx) {
    PDF and images go to Gemini as they are; text, CSV and JSON are read directly;
    Word, Excel and PowerPoint files are converted by Google Drive, read as text, and the copy is deleted.
 ========================= */
-function readUploadedFile_(upload, sources, ctx) {
+/**
+ * Ingest an uploaded file into sources.
+ * opts.allowDiagramIngest — when true (Flowchart / explicit opt-in), raster images may be
+ * reconstructed into editable diagram IR. Normal Create passes false so PNG/JPG/WebP/GIF stay
+ * visual references and never enter the flowchart pipeline by image alone.
+ */
+function readUploadedFile_(upload, sources, ctx, opts) {
+  opts = opts || {};
+  const allowDiagramIngest = !!opts.allowDiagramIngest;
   const name = String(upload.name || 'file');
   const ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1] ? name.match(/\.([a-z0-9]+)$/i)[1].toLowerCase() : '';
   const bytes = Utilities.base64Decode(String(upload.data));
@@ -1971,7 +1988,7 @@ function readUploadedFile_(upload, sources, ctx) {
     sources.text += (sources.text ? '\n\n' : '') + 'UPLOADED FILE "' + name + '":\n' + String(text).slice(0, CONFIG.maxSourceChars);
   };
 
-  // Diagram intelligence: structured diagram sources are normalized into editable IR when possible.
+  // Structured diagram formats are an explicit diagram action (not inferred from a raster image).
   const category = typeof detectUploadCategory_ === 'function' ? detectUploadCategory_(upload) : '';
   if (category === 'structured-diagram' ||
       /^(mmd|mermaid|drawio|dio|excalidraw|svg)$/.test(ext) ||
@@ -1987,14 +2004,21 @@ function readUploadedFile_(upload, sources, ctx) {
 
   if (ext === 'pdf' || mime === 'application/pdf') { sources.pdfs.push(String(upload.data)); return; }
   if (/^(png|jpe?g|webp|gif)$/.test(ext) || /^image\//.test(mime)) {
-    // Try diagram reconstruction for AI-generated flowchart/architecture images; keep image either way.
-    if (typeof ingestUploadedDiagram_ === 'function') {
+    // Raster images: reference material in Create. Diagram reconstruction only when explicitly allowed.
+    if (allowDiagramIngest && typeof ingestUploadedDiagram_ === 'function') {
       try { ingestUploadedDiagram_(upload, sources, ctx); } catch (e) {
         if (ctx) ctx.log.push('Diagram image analysis skipped: ' + e.message);
       }
+    } else if (ctx && !allowDiagramIngest) {
+      ctx.log.push('Image kept as reference (Create does not auto-convert pictures to flowcharts): ' + name + '.');
     }
     if (!(sources.images || []).some(function (img) { return img && img.data === String(upload.data); })) {
-      sources.images.push({ mime: mime || ('image/' + (ext === 'jpg' ? 'jpeg' : ext)), data: String(upload.data) });
+      sources.images.push({
+        mime: mime || ('image/' + (ext === 'jpg' ? 'jpeg' : ext)),
+        data: String(upload.data),
+        name: name,
+        role: 'reference'
+      });
     }
     return;
   }
@@ -2003,19 +2027,26 @@ function readUploadedFile_(upload, sources, ctx) {
     return;
   }
   if (ext === 'pptx' && typeof diagramUploadParts_ === 'function') {
-    // PowerPoint: the words of every slide go to the writer; the pictures are read as diagrams (diagram-design)
+    // PowerPoint: slide text always feeds the writer. Picture→diagram reconstruction is Flowchart-only.
     const parts = diagramUploadParts_(upload);
     const words = (parts.slides || []).map(function (sl) { return sl.text ? 'Slide ' + sl.slide + ': ' + sl.text : ''; }).filter(Boolean).join('\n');
     if (words) addText(words);
     const pics = parts.items.filter(function (it) { return it.image; });
-    if (pics.length) {
+    if (pics.length && allowDiagramIngest && typeof diagramDesignRead_ === 'function') {
       progressStage_(ctx, 'diagram', 'active', 'Reading the diagrams in ' + name + ' (diagram-design)');
       const got = diagramDesignRead_({ items: pics }, {}, ctx);
       got.log.forEach(function (l) { ctx.log.push(l); });
       sources.diagrams = sources.diagrams || [];
       got.diagrams.forEach(function (ir) { sources.diagrams.push({ name: name, category: 'presentation', ir: ir }); });
       if (got.diagrams.length && typeof noteDiagramsForPlanner_ === 'function') noteDiagramsForPlanner_(sources, got.diagrams, name);
-      got.notDiagram.forEach(function (it) { if (it.image && sources.images.length < 6) sources.images.push({ mime: it.image.mime, data: it.image.data }); });
+      got.notDiagram.forEach(function (it) { if (it.image && sources.images.length < 6) sources.images.push({ mime: it.image.mime, data: it.image.data, role: 'reference' }); });
+    } else if (pics.length) {
+      pics.forEach(function (it) {
+        if (it.image && sources.images.length < 6) {
+          sources.images.push({ mime: it.image.mime, data: it.image.data, name: name, role: 'reference' });
+        }
+      });
+      if (ctx) ctx.log.push('PowerPoint pictures kept as references (not converted to flowcharts in Create): ' + name + '.');
     }
     if (!words && !pics.length) throw new Error('Nothing could be read from ' + name + '.');
     return;
@@ -3748,7 +3779,9 @@ function runFlowchartGeneration(data) {
     const text = String(data.prompt || '').trim();
     const file = (Array.isArray(data.files) ? data.files : []).filter(function (f) { return f && f.data; })[0];
     if (!text && !file) throw new Error('Describe the steps, or upload a sketch or diagram file.');
-    const wanted = data.diagramType && data.diagramType !== 'auto' ? String(data.diagramType) : '';
+    // Dedicated Flowchart tab: default/auto forces flowchart so the classifier cannot pick another family.
+    // Explicit chip choices (process, swimlane, …) remain available.
+    const wanted = data.diagramType && data.diagramType !== 'auto' ? String(data.diagramType) : 'flowchart';
     const slidesWanted = Math.max(1, Math.min(10, Math.round(Number(data.slides) || 1)));   // the panel's slide meter (1-10)
 
     // 1. Read: pictures (also the ones inside a .pptx), PDF pages, or a structured diagram file

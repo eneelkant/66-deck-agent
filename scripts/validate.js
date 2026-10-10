@@ -119,6 +119,7 @@ function assertRequiredFiles() {
     "src/ShapeKit.gs",
     "src/Diagram.gs",
     "src/IconProvider.gs",
+    "src/ClientLogoProvider.gs",
     "src/Generator.html",
     "assets/icons/manifest.json"
   ];
@@ -177,6 +178,11 @@ function assertClaspConfig() {
     fail(".clasp.json filePushOrder must include Diagram.gs and IconProvider.gs");
   } else {
     ok(".clasp.json push order includes Diagram and IconProvider");
+  }
+  if (!/ClientLogoProvider\.gs/.test(order)) {
+    fail(".clasp.json filePushOrder must include ClientLogoProvider.gs");
+  } else {
+    ok(".clasp.json push order includes ClientLogoProvider");
   }
 }
 

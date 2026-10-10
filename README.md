@@ -106,30 +106,42 @@ class node_source_docs toneIndigo
 | `Brand.gs` | Brand colours, default brand profile, approved facts, Gemini/Vertex client |
 | `Rebrand.gs` | Rebrand mode: restyles existing slides to the brand |
 | `ShapeKit.gs` | Embedded rounded-rectangle shape kit (~3pt corners). Copy this file whole. |
-| `Generator.html` | Sidebar: 66° Deck Agent UI (Create/Rebrand, type, department, 3–20 slides, prompt, upload, progress, Stop) |
+| `Generator.html` | Sidebar: Create / Rebrand / Flowchart tabs, uploads, progress, Stop |
+| `ClientLogoProvider.gs` | Optional guarded client-logo lookup (Brandfetch; Unavatar opt-in; Clearbit disabled) |
+| `ProposalKit.gs` | Proposal Deck client detection, co-branding, logo.dev / Drive fallbacks |
+| `DiagramDesign.gs` | diagram-design inspired type selection and diagram reading (Vertex) |
 
 Pipeline (Create):
 
 ```
-research (Scite, else Gemini Search) → write plan → analyze/rebuild diagram
+research (Scite, else Gemini Search) → write plan
+  → attach structured diagram uploads only (Mermaid/draw.io/…)
   → match 2026 template designs → fit check → select icons
   → draw into getActivePresentation()
 ```
+
+**Create vs Flowchart isolation:** In Create, PNG/JPG/WebP/GIF uploads are **visual references** only. They are never auto-converted into editable flowchart shapes. Use the **Flowchart** tab to turn a diagram image or prompt into editable flowchart slides (defaults to type `flowchart`; does not run the general deck planner).
 
 Rebrand applies the brand pass to the open deck in place.
 
 ## Diagram & Icon Intelligence
 
-Uploaded diagrams can be reconstructed into **editable native Google Slides** shapes, connectors, and labels whenever structure can be recovered.
+Diagram reconstruction into **editable native Google Slides** shapes is available from:
 
-Supported inputs (when structure is available):
+1. The **Flowchart** tab (image / prompt / PDF / PPTX / structured files → diagram slides)
+2. Explicit **structured** uploads in Create (Mermaid, draw.io, Excalidraw, SVG)
 
+Supported Flowchart inputs:
+
+- Raster sketches (PNG/JPG/WebP/GIF)
 - Mermaid (`.mmd` / Mermaid text)
 - draw.io / diagrams.net (`.drawio` / compatible XML)
 - Excalidraw (`.excalidraw` / JSON)
 - SVG (text labels + approximate structure)
-- PNG/JPG AI-generated diagrams via Vertex visual extraction
-- Plain-language flow descriptions through the existing Gemini plan path
+- PDF / PowerPoint pages with diagram pictures
+- Plain-language flow descriptions
+
+Layout follows [diagram-design](https://github.com/cathrynlavery/diagram-design) principles (MIT, Cathryn Lavery) as a **design reference** vendored under `vendor/diagram-design/` — not as a runtime HTML/SVG dependency. Shape (not fill) signals node type; spacing and restrained accents are applied in `Diagram.gs` via native Slides rendering.
 
 Reconstruction flow:
 
@@ -172,12 +184,16 @@ Ordinary users do **not** install better-icons MCP, Bun, or any local icon serve
 │   ├── ShapeKit.gs
 │   ├── IconProvider.gs
 │   ├── Diagram.gs
+│   ├── DiagramDesign.gs / DiagramDesignKit.gs
+│   ├── ClientLogoProvider.gs
+│   ├── ProposalKit.gs
 │   ├── Engine.gs
 │   ├── EngineRenderer.gs
 │   ├── Reference.gs
 │   ├── Rebrand.gs
 │   ├── Code.gs
 │   └── Generator.html
+├── vendor/diagram-design/   # MIT design reference (not a runtime dependency)
 ├── scripts/validate.js
 ├── tests/
 ├── .clasp.json
@@ -212,6 +228,13 @@ Ordinary users do **not** install better-icons MCP, Bun, or any local icon serve
    | `VERTEX_MODEL` | No | Default `gemini-2.5-flash` |
    | `SCITE_API_KEY` | No | Academic research; Vertex Search/knowledge is the fallback |
    | `BEAUTIFUL_AI_KEY` | No | Unused unless `CONFIG.useBeautifulAi` is turned on |
+   | `CLIENT_LOGO_LOOKUP` | No | Set to `true` to enable optional Brandfetch client-logo lookup (off by default) |
+   | `BRANDFETCH_API_KEY` | No | Bearer key for Brandfetch Brand API when `CLIENT_LOGO_LOOKUP=true` |
+   | `CLIENT_LOGO_UNAVATAR` | No | Set to `true` only if you accept Unavatar’s rate limits/terms (off by default) |
+   | `UNAVATAR_API_KEY` | No | Optional Unavatar key when Unavatar is opted in |
+   | `LOGO_DEV_TOKEN` | No | Overrides the built-in logo.dev publishable token used by ProposalKit |
+
+   **Client logo providers:** Brandfetch is used only when lookup is enabled and `BRANDFETCH_API_KEY` is set. Unavatar is disabled by default (avatar-oriented, low anonymous quota). Clearbit `logo.clearbit.com` is permanently disabled (sunset Dec 2025). Failures fall back to Drive assets, logo.dev (ProposalKit), a text wordmark, or no client logo — generation always continues. Client logos never replace the official 66degrees mark.
 
    Also required on that Cloud project:
    - **Vertex AI API** enabled (`aiplatform.googleapis.com`)

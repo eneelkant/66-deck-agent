@@ -25,6 +25,7 @@
     "EngineRenderer.gs",
     "Reference.gs",
     "ProposalKit.gs",
+    "ClientLogoProvider.gs",
     "Rebrand.gs",
     "Code.gs",
     "Generator.html",

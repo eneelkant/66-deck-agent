@@ -304,8 +304,8 @@ test("V. upload flow ingests mermaid into sources.diagrams", () => {
 
 test("W. progress helpers exist for diagram/icons stages in Code.gs", () => {
   const code = read("src/Code.gs");
-  assert.match(code, /\['diagram', 'Analyzing diagram'\]/);
+  assert.match(code, /\['diagram', 'Analyzing diagram'\]|\['diagram', 'Checking for structured diagram uploads'\]|Checking for structured diagram uploads/);
   assert.match(code, /\['icons', 'Selecting icons'\]/);
-  assert.match(code, /Rebuilding flowchart/);
+  assert.match(code, /Structured diagram attached|Rebuilding flowchart|No structured diagram upload/);
   assert.match(code, /Applying brand styling|Drawing the slides/);
 });
