@@ -1241,6 +1241,15 @@ function finalVoicePass_(slides, ctx) {
     }
     if (t === 'stats') { splitRangeValues_(sp); statsOneKind_(sp); dropWideRanges_(sp); }
     if (!trainsModels) walkText_(sp, groundedNotTrained_);
+    walkText_(sp, directStatement_);
+    cleanClientMarks_(sp, ctx);
+    if (t === 'stats') (sp.items || []).forEach(function (it) {
+      if (!it) return;
+      // "24.6%" -> "25%" on a slide (figures of 10 and more are shown whole)
+      if (typeof it.value === 'string') it.value = it.value.replace(/^(\D*)(\d{2,})\.(\d)(\s?%?)$/, function (m, a, n, d, u) { return a + Math.round(parseFloat(n + '.' + d)) + u; });
+      // "Maintain/Exceed NPS" -> "Maintain or exceed NPS"
+      if (typeof it.label === 'string') it.label = slashWords_(it.label);
+    });
     expandMetricNames_(sp);
     sentenceCaseHeadings_(sp);
     if (Array.isArray(sp.items)) sp.items.forEach(function (it) {
@@ -1278,6 +1287,11 @@ function dropWideRanges_(sp) {
 }
 // V.1_39: Gemini is grounded in the client's content, not trained on it ("train Gemini models with Apple-specific data")
 function groundedNotTrained_(str) {
+  // V.1_40: "Develops, trains, and deploys Gemini and Vertex AI Search models" -> "Develops, configures, and deploys Gemini and Vertex AI Search"
+  str = String(str || '').replace(/\b(train(?:s|ing)?|fine-?tun(?:es|ing)?)(,?\s+(?:and\s+)?(?:deploy|test|tun|optimi[sz]|evaluat)\w*[^.]{0,40}?\b(?:Gemini|Vertex AI))/gi, function (m, v, rest) {
+    const c = /ing$/i.test(v) ? 'configuring' : /s$/i.test(v) ? 'configures' : 'configure';
+    return (/^[A-Z]/.test(v) ? c.charAt(0).toUpperCase() + c.slice(1) : c) + rest;
+  }).replace(/\b(Vertex AI Search)\s+models?\b/g, '$1');
   return String(str || '').replace(/\b(train|trains|training|trained|fine-?tun(?:e|es|ing|ed))\s+(?:the\s+)?(?:Gemini|AI|LLMs?|foundation|language)(?:\s+(?:AI|language))?(?:\s+models?)?\s+(?:with|on|using)\s+((?:[\w&'’-]+\s+){0,3}?)(?:data|datasets?|content|information)\b/gi,
     function (m, verb, what) {
       const v = verb.toLowerCase();
@@ -1285,6 +1299,32 @@ function groundedNotTrained_(str) {
       const out = g + ' Gemini in ' + what + 'content';
       return /^[A-Z]/.test(m) ? out.charAt(0).toUpperCase() + out.slice(1) : out;
     });
+}
+// V.1_40: "AI is no longer a future concept; it is an immediate necessity" -> "AI is an immediate necessity"
+function directStatement_(str) {
+  return String(str || '')
+    .replace(/\b([A-Z][^.;:!?]{1,60}?)\s+(is|are)\s+no longer\s+[^.;:!?]{1,80}?[;,:—–-]\s*(?:it|they)\s+(?:is|are)\s+(?:now\s+)?/g, '$1 $2 ')
+    .replace(/\bnot just\s+([^,.;]{1,60}?),\s*but\s+(?:also\s+)?/gi, '');
+}
+// "Maintain/Exceed" -> "Maintain or exceed"; acronym pairs ("AI/ML", "CI/CD") stay
+function slashWords_(str) {
+  return String(str || '').replace(/\b([A-Za-z][a-z]{2,})\/([A-Za-z][a-z]{2,})\b/g, function (m, a, b) { return a + ' or ' + b.toLowerCase(); });
+}
+// V.1_40: "(client)" written into a role's text goes; a role title says "(client)" -> the client's name
+function cleanClientMarks_(sp, ctx) {
+  const client = String((ctx && (ctx.clientName || (ctx.proposal && ctx.proposal.client && ctx.proposal.client.name))) || '');
+  const fixText = function (x) { return String(x).replace(/\s*\((?:the\s+)?client\)\s*\.?\s*$/i, '').replace(/\s*\((?:the\s+)?client\)/gi, ''); };
+  const fixHead = function (x) { return client ? String(x).replace(/\((?:the\s+)?client\)/gi, '(' + client + ')') : String(x); };
+  (sp.items || []).forEach(function (it) {
+    if (!it || typeof it !== 'object') return;
+    if (typeof it.text === 'string') it.text = fixText(it.text);
+    if (typeof it.title === 'string') it.title = fixHead(it.title);
+  });
+  if (Array.isArray(sp.rows)) sp.rows.forEach(function (r) {
+    if (!Array.isArray(r)) return;
+    if (typeof r[0] === 'string') r[0] = fixHead(r[0]);
+    for (var c = 1; c < r.length; c++) if (typeof r[c] === 'string') r[c] = fixText(r[c]);
+  });
 }
 // V.1_39: metric short forms written out in labels and headings ("Reduction in AHT", "Boost in agent sat")
 const METRIC_NAMES_ = [
@@ -2392,7 +2432,7 @@ function keepNames_(str) {
   return out;
 }
 // Ordinary heading words that are never names: lower case inside a heading even when the rest looks like sentence case
-const COMMON_HEAD_WORDS_ = /^(state|future|current|approach|plan|strategy|leadership|prowess|track|record|delivery|value|impact|benefits?|challenges?|solutions?|results?|outcomes?|phase|process|team|data|security|model|service|support|experience|success|goals?|next|steps?|risks?|business|technical|proven|transformation|management|operations|performance|readiness|quality|integration|adoption|governance|costs?|growth|view|overview|roadmap|journey|capabilities|expertise|partner|partnership|framework|architecture|platform|insights?|efficiency|productivity|satisfaction|resolution|time|rate|scope|timeline|milestones?|deliverables?|objectives?|requirements?|recommendations?|decisions?|considerations?|summary|agents?|supervisors?|customers?|employees?|teams?|roles?|people|knowledge|search|analytics|automation|assistance|engagement|interactions?|channels?|stores?|retail|online)$/;
+const COMMON_HEAD_WORDS_ = /^(state|future|current|approach|plan|strategy|leadership|prowess|track|record|delivery|value|impact|benefits?|challenges?|solutions?|results?|outcomes?|phase|process|team|data|security|model|service|support|experience|success|goals?|next|steps?|risks?|business|technical|proven|transformation|management|operations|performance|readiness|quality|integration|adoption|governance|costs?|growth|view|overview|roadmap|journey|capabilities|expertise|partner|partnership|framework|architecture|platform|insights?|efficiency|productivity|satisfaction|resolution|time|rate|scope|timeline|milestones?|deliverables?|objectives?|requirements?|recommendations?|decisions?|considerations?|summary|agents?|supervisors?|customers?|employees?|teams?|roles?|people|knowledge|search|analytics|automation|assistance|engagement|interactions?|channels?|stores?|retail|online|lead|leads|architect|architects|engineer|engineers|manager|managers|analyst|analysts|owner|owners|sponsor|sponsors|director|directors|consultant|consultants|specialist|specialists|developer|developers|designer|designers|scientist|scientists|officer|coordinator|administrator|advisor|executive|executives|head|champion|champions|member|members)$/;
 function lowerCommonWords_(str) {
   const words = String(str || '').split(/(\s+)/);
   let start = true;
@@ -3332,11 +3372,18 @@ function replaceDuplicateSlides_(plan, ctx) {
   }
   // A "Next steps" slide only when the request asks for one (strict rule)
   const wantsNext = /next\s*steps?|call to action|\bcta\b|action plan/i.test(String(ctx.userPrompt || ''));
+  // V.1_40: slides removed by a strict rule (never shown: unrequested next steps, credentials, case studies, extra step
+  // slides, dividers...) vs. repeats (kept when no new slide can replace them, so the deck keeps its slide count)
+  const strictIdx = [];
+  let mark = dupIdx.length;
+  const markStrict = function () { dupIdx.slice(mark).forEach(function (i) { strictIdx.push(i); }); mark = dupIdx.length; };
   if (!wantsNext) plan.slides.forEach(function (sp, i) {
     if ((String(sp.type || '').toLowerCase() === 'next_steps' || /^\s*(your\s+)?next\s+steps?\b/i.test(String(sp.title || ''))) && dupIdx.indexOf(i) === -1) dupIdx.push(i);
   });
+  markStrict();
   // Topics repeated in other words, or one topic split over several slides: Gemini lists them, they get new topics
   topicRepeats_(plan, ctx).forEach(function (i) { if (dupIdx.indexOf(i) === -1) dupIdx.push(i); });
+  mark = dupIdx.length;
   // V.1_39: one "current state / future state" slide per deck (deck 15 had two with the same design)
   let beforeAfter = 0;
   plan.slides.forEach(function (sp, i) {
@@ -3354,6 +3401,7 @@ function replaceDuplicateSlides_(plan, ctx) {
       targetIdx.forEach(function (i) { if (i !== keepT && dupIdx.indexOf(i) === -1) dupIdx.push(i); });
     }
   }
+  markStrict();
   // The same topic in other words (checked in code): slides of one topic family, or slides whose item headings share most
   // word stems ("Agent assist / Self-service" twice). The richer slide is kept, the others get new topics.
   const families = {};
@@ -3387,6 +3435,7 @@ function replaceDuplicateSlides_(plan, ctx) {
       }
     }
   }
+  mark = dupIdx.length;
   // 66degrees credentials / services / accelerators only when the request asks for them
   if (!wantsCredentials_(ctx.userPrompt)) {
     plan.slides.forEach(function (sp, i) {
@@ -3428,6 +3477,7 @@ function replaceDuplicateSlides_(plan, ctx) {
   if (!/summary|takeaway|conclusion|recap|wrap[- ]?up/i.test(String(ctx.userPrompt || ''))) plan.slides.forEach(function (sp, i) {
     if (fillerSlide_(sp, i === lastBody) && dupIdx.indexOf(i) === -1) dupIdx.push(i);
   });
+  markStrict();
   // Client proof asked for but missing: one slot becomes a case study (a replaced slide, else a credentials slide)
   const wantsCase = CASE_REQUEST_RE_.test(String(ctx.userPrompt || ''));
   const hasCase = plan.slides.some(function (sp, i) { return String(sp.type || '').toLowerCase() === 'case_study' && dupIdx.indexOf(i) === -1; });
@@ -3440,6 +3490,7 @@ function replaceDuplicateSlides_(plan, ctx) {
     if (slot != null) dupIdx.push(slot);
     else needCase = false;
   }
+  mark = dupIdx.length;
   // Empty dividers ("section") and comparisons over the limit are replaced too
   const compMax = plan.slides.length >= 14 ? 2 : 1;
   let comps = 0;
@@ -3448,6 +3499,7 @@ function replaceDuplicateSlides_(plan, ctx) {
     if (t === 'section' && dupIdx.indexOf(i) === -1) dupIdx.push(i);
     if (t === 'comparison' && ++comps > compMax && dupIdx.indexOf(i) === -1) dupIdx.push(i);
   });
+  markStrict();
   // V.1_39: every topic the request lists gets a slide; a topic whose parts are listed ("phased plan (discovery, pilot in
   // one region, scale)") is rewritten when its slide shows other parts. Slots: the repeats above, then slides that cover
   // no requested topic (the least rich first).
@@ -3494,7 +3546,7 @@ function replaceDuplicateSlides_(plan, ctx) {
         'a "diagram" with center (the platform) and items[{title, text}] (4-6 components named as the request names them, each saying ' +
         'what it does and what it connects to); security or data approach = cards on how data is protected and governed (access, ' +
         'encryption, residency, monitoring), only what Google Cloud provides; team structure = cards whose items are roles ' +
-        '(title "Engagement lead", "Solution architect"..., text = what the role does; mark client roles "(client)"), never names of people; ' +
+        '(title "Engagement lead", "Solution architect"..., text = what the role does; a client role ends its TITLE with the client name in brackets, e.g. "Retail operations lead (Apple)", never "(client)" in the text), never names of people; ' +
         'a phased plan = a "process" slide whose items are exactly the phases listed.' : '',
       needCase ? 'The FIRST new slide MUST be a case study (type "case_study", one client) built ONLY on the approved client result below\n' +
         'whose work is closest to the request (the same kind of work: data platform, analytics, cost savings...). Fields: title (names the\n' +
@@ -3510,7 +3562,9 @@ function replaceDuplicateSlides_(plan, ctx) {
         (caseMax ? '' : 'No case study or client story slide. ') +
         (seqKept >= seqMax ? 'No process, steps, phases, cycle, lifecycle or framework slide: the deck already has its step-by-step slides. ' : '') + (keepsRoadmap ? 'The deck already has its roadmap: never write another roadmap, phases, ' +
         'quarters, timeline, quick wins or "early value" slide. ' : '') + 'No summary or "future of" slide.',
-      'Sentence-case titles, max 58 characters. No invented numbers, clients or quotes.',
+      'Sentence-case titles and headings (role names too: "Engagement lead"), max 58 characters. No invented numbers, clients or quotes.',
+      'Gemini and Vertex AI Search are configured and grounded in the client\'s content: never write that anyone trains them or builds "Vertex AI Search models".',
+      'Never write "X is no longer Y; it is Z" or "not just X, but Y": state the point directly. No outcome or target slide when the deck already has one.',
       'Return ONLY JSON: {"slides":[...]}'
     ].filter(Boolean).join('\n');
     const out = callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.6);
@@ -3543,6 +3597,11 @@ function replaceDuplicateSlides_(plan, ctx) {
     if (roadmapLike_(sp)) { if (roadmapNow) return false; roadmapNow = true; }
     if (!wantsCredentials_(ctx.userPrompt) && (credentialsContent_(sp) || /^(credentials|services)$/.test(String(topicFamily_(sp, ctx.userPrompt))))) return false;
     if (offTopicAi_(sp, ctx.userPrompt)) return false;
+    // V.1_40: a new slide never repeats the topic family of a kept slide ("Business outcomes" next to "Outcome targets")
+    const fam = topicFamily_(sp, ctx.userPrompt);
+    if (fam && fam !== 'roadmap' && keptSlides.some(function (k) { return topicFamily_(k, ctx.userPrompt) === fam; }) && !(askedFam[fam] > 1)) return false;
+    if (targetStatsSlide_(sp) && keptSlides.some(targetStatsSlide_)) return false;
+    if (beforeAfterSlide_(sp) && keptSlides.some(beforeAfterSlide_)) return false;
     const w = slideWords_(sp);
     if (keptWords.some(function (kw) { return overlap_(w, kw) >= 0.6; })) return false;
     keptWords.push(w);                                     // two new slides never repeat each other either
@@ -3550,11 +3609,28 @@ function replaceDuplicateSlides_(plan, ctx) {
   });
   let k = 0;
   const kept = [];
+  const keptBack = [];
   plan.slides.forEach(function (sp, i) {
     if (dupIdx.indexOf(i) === -1) { kept.push(sp); return; }
     // every removed slide gets a new one (the deck keeps the slide count asked for)
     if (fresh[k]) { removeHypeWords_(fresh[k]); tidyItemText_(fresh[k]); sentenceCaseHeadings_(fresh[k]); kept.push(fresh[k]); }
-    else ctx.log.push('No new topic was found for one removed slide.');
+    else {
+      // V.1_40: the deck keeps the slide count asked for (deck 16 had 19 of 20): a repeat stays rather than leaving a gap,
+      // except slides that must never be shown (an unrequested next-steps slide, an empty divider)
+      // the whole deck as it will be (kept slides, the new ones, slides already kept back) must still follow the limits
+      const ty = String(sp.type || '').toLowerCase();
+      const deckNow = keptSlides.concat(fresh).concat(keptBack);
+      const seqIn = deckNow.filter(function (x) { return !skip[String(x.type || '').toLowerCase()] && sequenceLike_(x); }).length;
+      const breaks = (sequenceLike_(sp) && seqIn >= seqMax) || (roadmapLike_(sp) && deckNow.some(roadmapLike_)) ||
+        (ty === 'case_study' && deckNow.filter(function (x) { return String(x.type || '').toLowerCase() === 'case_study'; }).length >= caseMax) ||
+        (beforeAfterSlide_(sp) && deckNow.some(beforeAfterSlide_)) || (targetStatsSlide_(sp) && deckNow.some(targetStatsSlide_)) ||
+        ty === 'section' || ty === 'next_steps' || (!wantsNext && /^\s*(your\s+)?next\s+steps?\b/i.test(String(sp.title || ''))) ||
+        (!wantsCredentials_(ctx.userPrompt) && (credentialsContent_(sp) || /^(credentials|services)$/.test(String(topicFamily_(sp, ctx.userPrompt))))) ||
+        offTopicAi_(sp, ctx.userPrompt) || fillerSlide_(sp, false);
+      if (strictIdx.indexOf(i) === -1 && !breaks) {
+        keptBack.push(sp); kept.push(sp); ctx.log.push('No new topic was found for "' + String(sp.title || '').slice(0, 60) + '": it stays.'); }
+      else ctx.log.push('No new topic was found for one removed slide.');
+    }
     k++;
   });
   plan.slides = kept;
@@ -3691,7 +3767,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_39';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_40';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
