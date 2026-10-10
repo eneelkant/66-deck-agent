@@ -419,10 +419,11 @@ function assertSamePresentation() {
   } else {
     ok("Generator.html does not use the obsolete generator heading");
   }
-  if (!/Prompt \+ docs|On-brand Google Slides/.test(html)) {
-    fail("Generator.html missing product subtitle");
+  // V.1_41: the header shows only "Deck Agent" (no subtitle line)
+  if (/On-brand Google Slides in minutes/.test(html)) {
+    fail("Generator.html must not show the old subtitle line");
   } else {
-    ok("Generator.html has product subtitle");
+    ok("Generator.html header has no subtitle line");
   }
   // V.1_36: the sidebar has no Department field (the server uses "Other" = every template slide)
   if (!/presentationType:\s*\S/.test(html) || !/slideCount:\s*\S/.test(html)) {

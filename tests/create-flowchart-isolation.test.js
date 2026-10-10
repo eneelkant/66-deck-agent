@@ -115,7 +115,8 @@ test("allowDiagramIngest true: raster enters diagram ingestion", () => {
 test("Flowchart mode forces flowchart type when Auto is selected", () => {
   const html = read("src/Generator.html");
   assert.match(html, /Auto \(flowchart\)/);
-  assert.match(html, /not converted into flowcharts/i);
+  // V.1_41: the Create tab no longer carries the long "pictures are not converted into flowcharts" note (the server still
+  // never converts Create uploads: allowDiagramIngest is false below)
   assert.match(html, /only place that turns a sketch/i);
 
   const code = read("src/Code.gs");
