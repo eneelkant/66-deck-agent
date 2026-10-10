@@ -191,9 +191,47 @@ function brandfetchLogo_(domain) {
 function findClientLogo_(client, ctx) {
   if (!client || !client.name) return null;
   LOGO_TRAIL_ = [];
+  // Optional ClientLogoProvider path (gated by CLIENT_LOGO_LOOKUP). Never replaces 66° branding.
+  if (typeof resolveClientLogo_ === 'function') {
+    try {
+      if (typeof resetClientLogoRunLimit_ === 'function') resetClientLogoRunLimit_();
+      const resolved = resolveClientLogo_({
+        companyName: client.name,
+        domain: client.domain || '',
+        uploadedBlob: client.uploadedLogo || null,
+        enabled: typeof clientLogoLookupEnabled_ === 'function' ? clientLogoLookupEnabled_() : false,
+        driveLookupFn: function (name) {
+          const d = findDriveLogo_(name);
+          if (!d) return null;
+          return { id: d.id, source: d.source };
+        }
+      });
+      if (resolved && resolved.kind === 'image' && (resolved.blob || resolved.id)) {
+        if (resolved.id && !resolved.blob) return { id: resolved.id, blob: null, source: resolved.source };
+        if (resolved.blob) {
+          try {
+            const ext = /jpe?g/i.test(resolved.blob.getContentType()) ? '.jpg' : '.png';
+            const file = clientLogoFolder_().createFile(resolved.blob.setName(client.name + ' logo' + ext));
+            return { id: file.getId(), blob: resolved.blob, source: resolved.source + ', saved to Drive' };
+          } catch (e) {
+            return { id: 'inline', blob: resolved.blob, source: resolved.source + ' (not saved to Drive: ' + e.message + ')' };
+          }
+        }
+      }
+      if (resolved && resolved.kind === 'wordmark') {
+        LOGO_TRAIL_.push('ClientLogoProvider wordmark: ' + resolved.text);
+        if (ctx) ctx.clientWordmark = resolved.text;
+        // Continue to legacy providers for a real image when possible.
+      }
+      if (resolved && resolved.trail) LOGO_TRAIL_ = LOGO_TRAIL_.concat(resolved.trail);
+    } catch (e) {
+      LOGO_TRAIL_.push('ClientLogoProvider: ' + e.message);
+    }
+  }
   const inDrive = findDriveLogo_(client.name);
   if (inDrive) return inDrive;
   LOGO_TRAIL_.push('Drive: none');
+  // Only enrich domain from Wikidata when the caller did not supply one — never from emails/uploads.
   if (!client.domain) { client.domain = wikidataDomain_(client.name) || ''; if (client.domain) LOGO_TRAIL_.push('domain from Wikidata: ' + client.domain); }
   let blob = logoDevLogo_(client.domain), source = 'logo.dev';
   if (!blob && !client.domain) {
@@ -227,11 +265,22 @@ function findClientLogo_(client, ctx) {
 /* ---------- 3. The proposal frame on every slide ---------- */
 // Once per deck: the client and its logo, and the section divider style (dark streaks by default, light 66° watermark
 // in about one proposal in three). Kept in the long-deck run state so every part of a long deck matches.
-function prepareProposal_(userPrompt, sources, ctx) {
+function prepareProposal_(userPrompt, sources, ctx, opts) {
   if (!isProposalDeck_(ctx) || ctx.proposal) return ctx.proposal || null;
+  opts = opts || {};
   const p = { client: null, logoId: '', sectionStyle: Math.random() < 1 / 3 ? 'light' : 'dark' };
   progressStage_(ctx, 'match', 'active', 'Finding the client and its logo');
-  const c = detectClient_(userPrompt, sources, ctx);
+  // Explicit sidebar client name/domain take precedence (never inferred from email/uploads alone).
+  let c = null;
+  const explicitName = String(opts.clientName || ctx.clientName || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  const explicitDomain = String(opts.clientDomain || ctx.clientDomain || '').trim();
+  if (explicitName) {
+    const norm = typeof normalizeClientDomain_ === 'function' ? normalizeClientDomain_(explicitDomain) : { ok: !!explicitDomain, domain: explicitDomain };
+    c = { name: explicitName, domain: norm.ok ? norm.domain : '' };
+    ctx.log.push('Client from sidebar: ' + c.name + (c.domain ? ' (' + c.domain + ')' : '') + '.');
+  } else {
+    c = detectClient_(userPrompt, sources, ctx);
+  }
   if (c) {
     p.client = c.name;
     const logo = findClientLogo_(c, ctx);

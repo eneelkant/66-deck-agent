@@ -135,9 +135,21 @@ function normalizeDiagramIr_(raw) {
     const id = String(n.id || ('n' + (i + 1))).replace(/\s+/g, '_').slice(0, 40);
     if (seen[id]) return;
     seen[id] = true;
+    const kind = n.kind ? String(n.kind).toLowerCase() : '';
+    // diagram-design semantics: kind carries role; shape (not fill) signals type.
+    let nodeType = String(n.type || '').toLowerCase();
+    if (!nodeType || nodeType === 'process') {
+      if (/^(start|end|terminator)$/.test(kind)) nodeType = 'terminator';
+      else if (/^decision$/.test(kind)) nodeType = 'decision';
+      else if (/^(data|io|input|output)$/.test(kind)) nodeType = 'data';
+      else if (/^(connector|merge|junction)$/.test(kind)) nodeType = 'connector';
+      else nodeType = nodeType || 'process';
+    }
+    if (/^(start|end)$/.test(nodeType)) nodeType = 'terminator';
+    if (/^(input|output|io)$/.test(nodeType)) nodeType = 'data';
     ir.nodes.push({
       id: id,
-      type: String(n.type || 'process').toLowerCase(),
+      type: nodeType,
       label: String(n.label || n.text || id).replace(/\s+/g, ' ').trim().slice(0, 80),
       x: isFinite(Number(n.x)) ? Number(n.x) : i * 140,
       y: isFinite(Number(n.y)) ? Number(n.y) : 0,
@@ -146,7 +158,7 @@ function normalizeDiagramIr_(raw) {
       emphasize: !!n.emphasize,
       iconConcept: n.iconConcept ? String(n.iconConcept).slice(0, 60) : '',
       sub: n.sub ? String(n.sub).replace(/\s+/g, ' ').trim().slice(0, 40) : '',
-      kind: n.kind ? String(n.kind).toLowerCase() : '',
+      kind: kind,
       group: n.group ? String(n.group) : ''
     });
   });
@@ -523,8 +535,9 @@ function diagramNodeShape_(nodeType) {
   const t = String(nodeType || 'process').toLowerCase();
   if (t === 'decision') return 'FLOW_CHART_DECISION';
   if (t === 'terminator' || t === 'start' || t === 'end') return 'FLOW_CHART_TERMINATOR';
-  if (t === 'data' || t === 'io') return 'FLOW_CHART_INPUT_OUTPUT';
-  return 'FLOW_CHART_PROCESS';
+  if (t === 'data' || t === 'io' || t === 'input' || t === 'output') return 'FLOW_CHART_INPUT_OUTPUT';
+  if (t === 'connector' || t === 'merge' || t === 'junction') return 'ELLIPSE';
+  return 'ROUND_RECTANGLE';
 }
 
 function layoutDiagramIrPositions_(ir, area) {
@@ -727,18 +740,27 @@ function layoutFlowchart_(ir, area) {
   let dir = 'LR';
   const perRowMax = Math.max(2, Math.floor((area.w + 26) / (84 + 26)));   // steps never narrower than ~84pt
   if (L > perRowMax) dir = maxW === 1 || L > 12 ? 'SNAKE' : 'TB2';
-  const gapX = 26, gapY = 18;
+  // diagram-design: deliberate whitespace — avoid cramped nodes and overlapping labels.
+  const gapX = 32, gapY = 22;
   const place = function (id, cx, cy, w, h) {
     const n = byId[id] || {};
     const isDecision = /decision/i.test(n.type || '');
-    const ww = isDecision ? Math.min(w, h * 2.4) : w, hh = isDecision ? h * 1.25 : h;
+    const isTerm = /terminator|start|end/i.test(n.type || '');
+    const isConn = /connector|merge|junction/i.test(n.type || '');
+    let ww = w, hh = h;
+    if (isDecision) { ww = Math.min(w, h * 2.4); hh = Math.min(h * 1.25, h + 10); }
+    else if (isTerm) { ww = Math.min(w, 132); hh = Math.max(30, Math.min(h, h * 0.92 + 2)); }
+    else if (isConn) { ww = hh = Math.min(28, Math.min(w, h)); }
+    ww = Math.min(ww, w);
+    hh = Math.min(hh, Math.max(h, isDecision ? h + 10 : h));
     pos[id] = { x: cx - ww / 2, y: cy - hh / 2, w: ww, h: hh, cx: cx, cy: cy };
   };
   if (dir === 'LR') {
     const colW = (area.w - gapX * (L - 1)) / L;
-    const nodeW = Math.min(150, colW);
+    // Never wider than the column — keeps terminators/decisions inside the slide area.
+    const nodeW = Math.min(148, Math.max(72, colW - 2));
     const rowH = Math.min(78, (area.h - gapY * (maxW - 1)) / maxW);
-    const nodeH = Math.max(34, Math.min(48, rowH - 6));
+    const nodeH = Math.max(34, Math.min(48, rowH - 8));
     const usedW = nodeW * L + gapX * (L - 1) + (colW - nodeW) * 0;
     const x0 = area.x + (area.w - (colW * L + gapX * (L - 1))) / 2;
     lay.layers.forEach(function (layer, i) {
@@ -791,12 +813,13 @@ function flowchartToElements_(ir, area) {
     const label = String(n.label || '');
     const size = label.length > 34 ? 9 : label.length > 22 ? 10 : 11;
     const textStyle = { size: size, color: n.textColor || DIAGRAM_BRAND.nightBlue, align: 'center', valign: 'middle' };
-    if (t === 'decision' || t === 'terminator' || t === 'start' || t === 'end' || t === 'data' || t === 'io') {
-      els.push({ t: 'shape', shape: diagramNodeShape_(t), x: p.x, y: p.y, w: p.w, h: p.h, fill: n.fill || DIAGRAM_BRAND.panel,
-        line: { color: n.stroke || DIAGRAM_BRAND.shark, width: 1 }, text: label, textStyle: textStyle });
-    } else {
+    const shape = diagramNodeShape_(t);
+    if (shape === 'ROUND_RECTANGLE' || shape === 'RECTANGLE') {
       els.push({ t: 'rect', x: p.x, y: p.y, w: p.w, h: p.h, fill: n.fill || DIAGRAM_BRAND.panel,
-        line: { color: n.stroke || DIAGRAM_BRAND.shark, width: 1 }, text: label, textStyle: textStyle });
+        line: { color: n.stroke || DIAGRAM_BRAND.shark, width: 1.25 }, text: label, textStyle: textStyle, rx: 6 });
+    } else {
+      els.push({ t: 'shape', shape: shape, x: p.x, y: p.y, w: p.w, h: p.h, fill: n.fill || DIAGRAM_BRAND.panel,
+        line: { color: n.stroke || DIAGRAM_BRAND.shark, width: 1.25 }, text: label, textStyle: textStyle });
     }
   });
   const seg = function (x1, y1, x2, y2, color, width, arrow) {

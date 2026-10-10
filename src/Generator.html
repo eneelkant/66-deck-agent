@@ -1029,7 +1029,7 @@
           </button>
           <button type="button" data-mode="Flowchart" role="tab">
             <strong>Flowchart</strong>
-            <small>Diagram slide</small>
+            <small>Image → flowchart</small>
           </button>
         </div>
 
@@ -1042,8 +1042,8 @@
         <!-- Flowchart: one editable, on-brand diagram slide from a description or a sketch / diagram file -->
         <div data-only="flowchart">
           <div class="flow-info">
-            <strong>Build a flowchart slide</strong>
-            Describe the steps, or upload a sketch, screenshot, PDF, PowerPoint or diagram file. Each diagram becomes an editable slide in the 66degrees style, drawn with diagram-design rules.
+            <strong>Convert a diagram into an editable flowchart</strong>
+            This tab is the only place that turns a sketch or diagram image into editable flowchart shapes. Describe the steps and/or upload a picture, PDF, PowerPoint, Mermaid, draw.io, Excalidraw or SVG. Output is diagram-focused (not a full deck plan), drawn with diagram-design layout rules.
           </div>
 
           <div class="field" id="flowField">
@@ -1075,7 +1075,7 @@
           <div class="field" id="flowTypeField">
             <div class="label"><span>Diagram type <span class="opt">(optional)</span></span></div>
             <div class="chips" id="flowTypes" role="group" aria-label="Diagram type (optional)">
-              <button type="button" class="active" aria-pressed="true" data-type="auto">Auto</button>
+              <button type="button" class="active" aria-pressed="true" data-type="auto">Auto (flowchart)</button>
               <button type="button" aria-pressed="false" data-type="flowchart">Flowchart</button>
               <button type="button" aria-pressed="false" data-type="process">Process</button>
               <button type="button" aria-pressed="false" data-type="swimlane">Swimlane</button>
@@ -1084,7 +1084,7 @@
               <button type="button" aria-pressed="false" data-type="layers">Layers</button>
               <button type="button" aria-pressed="false" data-type="loop">Loop</button>
             </div>
-            <div class="hint" id="flowTypeHint">Auto: diagram-design picks the best type for each slide.</div>
+            <div class="hint" id="flowTypeHint">Auto defaults to flowchart for this tab. Pick another type only when you need it.</div>
           </div>
 
           <!-- Slide meter (Flowchart) -->
@@ -1131,11 +1131,12 @@
                 </svg>
               </div>
               <strong>Drop files here or <span>choose files</span></strong>
-              <small>PDF, DOC/DOCX, XLS/XLSX, CSV, PPT/PPTX, TXT, JPG, PNG and more · up to 20 MB</small>
+              <small>PDF, CSV, TXT, PPTX, JPG, PNG and more · up to 20 MB</small>
             </div>
             <input id="fileInput" type="file" multiple hidden />
             <ul class="file-list" id="fileList"></ul>
             <div class="err" id="filesErr"></div>
+            <div class="hint">Uploaded pictures (PNG, JPG, WebP, GIF) are used as visual references for the deck — they are not converted into flowcharts. Use the Flowchart tab to turn a diagram image into editable shapes.</div>
           </div>
 
           <!-- Presentation Type (V.1_36: the options are in the page, so they show at once; no Department field) -->
@@ -1150,6 +1151,22 @@
                 <option value="Solution Deck">Solution Deck</option>
               </select>
             </div>
+          </div>
+
+          <!-- Optional client branding (Proposal Deck). External logo lookup stays off unless Script Properties enable it. -->
+          <div class="field" id="clientField" data-only="create">
+            <div class="label"><span>Client company <span class="opt">(Optional · Proposal Deck)</span></span></div>
+            <div class="row" style="gap:10px">
+              <div class="field" style="flex:1;margin:0">
+                <label for="clientName">Company name</label>
+                <input id="clientName" type="text" maxlength="60" placeholder="e.g. Acme Retail" autocomplete="organization" />
+              </div>
+              <div class="field" style="flex:1;margin:0">
+                <label for="clientDomain">Company domain</label>
+                <input id="clientDomain" type="text" maxlength="80" placeholder="e.g. acme.com" autocomplete="off" />
+              </div>
+            </div>
+            <div class="hint">Used for co-branded proposal slides. Domain lookup (Brandfetch) is optional and disabled by default. The 66degrees logo is never replaced.</div>
           </div>
 
           <!-- Slide count -->
@@ -1762,6 +1779,8 @@
           slideCount: Number($("slideCount").value),
           prompt: $("prompt").value.trim(),
           sourceUrl: $("sourceUrl").value.trim(),
+          clientName: ($("clientName") && $("clientName").value || "").trim(),
+          clientDomain: ($("clientDomain") && $("clientDomain").value || "").trim(),
           files: state.files.map(function (f) {
             return { name: f.name, mimeType: f.mimeType, size: f.size, data: f.data };
           })
