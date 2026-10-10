@@ -93,7 +93,7 @@ test("presentation type options show at once (in the page) and match the backend
   const boot = sandbox.getGeneratorBootstrap();
   assert.deepEqual(Array.from(boot.presentationTypes), ["Proposal Deck", "HR Leadership, Internal", "General", "Delivery Deck", "Solution Deck"]);
   assert.deepEqual(Array.from(boot.departments), Array.from(sandbox.DEPARTMENTS));
-  assert.match(html, /<label for="presentationType">Presentation Type<\/label>/);
+  assert.match(html, /<label for="presentationType">Deck type<\/label>/);   // V.1_41: "Presentation Type" -> "Deck type"
   assert.ok(sandbox.DEPARTMENTS.includes("Sales"));
 });
 

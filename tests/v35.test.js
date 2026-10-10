@@ -208,7 +208,7 @@ test("Presentation Type: label, the five types in order, guidance for each", () 
   g.DECK_TYPES_.forEach((t) => assert.ok(g.DECK_TYPE_GUIDANCE_[t], t));
   assert.match(g.DECK_TYPE_GUIDANCE_["HR Leadership, Internal"], /no 66degrees credentials/);
   const html = read("src/Generator.html");
-  assert.match(html, /<label for="presentationType">Presentation Type<\/label>/);
+  assert.match(html, /<label for="presentationType">Deck type<\/label>/);   // V.1_41: "Presentation Type" -> "Deck type"
   assert.doesNotMatch(html, /<label for="presentationType">Type<\/label>/);
   assert.equal(g.normalizePresentationType_(""), "General");
 });

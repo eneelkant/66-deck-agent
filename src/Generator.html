@@ -239,12 +239,16 @@
         flex-direction: column;
       }
 
-      /* Create: Topic → Source doc → Files → Type/Department → Slides */
-      #promptField { order: 1; }
-      #sourceField { order: 2; }
-      #filesField  { order: 3; }
-      #metaRow     { order: 4; grid-template-columns: 1fr; }   /* one field: Presentation Type, full width */
+      /* Create (V.1_41): Deck type → Client (Proposal Deck only) → Topic → Content source (link + files) → Slides */
+      #metaRow     { order: 0; grid-template-columns: 1fr; }   /* one field: Deck type, full width */
+      #clientField { order: 1; }
+      #promptField { order: 2; }
+      #sourceField { order: 3; margin-bottom: 8px; }
+      #filesField  { order: 4; }
       #slidesField { order: 5; }
+      #clientField > .row { display: flex !important; flex-direction: row !important; gap: 8px !important; }
+      #clientField > .row input { min-width: 0; }
+      #clientField[hidden] { display: none !important; }
 
       /* Rebrand has no inputs, only this info card */
       .rebrand-info {
@@ -1006,7 +1010,6 @@
         <div class="logo" aria-label="66 degrees">66<span class="deg"></span></div>
         <div>
           <h1>Deck Agent</h1>
-          <p>On-brand Google Slides in minutes</p>
         </div>
         <span class="pill" id="aiStatus"><i></i>Checking</span>
       </header>
@@ -1103,7 +1106,7 @@
         <div class="form" data-only="create">
           <!-- Topic -->
           <div class="field" id="promptField">
-            <label for="prompt">Presentation topic</label>
+            <label for="prompt">Topic</label>
             <textarea id="prompt" placeholder="e.g. Google Cloud migration roadmap for retail"></textarea>
             <div class="err" id="promptErr"></div>
           </div>
@@ -1111,19 +1114,15 @@
           <!-- Source document URL -->
           <div class="field" id="sourceField">
             <label for="sourceUrl">
-              <span>Source document <span class="opt">(Optional)</span></span>
+              <span>Content source</span>
             </label>
             <input id="sourceUrl" type="url" placeholder="Doc, Sheet, Slides, PDF or image link" />
             <div class="err" id="sourceErr"></div>
-            <div class="hint">Link a Google Doc, Sheet, Slides, PDF or image (JPG, PNG) to pull content from.</div>
           </div>
 
           <!-- File upload -->
           <div class="field" id="filesField">
-            <div class="label">
-              <span>Upload files <span class="opt">(Optional)</span></span>
-              <span class="opt" id="filesTotal"></span>
-            </div>
+            <span class="opt" id="filesTotal" style="align-self:flex-end"></span>
             <div class="drop" id="dropZone" role="button" tabindex="0" aria-label="Upload files">
               <div class="drop-icon">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1136,13 +1135,13 @@
             <input id="fileInput" type="file" multiple hidden />
             <ul class="file-list" id="fileList"></ul>
             <div class="err" id="filesErr"></div>
-            <div class="hint">Uploaded pictures (PNG, JPG, WebP, GIF) are used as visual references for the deck — they are not converted into flowcharts. Use the Flowchart tab to turn a diagram image into editable shapes.</div>
+            
           </div>
 
           <!-- Presentation Type (V.1_36: the options are in the page, so they show at once; no Department field) -->
           <div class="row" id="metaRow" data-only="create">
             <div class="field">
-              <label for="presentationType">Presentation Type</label>
+              <label for="presentationType">Deck type</label>
               <select id="presentationType">
                 <option value="Proposal Deck">Proposal Deck</option>
                 <option value="HR Leadership, Internal">HR Leadership, Internal</option>
@@ -1153,30 +1152,28 @@
             </div>
           </div>
 
-          <!-- Optional client branding (Proposal Deck). External logo lookup stays off unless Script Properties enable it. -->
+          <!-- Client branding: shown for a Proposal Deck only (V.1_41) -->
           <div class="field" id="clientField" data-only="create">
-            <div class="label"><span>Client company <span class="opt">(Optional · Proposal Deck)</span></span></div>
-            <div class="row" style="gap:10px">
+                        <div class="row" style="gap:10px">
               <div class="field" style="flex:1;margin:0">
-                <label for="clientName">Company name</label>
+                <label for="clientName">Client name</label>
                 <input id="clientName" type="text" maxlength="60" placeholder="e.g. Acme Retail" autocomplete="organization" />
               </div>
               <div class="field" style="flex:1;margin:0">
-                <label for="clientDomain">Company domain</label>
+                <label for="clientDomain">Website</label>
                 <input id="clientDomain" type="text" maxlength="80" placeholder="e.g. acme.com" autocomplete="off" />
               </div>
             </div>
-            <div class="hint">Used for co-branded proposal slides. Domain lookup (Brandfetch) is optional and disabled by default. The 66degrees logo is never replaced.</div>
+            
           </div>
 
           <!-- Slide count -->
           <div class="field" id="slidesField">
-            <label for="slideCountInput">Slides <span class="opt">(3–200)</span></label>
+            <label for="slideCountInput">Slides</label>
             <div class="slider">
               <input id="slideCount" type="range" min="3" max="200" value="8" aria-label="Slide count slider" />
               <input id="slideCountInput" type="number" min="3" max="200" step="1" value="8" />
             </div>
-            <div class="hint">Includes cover and Thank You slides.</div>
           </div>
         </div>
       </main>
@@ -1779,8 +1776,9 @@
           slideCount: Number($("slideCount").value),
           prompt: $("prompt").value.trim(),
           sourceUrl: $("sourceUrl").value.trim(),
-          clientName: ($("clientName") && $("clientName").value || "").trim(),
-          clientDomain: ($("clientDomain") && $("clientDomain").value || "").trim(),
+          // V.1_41: the client fields belong to a Proposal Deck only (hidden and not sent for other deck types)
+          clientName: isProposal_() ? ($("clientName") && $("clientName").value || "").trim() : "",
+          clientDomain: isProposal_() ? ($("clientDomain") && $("clientDomain").value || "").trim() : "",
           files: state.files.map(function (f) {
             return { name: f.name, mimeType: f.mimeType, size: f.size, data: f.data };
           })
@@ -1798,6 +1796,10 @@
         });
       }
 
+      // V.1_41: Client name and Website show only when the deck type is Proposal Deck
+      function isProposal_() { var sel = $("presentationType"); return !!sel && sel.value === "Proposal Deck"; }
+      function syncClientField_() { var cf = $("clientField"); if (cf) cf.hidden = !isProposal_(); }
+
       function bootstrap() {
         server()
           .withSuccessHandler(function (data) {
@@ -1810,6 +1812,7 @@
               fillSelect(sel, data.presentationTypes);
               if (data.presentationTypes.indexOf(had) !== -1) sel.value = had;
             }
+            syncClientField_();
             var pill = $("aiStatus");
             pill.className = "pill " + (data.hasVertexConfig ? "ok" : "warn");
             pill.innerHTML = "<i></i>";
@@ -2074,6 +2077,8 @@
       });
 
       setMode("Create");
+      $("presentationType").addEventListener("change", syncClientField_);
+      syncClientField_();
       bootstrap();
     </script>
   </body>
