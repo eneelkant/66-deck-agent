@@ -109,8 +109,12 @@ var ENGINE = (function () {
     if (all.length > cap) {
       var joined = kept.join(' ');
       var endAt = Math.max(joined.lastIndexOf('. '), joined.lastIndexOf('; '));
+      // V.1_40: else the last whole clause, closed with a full stop ("..., from chat to the app" -> "... customers use.")
+      var clauseAt = joined.lastIndexOf(', ');
       if (endAt > joined.length * 0.5) {
         kept = wrap(joined.slice(0, endAt + 1), w, font, weight, sz);      // last complete sentence
+      } else if (clauseAt > joined.length * 0.55 && /[.!?]$/.test(String(text).trim())) {
+        kept = wrap(joined.slice(0, clauseAt) + '.', w, font, weight, sz);
       } else {
         var last = kept[cap - 1];
         while (last.length && textWidth(last + '…', font, weight, sz) > w) last = last.slice(0, -1);
@@ -467,7 +471,8 @@ var ENGINE = (function () {
     var hw = cw - padL - 14 - numW - iconW, bw = cw - padL - 14;
     var hSize = uniformSize(items.map(function (it) { return it.title; }), hw, 36, { weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
     var headBlock = Math.max(linesBlock(items.map(function (it) { return it.title; }), hw, hSize, 600, 2), numbered ? 24 : 18);
-    var bSize = uniformSize(items.map(function (it) { return it.text; }), bw, avail - headBlock - 44, { weight: 400, max: TSZ.body, min: TSZ.body });
+    // V.1_40: long card texts go down half a point (all cards alike) before any text is cut with "…" (deck 16, slide 6)
+    var bSize = uniformSize(items.map(function (it) { return it.text; }), bw, avail - headBlock - 44, { weight: 400, max: TSZ.body, min: TSZ.body - 0.5 });
     var need = 0;
     items.forEach(function (it) { need = Math.max(need, 16 + headBlock + 10 + textH(it.text, bw, bSize) + 18 + hlNeed(items, bw, bSize)); });
     var ch = boxH(need, avail);
@@ -705,6 +710,11 @@ var ENGINE = (function () {
     var needT = 0;
     ms.forEach(function (m) { needT = Math.max(needT, 42 + 2 * lineHeight('sans', tlSize) + textH(m.text, colW - 24, tbSize) + 16); });
     var cardH = boxH(needT, BOTTOM - cardTop);
+    // V.1_40: labels that only count ("Phase 1", "Step 2") already number the columns: no second "01" in the card (deck 16)
+    var countedLabels = ms.length > 0 && ms.every(function (m, i) {
+      var lb = String(m.date || m.label || '').trim(), mm = lb.match(/^(?:phase|step|stage|wave|sprint|part)\s*0?(\d+)$/i);
+      return mm && Number(mm[1]) === i + 1;
+    });
     ms.forEach(function (m, i) {
       var x = CX + (colW + gap) * i;
       text(els, x, top, colW - 8, 14, m.date || m.label || '', { font: 'mono', weight: 500, max: 10, min: 10, color: T.blue, maxLines: 1 });
@@ -712,9 +722,10 @@ var ENGINE = (function () {
       line(els, x + 7, ly + 10, x + 7, cardTop, T.blue, 1);
       rect(els, x, cardTop, colW, cardH, T.bgLight);
       rect(els, x, cardTop, colW, 3, T.blue);
-      text(els, x + 12, cardTop + 14, colW - 24, 14, (i < 9 ? '0' : '') + (i + 1), { font: 'mono', weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 1, color: T.blue });
-      text(els, x + 12, cardTop + 34, colW - 24, 2 * lineHeight('sans', tlSize), m.title, { weight: 700, max: tlSize, min: tlSize, maxLines: 2, color: T.ink });
-      var by = cardTop + 42 + 2 * lineHeight('sans', tlSize);   // two title lines reserved in every column
+      var up = countedLabels ? 20 : 0;
+      if (!countedLabels) text(els, x + 12, cardTop + 14, colW - 24, 14, (i < 9 ? '0' : '') + (i + 1), { font: 'mono', weight: 600, max: TSZ.heading, min: TSZ.heading, maxLines: 1, color: T.blue });
+      text(els, x + 12, cardTop + 34 - up, colW - 24, 2 * lineHeight('sans', tlSize), m.title, { weight: 700, max: tlSize, min: tlSize, maxLines: 2, color: T.ink });
+      var by = cardTop + 42 - up + 2 * lineHeight('sans', tlSize);   // two title lines reserved in every column
       text(els, x + 12, by, colW - 24, cardTop + cardH - by - 12, m.text, { weight: 400, max: tbSize, min: tbSize, color: T.body });
     });
     return { bg: T.white, els: els };
@@ -883,18 +894,23 @@ var ENGINE = (function () {
     if (s.text) text(els, CX + 18, y + st.height + 24, leftW - 18, tx.height + 4, s.text, { weight: 400, max: tx.size, min: tx.size, maxLines: 7, color: T.body });
     if (points.length) {
       var px = CX + leftW + 24, pw = CW - leftW - 24, gap = 12, pTop = top, pAvail = BOTTOM - pTop;
-      var hSize = uniformSize(points.map(function (p) { return p.title || p; }), pw - 28, 34, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2 });
+      // V.1_40: a point's heading is its title (a text-only point has none) - never "[object Object]" (deck 16, slide 5)
+      var headOf = function (p) { return typeof p === 'string' ? p : String((p && (p.title || p.label)) || ''); };
+      var bodyOf = function (p) { return typeof p === 'string' ? '' : String((p && p.text) || ''); };
+      var heads = points.map(headOf).filter(function (x) { return x; });
+      var hSize = heads.length ? uniformSize(heads, pw - 28, 34, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2 }) : TSZ.heading;
       var ch = (pAvail - gap * (points.length - 1)) / points.length;
-      var hBlk = linesBlock(points.map(function (p) { return p.title || p; }), pw - 28, hSize, 500, 2);
-      var bSize = uniformSize(points.map(function (p) { return p.text || ''; }), pw - 28, ch - hBlk - 30, { weight: 400, max: TSZ.body, min: TSZ.body });
+      var hBlk = heads.length ? linesBlock(heads, pw - 28, hSize, 500, 2) : 0;
+      var bSize = uniformSize(points.map(bodyOf), pw - 28, ch - hBlk - 30, { weight: 400, max: TSZ.body, min: TSZ.body });
       points.forEach(function (p, i) {
         var yy = pTop + i * (ch + gap);
         rect(els, px, yy, pw, ch, T.white, { color: T.cardLine, width: 0.75 });
-        var h = text(els, px + 14, yy + 12, pw - 28, 34, p.title || p, { weight: 500, max: hSize, min: hSize, maxLines: 2, color: T.ink });
-        text(els, px + 14, yy + 18 + h.height, pw - 28, ch - h.height - 28, p.text || '', { weight: 400, max: bSize, min: bSize, color: T.body });
+        var hd = headOf(p);
+        var h = hd ? text(els, px + 14, yy + 12, pw - 28, 34, hd, { weight: 500, max: hSize, min: hSize, maxLines: 2, color: T.ink }) : { height: -6 };
+        text(els, px + 14, yy + 18 + h.height, pw - 28, ch - h.height - 28, bodyOf(p), { weight: 400, max: bSize, min: bSize, color: T.body });
       });
     }
-    return { bg: T.bgLight, els: els };
+    return { bg: PROPOSAL_MODE_ ? T.white : T.bgLight, els: els };
   };
 
   // Axis maximum with 4 round gridline steps (1, 2 or 5 x 10^k), so labels read 10% / 20% / 30% / 40%, never 6.3%
