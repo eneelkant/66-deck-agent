@@ -158,18 +158,18 @@ test("Home Depot deck 2: base layouts cannot reach General designs in a Proposal
   assert.match(src, /no logo found: ' \+ LOGO_TRAIL_/, "the result message says what each logo source answered");
 });
 
-test("logo.dev is used first (after Drive), with fallback=404 so no made-up monogram; domain from Wikidata or name.com", () => {
+test("V.1_38: no built-in logo.dev key; logo.dev only with a LOGO_DEV_TOKEN script property", () => {
   const src = read("src/ProposalKit.gs");
-  const i = (k) => src.indexOf(k);
-  assert.ok(i("findDriveLogo_(client.name)") < i("logoDevLogo_(client.domain)") && i("logoDevLogo_(client.domain)") < i("wikidataLogo_(client.name, client.domain)"));
-  assert.match(src, /img\.logo\.dev\/' \+ encodeURIComponent\(domain\)/);
-  assert.match(src, /fallback=404/);
+  assert.doesNotMatch(src, /pk_[A-Za-z0-9]/, "no personal key in the code");
   assert.match(src, /LOGO_DEV_TOKEN/);
   const fetched = [];
-  const g = load({ UrlFetchApp: { fetch: (u) => { fetched.push(u); return { getResponseCode: () => 200, getBlob: () => ({ getContentType: () => "image/png", getBytes: () => new Array(5000), setName() { return this; } }) }; } },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }) } });
-  assert.ok(g.logoDevLogo_("apple.com"));
-  assert.match(fetched[0], /^https:\/\/img\.logo\.dev\/apple\.com\?token=pk_/);
+  const fetch = (u) => { fetched.push(u); return { getResponseCode: () => 200, getBlob: () => ({ getContentType: () => "image/png", getBytes: () => new Array(5000), setName() { return this; } }) }; };
+  const g = load({ UrlFetchApp: { fetch }, PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }) } });
+  assert.equal(g.logoDevLogo_("apple.com"), null);
+  assert.equal(fetched.length, 0, "no logo.dev request without a token");
+  const g2 = load({ UrlFetchApp: { fetch }, PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k === "LOGO_DEV_TOKEN" ? "tok" : null) }) } });
+  assert.ok(g2.logoDevLogo_("apple.com"));
+  assert.match(fetched[0], /^https:\/\/img\.logo\.dev\/apple\.com\?token=tok/);
 });
 
 test("Apple deck: client from the request when Gemini is unsure; the logo is used even if Drive cannot save it", () => {

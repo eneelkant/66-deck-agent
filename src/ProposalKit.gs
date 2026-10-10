@@ -97,6 +97,27 @@ function fetchImage_(url, minBytes, label) {
     return blob;
   } catch (e) { LOGO_TRAIL_.push((label || 'image') + ': ' + e.message); return null; }
 }
+// V.1_38: pixel width of a PNG / GIF / JPEG (0 when unknown) — tiny site icons are kept only as a last resort
+function imageWidth_(blob) {
+  try {
+    const b = blob.getBytes();
+    const u = function (i) { return b[i] & 0xff; };
+    if (u(0) === 0x89 && u(1) === 0x50) return (u(16) << 24 | u(17) << 16 | u(18) << 8 | u(19)) >>> 0;
+    if (u(0) === 0x47 && u(1) === 0x49) return u(6) | u(7) << 8;
+    if (u(0) === 0xff && u(1) === 0xd8) {
+      let i = 2;
+      while (i + 9 < b.length) {
+        if (u(i) !== 0xff) { i++; continue; }
+        const m = u(i + 1);
+        if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return u(i + 7) << 8 | u(i + 8);
+        i += 2 + (u(i + 2) << 8 | u(i + 3));
+      }
+    }
+  } catch (e) {}
+  return 0;
+}
+var LOGO_MIN_WIDTH_ = 96;
+
 function fetchJson_(url, label) {
   try {
     const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'Api-User-Agent': '66DeckAgent/1.0 (Google Apps Script add-on)' } });
@@ -106,11 +127,20 @@ function fetchJson_(url, label) {
 }
 
 // Wikipedia: the page's lead image is the company logo for most companies (the infobox logo)
-function wikipediaLogo_(name) {
+function wikipediaLogo_(name, retried) {
   const s = fetchJson_('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(String(name).replace(/ /g, '_')), 'Wikipedia');
-  if (!s || s.type === 'disambiguation') { if (s) LOGO_TRAIL_.push('Wikipedia: several pages with this name'); return null; }
-  const desc = String(s.description || '') + ' ' + String(s.extract || '').slice(0, 300);
-  if (!/compan|corporat|retailer|brand|business|bank|firm|organi[sz]ation|group|chain|manufacturer|provider|airline|university/i.test(desc)) { LOGO_TRAIL_.push('Wikipedia: page is not a company'); return null; }
+  const desc = s ? String(s.description || '') + ' ' + String(s.extract || '').slice(0, 300) : '';
+  const isCompany = s && s.type !== 'disambiguation' && /compan|corporat|retailer|brand|business|bank|firm|organi[sz]ation|group|chain|manufacturer|provider|airline|university/i.test(desc);
+  if (!isCompany) {
+    if (s) LOGO_TRAIL_.push('Wikipedia: "' + name + '" is ' + (s.type === 'disambiguation' ? 'several pages' : 'not a company page'));
+    // V.1_38: "Apple" is the fruit -> search "Apple company" and use the first page ("Apple Inc."), once
+    if (retried) return null;
+    const q = fetchJson_('https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch=' + encodeURIComponent(name + ' company'), 'Wikipedia search');
+    const hit = q && q.query && q.query.search && q.query.search[0] && q.query.search[0].title;
+    if (!hit || hit === name) return null;
+    LOGO_TRAIL_.push('Wikipedia search: ' + hit);
+    return wikipediaLogo_(hit, true);
+  }
   const img = (s.originalimage && s.originalimage.source) || (s.thumbnail && s.thumbnail.source);
   if (!img || !/logo|\.svg/i.test(img)) { LOGO_TRAIL_.push('Wikipedia: page image is not a logo'); return null; }
   // SVG originals: ask for a PNG thumbnail
@@ -152,11 +182,14 @@ function wikidataLogo_(name, domain) {
 
 // logo.dev (publishable token; script property LOGO_DEV_TOKEN overrides the built-in one). fallback=404 so an
 // unknown company never gets a generated monogram instead of its real logo.
-var LOGO_DEV_DEFAULT_TOKEN_ = 'pk_fr2f38609959838aac17b3';
+// V.1_38: no built-in token. logo.dev is used only if someone sets the script property LOGO_DEV_TOKEN; the client
+// logos come from ClientLogoProvider.gs (Brandfetch with a key, Unavatar without one).
+var LOGO_DEV_DEFAULT_TOKEN_ = '';
 function logoDevLogo_(domain) {
   if (!domain) return null;
   let token = LOGO_DEV_DEFAULT_TOKEN_;
   try { token = PropertiesService.getScriptProperties().getProperty('LOGO_DEV_TOKEN') || token; } catch (e) {}
+  if (!token) return null;
   return fetchImage_('https://img.logo.dev/' + encodeURIComponent(domain) + '?token=' + encodeURIComponent(token) +
     '&size=400&format=png&retina=true&fallback=404', 1200, 'logo.dev');
 }
@@ -191,15 +224,21 @@ function brandfetchLogo_(domain) {
 function findClientLogo_(client, ctx) {
   if (!client || !client.name) return null;
   LOGO_TRAIL_ = [];
-  // Optional ClientLogoProvider path (gated by CLIENT_LOGO_LOOKUP). Never replaces 66° branding.
+  let smallIcon = null;
+  // V.1_38: know the company's website before asking ClientLogoProvider (Unavatar / Brandfetch need a domain).
+  // Order: domain from the sidebar or Gemini, then Wikidata, then the plain .com of the name ("Home Depot" -> homedepot.com).
+  if (!client.domain) { client.domain = wikidataDomain_(client.name) || ''; if (client.domain) LOGO_TRAIL_.push('domain from Wikidata: ' + client.domain); }
+  const guessedDomain = client.domain ? '' : String(client.name).toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]+/g, '') + '.com';
+  if (guessedDomain) LOGO_TRAIL_.push('domain guessed: ' + guessedDomain);
+  // ClientLogoProvider (Drive, Brandfetch with a key, Unavatar) — on unless CLIENT_LOGO_LOOKUP=false. Never replaces 66° branding.
   if (typeof resolveClientLogo_ === 'function') {
     try {
       if (typeof resetClientLogoRunLimit_ === 'function') resetClientLogoRunLimit_();
       const resolved = resolveClientLogo_({
         companyName: client.name,
-        domain: client.domain || '',
+        domain: client.domain || guessedDomain,
         uploadedBlob: client.uploadedLogo || null,
-        enabled: typeof clientLogoLookupEnabled_ === 'function' ? clientLogoLookupEnabled_() : false,
+        enabled: typeof clientLogoLookupEnabled_ === 'function' ? clientLogoLookupEnabled_() : true,
         driveLookupFn: function (name) {
           const d = findDriveLogo_(name);
           if (!d) return null;
@@ -207,8 +246,14 @@ function findClientLogo_(client, ctx) {
         }
       });
       if (resolved && resolved.kind === 'image' && (resolved.blob || resolved.id)) {
+        if (guessedDomain && resolved.source !== 'user-upload' && !/drive|project/i.test(resolved.source || '')) client.domain = guessedDomain;
         if (resolved.id && !resolved.blob) return { id: resolved.id, blob: null, source: resolved.source };
-        if (resolved.blob) {
+        const w = resolved.blob ? imageWidth_(resolved.blob) : 0;
+        if (resolved.blob && resolved.source !== 'user-upload' && w && w < LOGO_MIN_WIDTH_) {
+          // a small site icon (Unavatar often answers 32-48 px): keep it, but first look for the full logo
+          LOGO_TRAIL_.push('ClientLogoProvider (' + resolved.source + '): only a ' + w + ' px icon, looking for the full logo');
+          smallIcon = { blob: resolved.blob, source: 'the company website icon (' + resolved.source + ')' };
+        } else if (resolved.blob) {
           try {
             const ext = /jpe?g/i.test(resolved.blob.getContentType()) ? '.jpg' : '.png';
             const file = clientLogoFolder_().createFile(resolved.blob.setName(client.name + ' logo' + ext));
@@ -220,8 +265,7 @@ function findClientLogo_(client, ctx) {
       }
       if (resolved && resolved.kind === 'wordmark') {
         LOGO_TRAIL_.push('ClientLogoProvider wordmark: ' + resolved.text);
-        if (ctx) ctx.clientWordmark = resolved.text;
-        // Continue to legacy providers for a real image when possible.
+        // V.1_38: no text-name logo — continue to the other sources for a real image.
       }
       if (resolved && resolved.trail) LOGO_TRAIL_ = LOGO_TRAIL_.concat(resolved.trail);
     } catch (e) {
@@ -231,26 +275,25 @@ function findClientLogo_(client, ctx) {
   const inDrive = findDriveLogo_(client.name);
   if (inDrive) return inDrive;
   LOGO_TRAIL_.push('Drive: none');
-  // Only enrich domain from Wikidata when the caller did not supply one — never from emails/uploads.
-  if (!client.domain) { client.domain = wikidataDomain_(client.name) || ''; if (client.domain) LOGO_TRAIL_.push('domain from Wikidata: ' + client.domain); }
   let blob = logoDevLogo_(client.domain), source = 'logo.dev';
   if (!blob && !client.domain) {
     // last try: the plain .com of the name ("Home Depot" -> homedepot.com); logo.dev answers 404 when it is not a company
-    const guess = String(client.name).toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]+/g, '') + '.com';
-    blob = logoDevLogo_(guess);
-    if (blob) client.domain = guess;
+    blob = logoDevLogo_(guessedDomain);
+    if (blob) client.domain = guessedDomain;
   }
   if (!blob) {
-    // logo.dev name lookup ("Apple") when no domain worked
+    // logo.dev name lookup ("Apple") when no domain worked (only with a LOGO_DEV_TOKEN)
     let token = LOGO_DEV_DEFAULT_TOKEN_;
     try { token = PropertiesService.getScriptProperties().getProperty('LOGO_DEV_TOKEN') || token; } catch (e) {}
-    blob = fetchImage_('https://img.logo.dev/name/' + encodeURIComponent(client.name) + '?token=' + encodeURIComponent(token) + '&size=400&format=png&retina=true&fallback=404', 1200, 'logo.dev (name)');
+    if (token) blob = fetchImage_('https://img.logo.dev/name/' + encodeURIComponent(client.name) + '?token=' + encodeURIComponent(token) + '&size=400&format=png&retina=true&fallback=404', 1200, 'logo.dev (name)');
   }
   if (!blob) { blob = brandfetchLogo_(client.domain); source = 'Brandfetch'; }
   if (!blob) { blob = wikidataLogo_(client.name, client.domain); source = 'the official logo on Wikimedia Commons'; }
   if (!blob) { blob = wikipediaLogo_(client.name); source = 'Wikipedia'; }
-  if (!blob && client.domain) { blob = fetchImage_('https://www.google.com/s2/favicons?sz=256&domain=' + encodeURIComponent(client.domain), 2500, 'Website icon'); source = 'the company website icon'; }
-  if (!blob && !client.domain) LOGO_TRAIL_.push('Website icon: no domain known');
+  if (!blob && smallIcon) { blob = smallIcon.blob; source = smallIcon.source; }
+  const iconDomain = client.domain || guessedDomain;
+  if (!blob && iconDomain) { blob = fetchImage_('https://www.google.com/s2/favicons?sz=256&domain=' + encodeURIComponent(iconDomain), 2500, 'Website icon'); source = 'the company website icon'; }
+  if (!blob && !iconDomain) LOGO_TRAIL_.push('Website icon: no domain known');
   if (!blob) return null;
   try {
     const ext = /jpe?g/i.test(blob.getContentType()) ? '.jpg' : '.png';

@@ -5,13 +5,13 @@
  * (Drive assets, logo.dev) with a guarded provider chain. Never replaces 66degrees branding.
  *
  * Provider status (verified 2026-03):
- *  - Brandfetch Brand API: requires Bearer API key (script property BRANDFETCH_API_KEY).
- *    Enabled only when CLIENT_LOGO_LOOKUP=true and the key is present.
- *  - Unavatar (unavatar.io): avatar-oriented; anonymous ~25 req/day/IP. Disabled by default
- *    (CLIENT_LOGO_UNAVATAR=true to opt in). Prefer Brandfetch when a key is available.
+ *  - Lookup is ON by default for Proposal Decks (V.1_38); CLIENT_LOGO_LOOKUP=false switches it off.
+ *  - Brandfetch Brand API: used when a Bearer API key is set (script property BRANDFETCH_API_KEY).
+ *  - Unavatar (unavatar.io): no key needed (anonymous ~25 req/day/IP; UNAVATAR_API_KEY raises it). ON by default
+ *    (CLIENT_LOGO_UNAVATAR=false switches it off). Brandfetch is tried first when a key is available.
  *  - Clearbit logo.clearbit.com: sunset December 2025 — permanently disabled.
  *
- * Fallback order: uploaded → Drive/project asset → Brandfetch → Unavatar (opt-in) →
+ * Fallback order: uploaded → Drive/project asset → Brandfetch (with key) → Unavatar →
  * text wordmark → none. Failures are nonfatal.
  */
 
@@ -57,9 +57,10 @@ var CLIENT_LOGO_RUN_COUNT_ = 0;
 function clientLogoLookupEnabled_() {
   try {
     const v = PropertiesService.getScriptProperties().getProperty('CLIENT_LOGO_LOOKUP');
-    return String(v || '').toLowerCase() === 'true' || String(v || '') === '1';
+    if (v == null || v === '') return true;                     // V.1_38: on unless switched off
+    return String(v).toLowerCase() === 'true' || String(v) === '1';
   } catch (e) {
-    return false;
+    return true;
   }
 }
 
@@ -68,7 +69,8 @@ function clientLogoProviderOptIn_(id) {
     const props = PropertiesService.getScriptProperties();
     if (id === 'unavatar') {
       const v = props.getProperty('CLIENT_LOGO_UNAVATAR');
-      return String(v || '').toLowerCase() === 'true' || String(v || '') === '1';
+      if (v == null || v === '') return true;                   // V.1_38: on unless switched off
+      return String(v).toLowerCase() === 'true' || String(v) === '1';
     }
     if (id === 'brandfetch') return true; // gated by CLIENT_LOGO_LOOKUP + key
   } catch (e) {}
