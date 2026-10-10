@@ -292,14 +292,19 @@ test("cache hit and negative-cache behavior", () => {
   assert.ok(g2._fetches.length <= nFail + 0 || g2._cache["clogo:bf:nope.example"] === "__none__");
 });
 
-test("Clearbit permanently disabled; Unavatar off by default", () => {
+test("Clearbit permanently disabled; V.1_38: lookup and Unavatar ON unless switched off", () => {
   const g = loadProvider({ props: { CLIENT_LOGO_LOOKUP: "true" } });
   assert.equal(g.clearbitClientLogo_().ok, false);
   assert.match(g.clearbitClientLogo_().reason, /sunset/i);
-  assert.equal(g.clientLogoProviderOptIn_("unavatar"), false);
-  const r = g.resolveClientLogo_({ companyName: "Acme", domain: "acme.com", enabled: true });
-  assert.ok(!g._fetches.some((f) => /clearbit|unavatar/i.test(f.url)));
-  assert.ok(r.kind === "wordmark" || r.kind === "none");
+  assert.equal(g.clientLogoProviderOptIn_("unavatar"), true, "Unavatar on when the property is not set");
+  g.resolveClientLogo_({ companyName: "Acme", domain: "acme.com", enabled: true });
+  assert.ok(!g._fetches.some((f) => /clearbit/i.test(f.url)), "never Clearbit");
+  assert.ok(g._fetches.some((f) => /^https:\/\/unavatar\.io\/acme\.com\?fallback=false$/.test(f.url)), "Unavatar asked, no key needed");
+  // switched off explicitly
+  const off = loadProvider({ props: { CLIENT_LOGO_LOOKUP: "true", CLIENT_LOGO_UNAVATAR: "false" } });
+  assert.equal(off.clientLogoProviderOptIn_("unavatar"), false);
+  const none = loadProvider({ props: { CLIENT_LOGO_LOOKUP: null } });
+  assert.equal(none.clientLogoLookupEnabled_(), true, "lookup on when CLIENT_LOGO_LOOKUP is not set");
 });
 
 test("uploaded logo wins; 66degrees branding never replaced by module", () => {

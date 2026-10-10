@@ -228,11 +228,11 @@ Ordinary users do **not** install better-icons MCP, Bun, or any local icon serve
    | `VERTEX_MODEL` | No | Default `gemini-2.5-flash` |
    | `SCITE_API_KEY` | No | Academic research; Vertex Search/knowledge is the fallback |
    | `BEAUTIFUL_AI_KEY` | No | Unused unless `CONFIG.useBeautifulAi` is turned on |
-   | `CLIENT_LOGO_LOOKUP` | No | Set to `true` to enable optional Brandfetch client-logo lookup (off by default) |
-   | `BRANDFETCH_API_KEY` | No | Bearer key for Brandfetch Brand API when `CLIENT_LOGO_LOOKUP=true` |
-   | `CLIENT_LOGO_UNAVATAR` | No | Set to `true` only if you accept Unavatar’s rate limits/terms (off by default) |
-   | `UNAVATAR_API_KEY` | No | Optional Unavatar key when Unavatar is opted in |
-   | `LOGO_DEV_TOKEN` | No | Overrides the built-in logo.dev publishable token used by ProposalKit |
+   | `CLIENT_LOGO_LOOKUP` | No | Client-logo lookup for Proposal Decks (Drive, Brandfetch, Unavatar). **On** unless set to `false` |
+   | `BRANDFETCH_API_KEY` | No | Brandfetch secret key (Bearer). Without it Brandfetch is skipped |
+   | `CLIENT_LOGO_UNAVATAR` | No | Unavatar (no key, about 25 lookups a day). **On** unless set to `false` |
+   | `UNAVATAR_API_KEY` | No | Optional Unavatar key for more lookups a day |
+   | `LOGO_DEV_TOKEN` | No | logo.dev token. There is no built-in token; logo.dev is skipped without it |
 
    **Client logo providers:** Brandfetch is used only when lookup is enabled and `BRANDFETCH_API_KEY` is set. Unavatar is disabled by default (avatar-oriented, low anonymous quota). Clearbit `logo.clearbit.com` is permanently disabled (sunset Dec 2025). Failures fall back to Drive assets, logo.dev (ProposalKit), a text wordmark, or no client logo — generation always continues. Client logos never replace the official 66degrees mark.
 
