@@ -471,15 +471,20 @@ var ENGINE = (function () {
     var need = 0;
     items.forEach(function (it) { need = Math.max(need, 16 + headBlock + 10 + textH(it.text, bw, bSize) + 18 + hlNeed(items, bw, bSize)); });
     var ch = boxH(need, avail);
+    var lastRowN = n - cols * (rows - 1);
     items.forEach(function (it, i) {
       var c = i % cols, r = Math.floor(i / cols), x = CX + c * (cw + gap), y = top + r * (ch + gap);
+      var cwBase = cw;
+      // V.1_39: a short last row (5 cards = 3 + 2) spreads over the full width, no empty slot
+      if (r === rows - 1 && lastRowN < cols) { cw = (CW - gap * (lastRowN - 1)) / lastRowN; x = CX + c * (cw + gap); }
       if (style === 'elevated') rect(els, x, y, cw, ch, T.white, { color: T.cardLine, width: 0.75 });
       else rect(els, x, y, cw, ch, T.bgLight);
       if (style === 'rule') rect(els, x, y, 3.5, ch, T.blue);
       if (numbered) text(els, x + padL, y + 13, numW, 26, pad2(i + 1), { font: 'mono', weight: 600, max: 20, min: 16, maxLines: 1, color: T.blue });
       else icon(els, it, x + cw - 14 - 18, y + 16, 18, false);
-      text(els, x + padL + numW, y + 16 + (numbered ? 3 : 0), hw, headBlock, it.title, { weight: 600, max: hSize, min: hSize, maxLines: 2, color: T.ink });
-      cardBody(els, x + padL, y + 16 + headBlock + 10, bw, ch - headBlock - 44, it, bSize, items);
+      text(els, x + padL + numW, y + 16 + (numbered ? 3 : 0), hw + (cw - cwBase), headBlock, it.title, { weight: 600, max: hSize, min: hSize, maxLines: 2, color: T.ink });
+      cardBody(els, x + padL, y + 16 + headBlock + 10, bw + (cw - cwBase), ch - headBlock - 44, it, bSize, items);
+      cw = cwBase;
     });
     return { bg: style === 'elevated' ? T.bgLight : T.white, els: els };
   };
@@ -789,7 +794,8 @@ var ENGINE = (function () {
     var ph = boxH(Math.max(panelHeight(left), panelHeight(right)), avail);
     panel(els, CX, top, pw, ph, T.blue, headerText(left, pw - 20), left.points, left.text);
     panel(els, CX + pw + gap, top, pw, ph, T.ink, headerText(right, pw - 20), right.points, right.text);
-    return { bg: T.bgLight, els: els };
+    // V.1_39: a Proposal Deck keeps one background on every content slide (deck 15: two grey slides among cream ones)
+    return { bg: PROPOSAL_MODE_ ? T.white : T.bgLight, els: els };
   };
 
   L.next_steps = function (s, ctx) {
@@ -836,7 +842,13 @@ var ENGINE = (function () {
     }
     var lw = side ? 400 : CW;
     var listH;
-    if (side) listH = bulletList(els, CX, top, lw, BOTTOM - top, s.points, { max: TSZ.body + 0.5, min: TSZ.body + 0.5, gap: 12 });
+    if (side) {
+      // V.1_39: the points spread down the slide next to the panel instead of leaving the lower half empty
+      var spts = asList(s.points), ssz = TSZ.body + 0.5, savail = BOTTOM - top - 10;
+      var stot = spts.reduce(function (t, p) { return t + textH(p, lw - 16, ssz); }, 0);
+      var sgap = Math.max(12, Math.min(28, (savail * 0.72 - stot) / Math.max(spts.length - 1, 1)));
+      listH = bulletList(els, CX, top, lw, savail, spts, { max: ssz, min: ssz, gap: sgap });
+    }
     else {
       var bpts = asList(s.points), bsz = TSZ.body + 2, avail = BOTTOM - top - 10;
       var textTot = bpts.reduce(function (t, p) { return t + textH(p, lw - 16, bsz); }, 0);
