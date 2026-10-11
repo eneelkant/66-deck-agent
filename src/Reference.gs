@@ -345,7 +345,27 @@ function referenceForTag_(lib, tag) {
 
 // Designs whose look carries a meaning: only used when the slide is about that (e.g. the "!" warning badges = risks)
 const DESIGN_TOPICS_ = {
-  '66D_LAYOUT_CARDS_024': /\b(risks?|challenges?|issues?|barriers?|pitfalls?|concerns?|threats?|problems?|obstacles?|gaps?|blockers?|hurdles?|warnings?)\b/i
+  '66D_LAYOUT_CARDS_024': /\b(risks?|challenges?|issues?|barriers?|pitfalls?|concerns?|threats?|problems?|obstacles?|gaps?|blockers?|hurdles?|warnings?)\b/i,
+  // V.1_42 Proposal Deck designs whose look says what the slide is about
+  P66_CREDENTIALS: /66\s?degrees|\bpartner|credential|why us|about us|who we are|certifi|award|expertise/i,
+  P66_BADGES: /partner|certifi|speciali[sz]|badge|status|award/i,
+  P66_LOGO_WALL: /66\s?degrees|why us|partner|our clients|trusted|experience/i,
+  P66_STORIES: /success|stor(y|ies)|customers|clients|references?|proof|results/i,
+  P66_PRICING: /pric|cost|commercial|rate card|fees?\b|invest|estimate|budget|effort/i,
+  P66_PACKAGES: /package|options?\b|tiers?\b|plans?\b|pricing|offer/i,
+  P66_INVESTMENT: /invest|pric|cost|commercial|budget|estimate|fees?\b/i,
+  P66_IMPACT_MITIGATION: /risk|impact|mitigat|issues?|concerns?|challenges?/i,
+  P66_PERSONAS: /persona|champion|users?\b|audience|stakeholder|roles?\b/i,
+  P66_PROS_CONS: /options?\b|pros|cons\b|trade-?offs?|advantages|alternatives?/i,
+  P66_DIAGONAL_OPTIONS: /options?\b|choices?|alternatives?|paths?\b/i,
+  P66_CHECK_MATRIX: /options?\b|compar|versus|\bvs\b|alternatives?|tools?\b|capabilit|criteria|not\b/i,
+  P66_CHECKLIST_DECISIONS: /checklist|decisions?|cutover|readiness|go-?live/i,
+  P66_RADAR: /scores?|maturity|readiness|assessment|strengths?|ratings?/i,
+  P66_PITCH: /pitch|message|story|narrative/i,
+  P66_GOV_COLUMNS: /governance|standards?|operating model|raci|oversight/i,
+  P66_KEY_INPUTS: /inputs?|requirements?|questions?|assumptions?|needs|what we heard/i,
+  P66_PHASE_DETAIL: /phase|stage|wave|workstream|sprint/i,
+  P66_CATEGORY_LEGEND: /framework|categor|criteria|validation|readiness|classification/i
 };
 
 // Template designs the layout engine can draw for a type (Engine.gs VARIANTS), filtered by item count
@@ -356,12 +376,16 @@ function drawableDesigns_(type, n, spec) {
   const all = ((typeof ENGINE !== 'undefined' && ENGINE.VARIANTS && ENGINE.VARIANTS[type]) || []).filter(function (v) {
     if (proposal !== !!P[v.tag]) return false;      // libraries never mix (Proposal Deck <-> General)
     // a design with a meaning (warning badges) only for slides about that meaning
-    if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words)) return false;
+    // (in a Proposal Deck Gemini may pick such a design itself: it wrote the slide for it)
+    if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words) && !(proposal && String(spec.design || '').trim() === v.tag)) return false;
     // designs that need extra fields (e.g. the client journey needs spec.cases) are only offered when the slide has them
     return !v.needs || designNeedsMet_(v.needs, spec);
   });
+  // V.1_42: a proposal design counts its own fields (groups, stats, org, columns...), so the item count does not rule it
+  // out: the chooser tries each one with the real content (ENGINE.canDraw) and keeps the ones that draw it
+  if (proposal) return all;
   const fits = all.filter(function (v) { return !n || (n >= v.min && n <= v.max); });
-  return fits.length ? fits : all.slice(0, 1);   // (empty for a Proposal Deck type without proposal designs: base layout)
+  return fits.length ? fits : all.slice(0, 1);
 }
 
 // Design rotation between decks (per user): { type: index of the design used last }
@@ -930,6 +954,12 @@ function designNeedsMet_(need, spec) {
     case 'teams': return Array.isArray(spec.teams) && spec.teams.length === 2;
     case 'org': return !!(spec.org && Array.isArray(spec.org.reports) && spec.org.reports.length >= 2);
     case 'tabs': return Array.isArray(spec.tabs) && spec.tabs.length >= 2 && Array.isArray(spec.epics) && spec.epics.length >= 1;
+    // V.1_42 proposal designs
+    case 'left': return !!(spec.left && spec.right && typeof spec.left === 'object' && typeof spec.right === 'object');
+    case 'value': return !!String(spec.value || '').trim();
+    case 'challenge': return !!(Array.isArray(spec.challenge) ? spec.challenge.length : String(spec.challenge || '').trim());
+    case 'groups': return Array.isArray(spec.groups) && spec.groups.length >= 1;
+    case 'periods': return Array.isArray(spec.periods) && spec.periods.length >= 3;
     default: return Array.isArray(spec[need]) && spec[need].length >= 2;
   }
 }

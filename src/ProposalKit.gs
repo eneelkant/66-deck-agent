@@ -311,7 +311,7 @@ function findClientLogo_(client, ctx) {
 function prepareProposal_(userPrompt, sources, ctx, opts) {
   if (!isProposalDeck_(ctx) || ctx.proposal) return ctx.proposal || null;
   opts = opts || {};
-  const p = { client: null, logoId: '', sectionStyle: Math.random() < 1 / 3 ? 'light' : 'dark' };
+  const p = proposalStyles_({ client: null, logoId: '', sectionStyle: Math.random() < 1 / 3 ? 'light' : 'dark' });
   progressStage_(ctx, 'match', 'active', 'Finding the client and its logo');
   // Explicit sidebar client name/domain take precedence (never inferred from email/uploads alone).
   let c = null;
@@ -344,13 +344,19 @@ function applyProposalFrame_(slides, ctx) {
   if (!ctx.proposal && isProposalDeck_(ctx)) ctx.proposal = { client: null, logoId: '', sectionStyle: 'dark' };
   const p = ctx.proposal;
   if (!p) return;
+  proposalStyles_(p);
   (slides || []).forEach(function (sp) {
     if (!sp) return;
     const t = String(sp.type || '').toLowerCase();
     sp.deckLibrary = 'proposal';
     sp.cobrand = !!p.logoId && t !== 'cover' && t !== 'closing';
     if (t === 'cover') sp.clientLogo = !!p.logoId;
-    if (t === 'section') sp.sectionStyle = p.sectionStyle;
+    if (t === 'section') {
+      sp.sectionStyle = p.sectionStyle;
+      // V.1_42: one divider style per deck; a workstream inside a section (level 2) is the light divider, not numbered
+      if (!sp.lockTag) sp.lockTag = Number(sp.level) === 2 ? 'P66_SECTION_LIGHT' : p.dividerTag;
+      if (sp.lockTag === 'P66_SECTION_LIGHT') delete sp.number;
+    }
     if (p.client) restoreName_(sp, p.client);
   });
 }
@@ -374,5 +380,182 @@ function restoreName_(o, name) {
 var WATERMARK_66_PNG_ = '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';
 function inlineAssetBlob_(asset) {
   if (asset === 'watermark-66') return Utilities.newBlob(Utilities.base64Decode(WATERMARK_66_PNG_), 'image/png', 'watermark-66.png');
+  // V.1_42: navy background (navy section divider) and navy header band (proposal agendas), ProposalAssets.gs
+  if (asset === 'navy-bg' && typeof NAVY_BG_JPG_ !== 'undefined') return Utilities.newBlob(Utilities.base64Decode(NAVY_BG_JPG_), 'image/jpeg', 'navy-bg.jpg');
+  if (asset === 'navy-band' && typeof NAVY_BAND_JPG_ !== 'undefined') return Utilities.newBlob(Utilities.base64Decode(NAVY_BAND_JPG_), 'image/jpeg', 'navy-band.jpg');
   return null;
+}
+
+
+/* =========================================================================================================
+   5. Proposal Deck structure (V.1_42)
+   - Section dividers: one style per deck - dark streaks with the section number (about 3 decks in 4) or navy with the
+     section's topics (about 1 in 4). A workstream inside a section is the light divider (title only, no number).
+   - Agenda: up to 7 items -> spiral; more -> dark two columns (about 3 in 4) or the dark table of contents (about 1 in 4,
+     up to 11 items). An agenda too long for one slide continues on "Agenda (continued)".
+   - Decks of 12+ slides are written in 3-4 sections (Gemini names each body slide's section; the code adds the dividers).
+   The choices are made once per deck and kept in ctx.proposal (long decks keep them from run to run).
+   ========================================================================================================= */
+var PROPOSAL_DIVIDER_TAGS_ = { dark: 'P66_SECTION_DARK', navy: 'P66_SECTION_NAVY', light: 'P66_SECTION_LIGHT' };
+function proposalStyles_(p) {
+  if (!p) return p;
+  if (!p.dividerTag) p.dividerTag = Math.random() < 0.25 ? PROPOSAL_DIVIDER_TAGS_.navy : PROPOSAL_DIVIDER_TAGS_.dark;
+  if (!p.agendaWide) p.agendaWide = Math.random() < 0.25 ? 'P66_AGENDA_CONTENTS' : 'P66_AGENDA_TWO_COLUMNS';
+  return p;
+}
+
+// Number of section dividers a single-run Proposal Deck of n slides is written with (0 = no sections)
+function proposalSectionCount_(n) {
+  n = Number(n) || 0;
+  return n >= 17 ? 4 : n >= 12 ? 3 : 0;
+}
+
+function proposalTypeOf_(sp) { return String((sp && sp.type) || '').toLowerCase(); }
+function proposalFrame_(sp) { return ['cover', 'agenda', 'closing'].indexOf(proposalTypeOf_(sp)) !== -1; }
+function proposalShort_(t, max) {
+  let x = String(t || '').split(/:| — | – | - /)[0].replace(/\s+/g, ' ').trim();
+  if (x.length > (max || 48)) x = x.slice(0, max || 48).replace(/\s+\S*$/, '');
+  return x;
+}
+function proposalSectionName_(t) {
+  const x = proposalShort_(t, 40);
+  return typeof sentenceCase_ === 'function' ? sentenceCase_(x, 1) : x;
+}
+
+// Body slides grouped by their "section" field into exactly k consecutive groups (merging the smallest or splitting
+// the largest when Gemini gave a different number). Returns [{ title, slides[] }].
+function proposalGroups_(body, k) {
+  let groups = [];
+  let last = '';
+  body.forEach(function (sp) {
+    let name = proposalSectionName_(sp.section || '');
+    if (!name) name = last;
+    if (groups.length && name.toLowerCase() === last.toLowerCase()) groups[groups.length - 1].slides.push(sp);
+    else groups.push({ title: name, slides: [sp] });
+    last = name || last;
+  });
+  // a leading group without a name takes the next group's name
+  if (groups.length > 1 && !groups[0].title) { groups[1].slides = groups[0].slides.concat(groups[1].slides); groups.shift(); }
+  while (groups.length > k && groups.length > 1) {
+    let i = 0;
+    groups.forEach(function (g, j) { if (g.slides.length < groups[i].slides.length) i = j; });
+    const left = i > 0 ? groups[i - 1] : null, right = i < groups.length - 1 ? groups[i + 1] : null;
+    const into = !left ? right : !right ? left : (left.slides.length <= right.slides.length ? left : right);
+    if (into === left) left.slides = left.slides.concat(groups[i].slides);
+    else right.slides = groups[i].slides.concat(right.slides);
+    groups.splice(i, 1);
+  }
+  while (groups.length < k) {
+    let i = -1;
+    groups.forEach(function (g, j) { if (g.slides.length >= 2 && (i === -1 || g.slides.length > groups[i].slides.length)) i = j; });
+    if (i === -1) break;
+    const g = groups[i], half = Math.ceil(g.slides.length / 2);
+    const second = { title: proposalSectionName_(g.slides[half].title), slides: g.slides.slice(half) };
+    g.slides = g.slides.slice(0, half);
+    groups.splice(i + 1, 0, second);
+  }
+  groups.forEach(function (g) { if (!g.title) g.title = proposalSectionName_(g.slides[0].title); });
+  return groups;
+}
+
+// Fills the agenda slide from rows [{ title, points[] }] (Introduction ... Thank you) and locks its design.
+// Returns the extra "Agenda (continued)" slide when the agenda does not fit on one slide, else null.
+function proposalAgenda_(agenda, rows, p) {
+  proposalStyles_(p);
+  agenda.agendaWide = p.agendaWide;                    // kept on the slide so a later re-sync keeps the same design
+  rows = rows.map(function (r) { return { title: proposalShort_(r.title, 60), points: (r.points || []).map(function (x) { return proposalShort_(x, 56); }).filter(Boolean) }; })
+    .filter(function (r) { return r.title; });
+  agenda.title = agenda.title && !/^table of contents$/i.test(agenda.title) ? agenda.title : 'Agenda';
+  if (rows.length <= 7) {
+    agenda.items = rows.map(function (r) { return { title: r.title }; });
+    agenda.lockTag = 'P66_AGENDA_SPIRAL';
+    return null;
+  }
+  const CAP = 26;                                       // lines that fit in the two columns
+  let tag = p.agendaWide;
+  if (tag === 'P66_AGENDA_CONTENTS' && rows.length > 11) tag = 'P66_AGENDA_TWO_COLUMNS';
+  if (tag === 'P66_AGENDA_CONTENTS') {
+    agenda.items = rows.map(function (r) { return { title: r.title }; });
+    agenda.lockTag = tag;
+    return null;
+  }
+  // two columns: sections with their topics; topics are cut back (fewest first) until everything fits
+  let per = 6;
+  const lines = function () { return rows.reduce(function (a, r) { return a + 1 + Math.min(per, r.points.length); }, 0); };
+  while (per > 0 && lines() > CAP) per--;
+  const take = function (list) { return list.map(function (r) { return { title: r.title, points: r.points.slice(0, per) }; }); };
+  agenda.lockTag = tag;
+  if (rows.length <= CAP - 2) { agenda.items = take(rows); return null; }
+  // more sections than one slide holds: the rest continues on a second agenda slide
+  const cut = CAP - 2;
+  agenda.items = take(rows.slice(0, cut));
+  return { type: 'agenda', title: agenda.title, continued: true, items: take(rows.slice(cut)), lockTag: tag };
+}
+
+// Single-run Proposal Deck: adds the section dividers (when the deck was written in sections) and builds the agenda.
+// plan.slides = cover, agenda, body..., closing (from planContent). k = the number of dividers planned for this deck.
+function proposalStructure_(plan, ctx, k) {
+  if (ctx && !ctx.proposal && isProposalDeck_(ctx)) ctx.proposal = { client: null, logoId: '', sectionStyle: 'dark' };
+  const p = ctx && ctx.proposal;
+  if (!p || !plan || !Array.isArray(plan.slides)) return plan;
+  proposalStyles_(p);
+  const slides = plan.slides;
+  const cover = slides.filter(function (sp) { return proposalTypeOf_(sp) === 'cover'; })[0];
+  const agenda = slides.filter(function (sp) { return proposalTypeOf_(sp) === 'agenda'; })[0];
+  const closing = slides.filter(function (sp) { return proposalTypeOf_(sp) === 'closing'; })[0];
+  const body = slides.filter(function (sp) { return !proposalFrame_(sp) && proposalTypeOf_(sp) !== 'section'; });
+  const heading = function (sp) { return String(sp.title || sp.statement || '').trim(); };
+  let rows;
+  let out = body;
+  if (k > 0 && body.length >= 2 * k) {
+    const groups = proposalGroups_(body, k);
+    out = [];
+    groups.forEach(function (g, i) {
+      out.push({ type: 'section', title: g.title, number: (i + 1 < 10 ? '0' : '') + (i + 1), lead: '',
+        points: g.slides.map(heading).filter(Boolean).slice(0, 5), notes: '' });
+      g.slides.forEach(function (sp) { out.push(sp); });
+    });
+    rows = groups.map(function (g) { return { title: g.title, points: g.slides.map(heading) }; });
+    if (ctx.log && groups.length !== k) ctx.log.push('Proposal sections: ' + groups.length + ' of ' + k + ' planned.');
+  } else {
+    rows = body.map(function (sp) { return { title: heading(sp), points: [] }; });
+  }
+  body.forEach(function (sp) { delete sp.section; });
+  let extra = null;
+  if (agenda) {
+    rows = [{ title: 'Introduction', points: [] }].concat(rows, closing ? [{ title: 'Thank you', points: [] }] : []);
+    extra = proposalAgenda_(agenda, rows, p);
+  }
+  plan.slides = [].concat(cover ? [cover] : [], agenda ? [agenda] : [], extra ? [extra] : [], out, closing ? [closing] : []);
+  return plan;
+}
+
+// Rebuilds the proposal agenda (and the dividers' topic lists) from the slides as they are now: titles can change after
+// the structure step (the fit step shortens texts). A continued agenda slide is refreshed, never added here.
+function proposalAgendaSync_(slides) {
+  const agendas = slides.filter(function (sp) { return proposalTypeOf_(sp) === 'agenda'; });
+  const agenda = agendas.filter(function (sp) { return !sp.continued; })[0];
+  if (!agenda) return;
+  const heading = function (sp) { return String(sp.title || sp.statement || '').trim(); };
+  const rows = [];
+  let current = null, hasSections = false;
+  slides.forEach(function (sp) {
+    const t = proposalTypeOf_(sp);
+    if (proposalFrame_(sp)) return;
+    if (t === 'section' && Number(sp.level) !== 2) {
+      hasSections = true;
+      current = { title: heading(sp), points: [], divider: sp };
+      rows.push(current);
+      return;
+    }
+    if (t === 'section') return;
+    if (current) current.points.push(heading(sp));
+    else rows.push({ title: heading(sp), points: [] });
+  });
+  if (hasSections) rows.forEach(function (r) { if (r.divider) r.divider.points = r.points.filter(Boolean).slice(0, 5); });
+  const all = [{ title: 'Introduction', points: [] }].concat(rows.map(function (r) { return { title: r.title, points: hasSections ? r.points : [] }; }));
+  if (slides.some(function (sp) { return proposalTypeOf_(sp) === 'closing'; })) all.push({ title: 'Thank you', points: [] });
+  const more = proposalAgenda_(agenda, all, { agendaWide: agenda.agendaWide });
+  const cont = agendas.filter(function (sp) { return sp.continued; })[0];
+  if (cont) cont.items = more ? more.items : [];
 }

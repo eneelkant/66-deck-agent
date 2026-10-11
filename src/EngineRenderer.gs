@@ -235,9 +235,11 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
 
   slide.getPageElements().forEach(function (el) { try { el.remove(); } catch (e) {} });
   ctx.slideIcons = {};
-  const bgId = out.bgImage ? engineAssetId(out.bgImage, ctx) : null;
-  if (bgId) {
-    try { slide.getBackground().setPictureFill(getBlobCached(bgId, ctx)); } catch (e) { slide.getBackground().setSolidFill(out.bg); }
+  // V.1_42: built-in pictures (navy background of the proposal divider) first, then the Drive design assets
+  const bgInline = out.bgImage && typeof inlineAssetBlob_ === 'function' ? inlineAssetBlob_(out.bgImage) : null;
+  const bgId = out.bgImage && !bgInline ? engineAssetId(out.bgImage, ctx) : null;
+  if (bgInline || bgId) {
+    try { slide.getBackground().setPictureFill(bgInline || getBlobCached(bgId, ctx)); } catch (e) { slide.getBackground().setSolidFill(out.bg); }
   } else {
     slide.getBackground().setSolidFill(out.bg);
   }

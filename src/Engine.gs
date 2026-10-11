@@ -232,13 +232,16 @@ var ENGINE = (function () {
 
   // Proposal Deck: the client's logo bottom-right, mirroring the 66° mark bottom-left (same line, ~16pt tall, max 80pt
   // wide). On dark slides and on the blue agenda band it sits on a small light tile so any logo reads.
-  function clientCorner_(out, type) {
-    var band = type === 'agenda';
+  function clientCorner_(out, type, proposal) {
+    // the General agenda has a band along the bottom (the logo sits on it); the proposal agendas have none
+    var band = type === 'agenda' && (!proposal || out.els.some(function (e) { return e.t === 'image' && e.asset === 'band-pattern' && e.y >= 340; }));
     if (band) out.els.forEach(function (e) { if (e.t === 'image' && e.asset === 'band-pattern' && e.y >= 340) e.x = 520; });
     var dark = band || !!out.dark;
+    // a design on a photo (dark strip or panel behind the corner) gets the light tile behind the logo too
+    var tile = dark || !!out.bgImage;
     // centred on the 66° mark's line; up to 20pt tall so a square logo (an icon) is not tiny, max 80pt wide
     var mh = dark ? 18.8 : 16.2, my = dark ? 368 : 376.8, h = 20;
-    out.els.push({ t: 'image', asset: 'client-logo', x: W - 22.3 - 80, y: my + mh / 2 - h / 2, w: 80, h: h, fit: 'contain', align: 'right', valign: 'middle', tile: dark });
+    out.els.push({ t: 'image', asset: 'client-logo', x: W - 22.3 - 80, y: my + mh / 2 - h / 2, w: 80, h: h, fit: 'contain', align: 'right', valign: 'middle', tile: tile });
   }
   function footerMark(els, dark) {
     if (dark) image(els, 'mark-white', 22.3, 367.6, 28.2, 18.8);
@@ -3813,12 +3816,19 @@ var ENGINE = (function () {
     return (VARIANTS[type] || []).some(function (v) { return v.tag === tag; });
   }
   // Design menu text for the content planner (Code.gs)
-  function designMenu() {
+  // V.1_42: library 'proposal' lists only the Proposal Deck designs (frame slides excluded: the code places the agenda and
+  // the section dividers), any other library only the General designs
+  function designMenu(library) {
+    var proposal = library === 'proposal';
     return Object.keys(VARIANTS).map(function (type) {
-      return type + ':\n' + VARIANTS[type].map(function (v) {
-        return '  - ' + v.tag + ' (' + (v.max < 99 ? v.min + '-' + v.max + ' items, ' : '') + v.desc + (v.words ? '; ' + v.words + ' words' + (/^\d/.test(v.words) ? ' each' : '') : '') + ')';
+      if (proposal && (type === 'agenda' || type === 'section')) return '';
+      var list = VARIANTS[type].filter(function (v) { return proposal === !!PROPOSAL_TAGS_[v.tag]; });
+      if (!list.length) return '';
+      return type + ':\n' + list.map(function (v) {
+        var count = v.max != null && v.max < 99 && v.min != null ? v.min + '-' + v.max + ' items, ' : '';
+        return '  - ' + v.tag + ' (' + count + v.desc + (v.fields ? '; fields: ' + v.fields : '') + (v.words ? '; ' + v.words + ' words' + (/^\d/.test(v.words) ? ' each' : '') : '') + ')';
       }).join('\n');
-    }).join('\n');
+    }).filter(Boolean).join('\n');
   }
 
   // Elements below the title area (images excluded): 0 means the design drew no content
@@ -3851,7 +3861,8 @@ var ENGINE = (function () {
     var tag = s.reference && s.reference.tag;
     // Design libraries never mix: a Proposal Deck only uses proposal designs (frame slides have one strict design),
     // a General deck never uses a proposal design. Content without a design in its library uses the base layout.
-    if (s.deckLibrary === 'proposal' ? (FRAME_TYPES_[type] || !PROPOSAL_TAGS_[tag]) : !!PROPOSAL_TAGS_[tag]) tag = null;
+    // (V.1_42: a section divider may use a proposal divider design: dark streaks, navy with its topics, light workstream)
+    if (s.deckLibrary === 'proposal' ? ((FRAME_TYPES_[type] && !(type === 'section' && PROPOSAL_TAGS_[tag])) || !PROPOSAL_TAGS_[tag]) : !!PROPOSAL_TAGS_[tag]) tag = null;
     var out = (tag && V[tag] && variantOf(type, tag)) ? V[tag](s, lctx) : null;
     if (out && contentCount_(out) === 0) out = null;
     out = out || L[type](s, lctx);
@@ -4004,7 +4015,7 @@ var ENGINE = (function () {
         out = applyDiagramIrToEngineOutput_(out, s, ctx.tokens || null);
       }
       if (!out.noFooter) footerMark(out.els, out.dark);
-      if (s.cobrand && type !== 'cover' && type !== 'closing') clientCorner_(out, type);
+      if (s.cobrand && type !== 'cover' && type !== 'closing') clientCorner_(out, type, s.deckLibrary === 'proposal');
       out.type = type;
       out.notes = s.notes || '';
       slides.push(out);
@@ -4012,7 +4023,29 @@ var ENGINE = (function () {
     return slides;
   }
 
+  // V.1_42: the Proposal Deck design library (ProposalDesigns.gs) adds its designs here and draws with the same helpers
+  // meta.needs may describe the fields ("items[{title,text,icon}], callout{text}"): it is kept as `fields` for the planner's
+  // design menu, and `needs` keeps only the one special field the slide must have (items / points are counted by min-max)
+  var PLAIN_FIELDS_ = { items: 1, points: 1, '': 1 };
+  function addProposalDesign(tag, type, meta, fn) {
+    V[tag] = function () { return PROPOSAL_MODE_ ? fn.apply(null, arguments) : null; };
+    PROPOSAL_TAGS_[tag] = true;
+    var m = Object.assign({ tag: tag }, meta || {});
+    var raw = String(m.needs || '').trim(), key = (raw.match(/^[A-Za-z_]+/) || [''])[0];
+    if (raw && raw !== key) m.fields = raw;
+    if (PLAIN_FIELDS_[key]) delete m.needs; else m.needs = key;
+    (VARIANTS[type] = VARIANTS[type] || []).push(m);
+  }
+  var KIT = {
+    text: text, rect: rect, roundrect: roundrect, ellipse: ellipse, line: line, image: image, icon: icon, header: header,
+    arr: arr, str: str, pad2: pad2, textH: textH, fit: fit, wrap: wrap, textWidth: textWidth, lineHeight: lineHeight,
+    uniformSize: uniformSize, linesBlock: linesBlock, boxH: boxH, bulletList: bulletList, shape: shape, ring: ring,
+    dashedLine: dashedLine, arc: arc, rbox: rbox, onFill: onFill, isLight: isLight, asList: asList, agendaItems: agendaItems,
+    items: items_, T: T, TSZ: TSZ, W: W, H: H, CX: CX, CW: CW, X0: X0, BOTTOM: BOTTOM, INSET: INSET
+  };
+
   return {
+    addProposalDesign: addProposalDesign, kit: KIT,
     titleFits: function (t) { return wrap(String(t), TITLE_W, 'sans', 500, 20).length <= 1; },
     titleMaxChars: function (t) { return maxCharsFor(t, TITLE_W, 20, 500); },
     agendaTextFits: function (t) { return wrap(String(t), AGENDA_DESC_W, 'sans', 400, 11).length <= 1; },
@@ -4022,7 +4055,10 @@ var ENGINE = (function () {
       var s1 = cleanSpec(spec || {}), tag = s1.reference && s1.reference.tag;
       if (!tag || !V[tag]) return true;
       TSZ.body = TYPE_STEPS[0].body; TSZ.heading = TYPE_STEPS[0].heading;
-      try { return !!V[tag](s1, {}); } catch (e) { return false; }
+      // V.1_42: drawn in the slide's own library (a proposal design only draws in a Proposal Deck)
+      var wasMode = PROPOSAL_MODE_;
+      PROPOSAL_MODE_ = s1.deckLibrary === 'proposal';
+      try { var o = V[tag](s1, {}); return !!o && contentCount_(o) > 0; } catch (e) { return false; } finally { PROPOSAL_MODE_ = wasMode; }
     },
     render: render, measure: measure, variantsFor: function (type) { return (VARIANTS[type] || []).slice(); }, cleanSpec: cleanSpec, cleanText: cleanText, designMenu: designMenu, layouts: Object.keys(L), VARIANTS: VARIANTS, BRAND: BRAND, TOKENS: T, W: W, H: H, INSET: INSET,
     textWidth: textWidth, wrap: wrap, fit: fit, tableRowsThatFit: tableRowsThatFit, PROPOSAL_TAGS: PROPOSAL_TAGS_, posSize: posSize, splitSpace: splitSpace, innerSize: innerSize, boxH: boxH };
