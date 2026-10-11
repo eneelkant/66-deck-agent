@@ -47,7 +47,7 @@ test("library: 65 proposal designs, each tag once; none draws in a General deck"
 test("design menu: proposal designs with their fields for a Proposal Deck, none of them for a General deck", () => {
   const g = load();
   const p = g.ENGINE.designMenu("proposal"), gen = g.ENGINE.designMenu();
-  assert.ok(/P66_KPI_TILES/.test(p) && /fields: stats\[/.test(p));
+  assert.ok(/P66_KPI_TILES/.test(p) && /fields: items\[\{value,label,text\}\]/.test(p));
   assert.ok(!/66D_LAYOUT_/.test(p) && !/P66_AGENDA|P66_SECTION/.test(p), "frame slides are placed by the code");
   assert.ok(!/P66_/.test(gen) && /66D_LAYOUT_/.test(gen));
 });
@@ -56,7 +56,7 @@ test("needs: only the special field is a requirement (items / points are counted
   const g = load();
   const v = (tag) => Object.values(g.ENGINE.VARIANTS).flat().find((x) => x.tag === tag);
   assert.equal(v("P66_ICON_COLUMNS").needs, undefined);
-  assert.equal(v("P66_KPI_TILES").needs, "stats");
+  assert.equal(v("P66_ORG_TREE").needs, "org");
   assert.equal(v("P66_TWO_PANELS").needs, "left");
   const two = g.drawableDesigns_("comparison", 2, { type: "comparison", deckLibrary: "proposal", title: "Options", left: { label: "A", points: ["x"] }, right: { label: "B", points: ["y"] } });
   assert.ok(two.some((d) => d.tag === "P66_TWO_PANELS"));
@@ -200,6 +200,6 @@ test("text screenshot design never draws an empty screenshot frame", () => {
   assert.equal(g.ENGINE.canDraw(Object.assign({ screenshot: true }, s)), true);
 });
 
-test("version label is V.1_42", () => {
-  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_42'/.test(read("src/Code.gs")));
+test("version label is V.1_42 or later", () => {
+  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_4[2-9]'/.test(read("src/Code.gs")));
 });

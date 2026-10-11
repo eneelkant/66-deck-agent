@@ -613,7 +613,10 @@
     desc: 'proposed team structure: a governance box on top (governance: text or {title, text}) connected to two lanes, the client team and the 66degrees team (teams[{name, roles[]: strings or {title, text of 2-5 words}}], 2-8 roles each)',
     words: '3-12' }, function (s) {
     var teams = K.arr(s.teams, 2).map(function (t) {
-      return { name: K.str(t.name || t.title || t.label), roles: K.arr(t.roles || t.points, 8).map(function (r) { return typeof r === 'string' ? { title: r, text: '' } : { title: r.title || r.name || '', text: r.text || '' }; }).filter(function (r) { return r.title; }) };
+      // roles[] (proposal shape) or stakeholders[] + specialists[] (General team shape): the role is shown, never an invented name
+      var list = K.arr(t.roles || t.points || t.members, 8);
+      if (!list.length) list = K.arr(t.stakeholders, 8).concat(K.arr(t.specialists, 8)).slice(0, 8);
+      return { name: K.str(t.name || t.title || t.label), roles: list.map(function (r) { return typeof r === 'string' ? { title: r, text: '' } : { title: r.title || r.role || r.name || '', text: r.text || r.responsibility || '' }; }).filter(function (r) { return r.title; }) };
     });
     if (teams.length !== 2 || teams.some(function (t) { return !t.roles.length; })) return null;
     var els = [];

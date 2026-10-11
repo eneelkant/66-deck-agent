@@ -365,6 +365,7 @@ const DESIGN_TOPICS_ = {
   P66_GOV_COLUMNS: /governance|standards?|operating model|raci|oversight/i,
   P66_KEY_INPUTS: /inputs?|requirements?|questions?|assumptions?|needs|what we heard/i,
   P66_PHASE_DETAIL: /phase|stage|wave|workstream|sprint/i,
+  P66_PYRAMID: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?)\b)/i,             // levels, never a list of risks
   P66_CATEGORY_LEGEND: /framework|categor|criteria|validation|readiness|classification/i
 };
 
@@ -377,7 +378,7 @@ function drawableDesigns_(type, n, spec) {
     if (proposal !== !!P[v.tag]) return false;      // libraries never mix (Proposal Deck <-> General)
     // a design with a meaning (warning badges) only for slides about that meaning
     // (in a Proposal Deck Gemini may pick such a design itself: it wrote the slide for it)
-    if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words) && !(proposal && String(spec.design || '').trim() === v.tag)) return false;
+    if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words) && !(proposal && String(spec.design || '').trim() === v.tag && v.tag !== 'P66_PYRAMID')) return false;
     // designs that need extra fields (e.g. the client journey needs spec.cases) are only offered when the slide has them
     return !v.needs || designNeedsMet_(v.needs, spec);
   });

@@ -338,15 +338,45 @@
   });
 
   /* ---------- 9. KPI tiles + categories — proposals page 21 (7, 120) ---------- */
-  add('P66_KPI_TILES', 'stats', { min: 3, max: 4, needs: 'stats[{value,label}] (3-4), banner, groups[{label,points[]}] (2-6)',
-    desc: 'row of 3-4 KPI tiles (big blue number + label) above a blue section bar (banner) and a grid of category boxes with short lists (inventory, scope in numbers)', words: 'label 2-5; 2-6 short names per group' }, function (s) {
-    var stats = K.arr(s.stats || s.results || s.items, 4).map(function (st) { return { value: String(st && st.value || '').trim(), label: String(st && (st.label || st.title) || '').trim() }; })
+  // KPI tiles without category boxes: one row of tall tiles (big blue number, label, one or two lines of text) and the
+  // takeaway on the blue bar underneath
+  function kpiTilesOnly_(els, s, stats) {
+    var n = stats.length, top = K.header(els, s) + 4, gap = 12, tw = (CW - gap * (n - 1)) / n, iw = tw - 32;
+    var take = String(s.takeaway || s.banner || '').trim();
+    var vSize = K.uniformSize(stats.map(function (st) { return st.value; }), iw, 50, { font: 'mono', weight: 500, max: 32, min: 20, maxLines: 1 });
+    var lB = K.linesBlock(stats.map(function (st) { return st.label; }), iw, TSZ.heading, 500, 2);
+    var tB = K.linesBlock(stats.map(function (st) { return st.text; }), iw, TSZ.body, 400, 6);
+    var need = 20 + K.lineHeight('mono', vSize) + 10 + lB + (tB ? 8 + tB : 0) + 20;
+    var bottom = BOTTOM - (take ? 44 : 0);
+    if (need > bottom - top) return null;
+    var tileH = Math.min(bottom - top, need + 40), y0 = top + Math.max(0, (bottom - top - tileH) / 2);
+    stats.forEach(function (st, i) {
+      var x = CX + i * (tw + gap);
+      K.rect(els, x, y0, tw, tileH, i % 2 ? ALT : T.bgLight);
+      K.rect(els, x, y0, tw, 3, T.blue);
+      var y = y0 + 20;
+      K.text(els, x + 16, y, iw, K.lineHeight('mono', vSize), st.value, { font: 'mono', weight: 500, max: vSize, min: vSize, maxLines: 1, color: T.blue });
+      y += K.lineHeight('mono', vSize) + 10;
+      K.text(els, x + 16, y, iw, lB, st.label, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, color: T.ink });
+      y += lB + 8;
+      if (st.text) K.text(els, x + 16, y, iw, tB, st.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 6, color: T.body });
+    });
+    if (take) {
+      K.roundrect(els, CX, BOTTOM - 32, CW, 32, T.blue);
+      K.text(els, CX + 16, BOTTOM - 32, CW - 32, 32, take, { weight: 500, max: TSZ.heading, min: 9.5, maxLines: 2, align: 'center', valign: 'middle', color: T.white });
+    }
+    return { bg: T.white, els: els, noBalance: true };
+  }
+  add('P66_KPI_TILES', 'stats', { min: 3, max: 4, needs: 'items[{value,label,text}] (3-4), takeaway; optional banner + groups[{label,points[]}] (2-6)',
+    desc: 'row of 3-4 KPI tiles (big blue number + label) above a blue section bar (banner) and a grid of category boxes with short lists (inventory, scope in numbers); without groups: tall tiles with value, label and a short text, and the takeaway on a blue bar (KPIs, targets, market figures)', words: 'label 2-5; 2-6 short names per group' }, function (s) {
+    var stats = K.arr(s.stats || s.results || s.items, 4).map(function (st) { return { value: String(st && st.value || '').trim(), label: String(st && (st.label || st.title) || '').trim(), text: String(st && st.text || '').trim() }; })
       .filter(function (st) { return st.value; });
     var groups = K.arr(s.groups, 6).map(function (g) { return { label: String(g && (g.label || g.title) || '').trim(), points: K.arr(g && g.points, 8).map(K.str).filter(Boolean) }; })
       .filter(function (g) { return g.label && g.points.length; });
     var n = stats.length, m = groups.length;
-    if (n < 3 || n > 4 || m < 2 || m > 6) return null;
+    if (n < 3 || n > 4 || m === 1 || m > 6) return null;
     var els = [];
+    if (!m) return kpiTilesOnly_(els, s, stats);     // V.1_42b: plain KPIs (value, label, text) -> the tiles with their text
     var top = K.header(els, s) + 2;
     var gap = 10, tw = (CW - gap * (n - 1)) / n;
     var vSize = K.uniformSize(stats.map(function (st) { return st.value; }), tw - 24, 40, { font: 'mono', weight: 500, max: 26, min: 18, maxLines: 1 });
