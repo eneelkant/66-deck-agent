@@ -3878,7 +3878,14 @@ var ENGINE = (function () {
       // 2. otherwise the content as cards (items, layers, risks) or bullets (points)
       var its = arr(s.items, 8).concat(arr(s.layers, 4)).concat(arr(s.risks, 6).map(function (r) {
         return r && { title: r.description || r.title || '', text: r.mitigation || r.text || '' };
-      })).filter(function (x) { return x && (x.title || x.text || typeof x === 'string'); });
+      })).concat(arr(s.teams, 4).map(function (t) {
+        // V.1_42b: a team structure the team designs could not draw -> one card per team with its roles
+        var roles = arr(t && (t.roles || t.members || t.points), 8).concat(arr(t && t.stakeholders, 8)).concat(arr(t && t.specialists, 8))
+          .map(function (r) { return typeof r === 'string' ? r : (r && (r.role || r.title || r.name)) || ''; }).filter(Boolean);
+        return t && { title: t.name || t.title || '', text: roles.join(', ') || t.text || '' };
+      })).concat(s.org && s.org.name ? arr(s.org.reports, 6).map(function (r) {
+        return r && { title: r.name || r.title || '', text: r.role || arr(r.reports, 4).map(function (x) { return x && (x.name || x.title); }).filter(Boolean).join(', ') };
+      }) : []).filter(function (x) { return x && (x.title || x.text || typeof x === 'string'); });
       if (its.length >= 2) alt = L.cards(Object.assign({}, s, { items: its, reference: null }), lctx);
       else if (arr(s.points, 6).length) alt = L.bullets(Object.assign({}, s, { reference: null }), lctx);
       if (alt && contentCount_(alt) > 0) out = alt;

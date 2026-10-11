@@ -984,10 +984,19 @@ ${proposalDeck ? `PROPOSAL DESIGNS: this is a Proposal Deck, so only the designs
 suits it in "design" and write the fields its description names (for example groups[...], stats[...], banner, org{...},
 columns[...], periods[...], workstreams[...], left{...}/right{...}, challenge, value) next to the slide type's usual fields.
 Use each design at most once and use many different designs: a proposal reads like a designed consulting document.
+` : ''}${proposalDeck ? `PROPOSAL RULES:
+- Every body slide uses one design from the menu above and is written in that design's fields. Do not write slide types the
+  menu has no design for (no "quote", no plain bar or line "chart"): show figures as stats (KPI tiles) instead.
+- A team structure is ONE slide: type "team" with teams[{name, roles[{title, text}]}] (2: the client team and the 66degrees team,
+  roles only, never invented names) and governance, or an org chart org{name, role, reports[...]}, or role blocks
+  items[{title, text}]. Never a second team slide in other words.
+- Risks use the risk / impact / mitigation design (comparison), never a pyramid or a funnel.
 ` : ''}${proposalDeck && !batch && ctx.proposalSections ? `PROPOSAL SECTIONS: the body slides are grouped into exactly ${ctx.proposalSections} sections (the code adds a divider slide before
 each section and lists the sections in the agenda). Give every body slide a "section" field: the name of its section,
 2-4 words in sentence case (for example "Understanding your needs", "Our approach", "Delivery plan", "Why 66degrees").
-The slides of one section are next to each other, every section has at least two slides, and each section name is different.
+The first section is about the client: its situation, goals and challenges (market figures only as support). Each section name
+says what ITS slides are about (an architecture slide sits in the approach section, a team slide in the delivery or partnership
+section). The slides of one section are next to each other, every section has at least two slides, and each section name is different.
 ` : ''}
 ${recentList.length ? 'RECENTLY USED DESIGNS (used in the last decks made with this tool; choose OTHER designs from the menu whenever one suits the content, so every deck looks fresh): ' + recentList.join(', ') : ''}
 For "cards" items, "icon" must be a name from ${libIconNames.length ? 'LIBRARY_ICONS (preferred) or ' : ''}BRAND_ICONS and "material" the closest Google Material Icons name.
@@ -2515,9 +2524,13 @@ function chooseDesignsByContent_(plan, ctx) {
   const FRAME = { cover: 1, agenda: 1, closing: 1 };
   const lookKey = function (type, tag, m) { return FRAME[type] ? type + ':' + tag : (m && m.look) || tag; };
   const trialOf = function (sp, tag) { return Object.assign({}, sp, { reference: Object.assign({}, sp.reference || {}, { tag: tag }) }); };
+  const wanted = {};                                                   // designs Gemini chose, slide by slide
+  plan.slides.forEach(function (sp) { if (sp && sp.design) wanted[String(sp.design).trim()] = true; });
   plan.slides.forEach(function (sp) {
-    const type = normalizeType_(sp.type);
+    let type = normalizeType_(sp.type);
     if (type === 'template' || String(sp.type || '').toLowerCase() === 'template') { if (sp.tag) used[sp.tag] = 1; return; }
+    // V.1_42b: a Proposal Deck slide no proposal design can draw is reshaped into one that can (never the plain layout)
+    if (typeof proposalCoerce_ === 'function' && proposalCoerce_(sp, ctx, used)) type = normalizeType_(sp.type);
     // V.1_42: frame slides of a Proposal Deck (agenda, section dividers) keep the design the deck structure gave them
     if (sp.lockTag) {
       sp.reference = referenceForTag_(ctx.lib, sp.lockTag);
@@ -2572,7 +2585,9 @@ function chooseDesignsByContent_(plan, ctx) {
       // 2. Variety inside the deck: a design once, a look (family of similar designs) once, never twice in a row
       // (a design already used in this deck loses more than a design that needs its text rewritten: the fit step
       //  shortens or fills the text afterwards, so variety wins whenever another design can show the content)
-      score -= 360 * (used[d.tag] || 0);                              // V.1_35: a design twice in one deck is a last resort
+      score -= 360 * (used[d.tag] || 0);
+      // V.1_42b: a design Gemini chose for another slide of the deck is left for that slide
+      if (sp.deckLibrary === 'proposal' && wanted[d.tag] && String(sp.design || '').trim() !== d.tag) score -= 100;                              // V.1_35: a design twice in one deck is a last resort
       // (Gemini's own proposal design that fits keeps its place: look families only separate the other candidates)
       const geminiPick = sp.deckLibrary === 'proposal' && c.fitsWell && sp.design && String(sp.design).trim() === d.tag;
       if (!geminiPick) score -= 70 * (looksUsed[c.look] || 0);
@@ -2587,13 +2602,9 @@ function chooseDesignsByContent_(plan, ctx) {
       score += Math.random() * 35;
       if (!best || score > best.score) best = { tag: d.tag, score: score, c: c };
     });
-    // V.1_42: in a Proposal Deck a design is never shown twice: when every design that can draw the slide is used already,
-    // the slide takes the plain layout of its type instead
-    if (best && sp.deckLibrary === 'proposal' && used[best.tag]) {
-      sp.reference = referenceForTag_(ctx.lib, '');
-      best = null;
-      swaps++;
-    } else if (best && best.tag !== current) {
+    // (V.1_42b: a Proposal Deck slide that only a design already used can draw keeps that proposal design: the
+    //  reshaping above has tried every other proposal design first, and a plain layout would leave the library)
+    if (best && best.tag !== current) {
       sp.reference = referenceForTag_(ctx.lib, best.tag);
       swaps++;
     }
@@ -2703,8 +2714,9 @@ function headingCase_(t) {
   const SMALLW = /^(a|an|and|or|for|of|in|on|at|to|by|the|with|from|vs|via|as|is|are|your|our)$/i;
   const parts = str.split(/[\s-]+/).slice(1).filter(function (w) { const b = w.replace(/[^A-Za-z]/g, ''); return b && !SMALLW.test(b) && !/^[A-Z]{2,}s?$/.test(b); });
   const caps = parts.filter(function (w) { return /^[A-Z][a-z]/.test(w.replace(/^[^A-Za-z]+/, '')); }).length;
-  // one capitalised word is usually a name ("Integration with Salesforce CRM"): only ordinary heading words are lowered then
-  if (!parts.length || caps < Math.max(2, parts.length * 0.5)) return keepNames_(lowerCommonWords_(str.replace(/\.$/, '')));   // already sentence case
+  // V.1_42b: a heading is sentence case whatever its length ("Continuous Optimization" -> "Continuous optimization");
+  // names keep their capitals through keepNames_ (Google products, the client, names written with capitals in the request)
+  if (!parts.length || caps === 0) return keepNames_(lowerCommonWords_(str.replace(/\.$/, '')));   // already sentence case
   const keep = /^(AI|ML|ROI|KPIs?|CIO|CFO|CEO|CTO|IT|API|GCP|AWS|SAP|LLMs?|MLOps|LLMOps|GenAI|CSAT|NPS|SaaS|B2B|US|UK|EU|GDPR|CCPA|Q[1-4]|66degrees)$/;
   const out = words.map(function (w, i) {
     return w.split('-').map(function (part, j) {
@@ -2744,9 +2756,26 @@ function sentenceCaseHeadings_(sp) {
   const t = String(sp.type || '').toLowerCase();
   if ((t === 'cover' || t === 'closing') && sp.subtitle) sp.subtitle = sentenceCase_(sp.subtitle, 2);
   if (Array.isArray(sp.columns)) sp.columns = sp.columns.map(function (c) {
+    // V.1_42b: column objects of a proposal design (architecture flow) keep their items; only their label is cased
+    if (c && typeof c === 'object' && t !== 'table') { fix(c, 'label'); fix(c, 'title'); return c; }
     if (c && typeof c === 'object') { const v = c.title || c.label || c.name || c.header || ''; return headingCase_(String(v)); }
     return typeof c === 'string' ? headingCase_(c) : c;
   });
+  // proposal design fields: groups, stats, teams and their roles, org chart, flow nodes, workstreams, legend
+  (sp.groups || []).forEach(function (g) { if (g && typeof g === 'object') { fix(g, 'label'); fix(g, 'title'); } });
+  (sp.stats || []).forEach(function (x) { if (x && typeof x === 'object') fix(x, 'label'); });
+  (sp.teams || []).forEach(function (tm) {
+    if (!tm || typeof tm !== 'object') return;
+    fix(tm, 'name');
+    ['roles', 'stakeholders', 'specialists', 'members'].forEach(function (k) { (tm[k] || []).forEach(function (r) { if (r && typeof r === 'object') { fix(r, 'title'); fix(r, 'role'); } }); });
+  });
+  (function org(o) { if (!o || typeof o !== 'object') return; fix(o, 'name'); fix(o, 'role'); (o.reports || []).forEach(org); })(sp.org);
+  (sp.nodes || []).forEach(function (nd) { if (nd && typeof nd === 'object') fix(nd, 'label'); });
+  (sp.workstreams || []).forEach(function (w) { if (w && typeof w === 'object') fix(w, 'name'); });
+  (sp.legend || []).forEach(function (l) { if (l && typeof l === 'object') fix(l, 'label'); });
+  ['banner', 'heading'].forEach(function (k) { if (typeof sp[k] === 'string') fix(sp, k); });
+  // a lead that starts with a Title Case label ("Beyond Implementation: we focus...") gets the label in sentence case
+  if (typeof sp.lead === 'string') sp.lead = sp.lead.replace(/^([^:]{3,40}):\s+(.)/, function (m, lab, c) { return headingCase_(lab) + ': ' + c.toLowerCase(); });
   if (Array.isArray(sp.options)) sp.options = sp.options.map(function (o) { return typeof o === 'string' ? headingCase_(o) : o; });
   (sp.items || []).forEach(function (it) { if (it && typeof it === 'object') { fix(it, 'title'); fix(it, 'label'); } });
   (sp.points || []).forEach(function (p) { if (p && typeof p === 'object') fix(p, 'title'); });
@@ -2986,6 +3015,7 @@ const TOPIC_FAMILIES_ = [
   ['value', /\b(benefits?|value of|business value|why (gemini|ai)|shift(ing)? from|from reactive|without .{2,30} with|before and after|old way|new way)\b/i],
   ['usecases', /\b(use cases?|applications? (of|for)|where .{2,30} (helps|delivers|adds value)|capabilities (across|for|in)|enhances .{2,40}(operations|service)|touchpoints|ways? .{2,20} helps?)\b/i],
   ['delivery', /\b(how we deliver|our\b.{0,25}\b(framework|approach|methodology|process|method)|structured (approach|process|methodology)|implementation (process|plan|framework|approach|journey|steps)|implementing .{2,30}(framework|approach)|delivery (model|approach|methodology|framework)|phased (approach|implementation)|step-by-step|(holistic|comprehensive|proven) approach|approach to (ai|the|your|digital|cloud|data)\b.{0,30}|transformation approach)\b/i],
+  ['team', /\b(team structure|project team|delivery team|our team|proposed team|team approach|team model|staffing|roles and responsibilities|who does what)\b/i],
   ['platform', /\b(data platform|data foundation|data ecosystem|backbone|unified data|integrated .{0,25}platform|data architecture|data ingestion|data stack|single source of truth)\b/i],
   ['adoption', /\b(adoption|change management|upskilling|skills? gaps?|resistance to change|people, process|building trust)\b/i],
   ['considerations', /\b(considerations|critical success factors|success factors|key decisions|decisions? (to make|for your)|common (challenges|pitfalls)|challenges to (address|overcome)|keys to success|what it takes)\b/i],
@@ -3828,7 +3858,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_42';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_43';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck

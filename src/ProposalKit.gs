@@ -93,7 +93,10 @@ function fetchImage_(url, minBytes, label) {
     const blob = r.getBlob();
     const type = String(blob.getContentType() || '');
     if (!/^image\/(png|jpeg|jpg|gif|webp)/i.test(type)) { LOGO_TRAIL_.push((label || 'image') + ': not an image (' + type + ')'); return null; }
-    if (blob.getBytes().length < (minBytes || 1500)) { LOGO_TRAIL_.push((label || 'image') + ': too small'); return null; }
+    // V.1_42b: a simple logo (one-colour mark such as a swoosh) is a small file: the size check is on pixels, not bytes
+    const w = imageWidth_(blob);
+    if (blob.getBytes().length < 200 || (w && w < 64) || (!w && blob.getBytes().length < (minBytes || 1500))) { LOGO_TRAIL_.push((label || 'image') + ': too small'); return null; }
+    if (/webp/i.test(type)) { LOGO_TRAIL_.push((label || 'image') + ': WebP not supported by Slides'); return null; }
     return blob;
   } catch (e) { LOGO_TRAIL_.push((label || 'image') + ': ' + e.message); return null; }
 }
@@ -234,7 +237,7 @@ function findClientLogo_(client, ctx) {
   if (typeof resolveClientLogo_ === 'function') {
     try {
       if (typeof resetClientLogoRunLimit_ === 'function') resetClientLogoRunLimit_();
-      const resolved = resolveClientLogo_({
+      let resolved = resolveClientLogo_({
         companyName: client.name,
         domain: client.domain || guessedDomain,
         uploadedBlob: client.uploadedLogo || null,
@@ -245,6 +248,11 @@ function findClientLogo_(client, ctx) {
           return { id: d.id, source: d.source };
         }
       });
+      // Slides cannot place WebP pictures: such an answer is skipped and the other sources are tried
+      if (resolved && resolved.kind === 'image' && resolved.blob && /webp/i.test(String(resolved.blob.getContentType() || '') + ' ' + String(resolved.mime || ''))) {
+        LOGO_TRAIL_.push('ClientLogoProvider (' + resolved.source + '): WebP picture skipped');
+        resolved = null;
+      }
       if (resolved && resolved.kind === 'image' && (resolved.blob || resolved.id)) {
         if (guessedDomain && resolved.source !== 'user-upload' && !/drive|project/i.test(resolved.source || '')) client.domain = guessedDomain;
         if (resolved.id && !resolved.blob) return { id: resolved.id, blob: null, source: resolved.source };
@@ -465,7 +473,7 @@ function proposalAgenda_(agenda, rows, p) {
   agenda.agendaWide = p.agendaWide;                    // kept on the slide so a later re-sync keeps the same design
   rows = rows.map(function (r) { return { title: proposalShort_(r.title, 60), points: (r.points || []).map(function (x) { return proposalShort_(x, 56); }).filter(Boolean) }; })
     .filter(function (r) { return r.title; });
-  agenda.title = agenda.title && !/^table of contents$/i.test(agenda.title) ? agenda.title : 'Agenda';
+  agenda.title = 'Agenda';                             // V.1_42b: always "Agenda" (never Gemini's long agenda title)
   if (rows.length <= 7) {
     agenda.items = rows.map(function (r) { return { title: r.title }; });
     agenda.lockTag = 'P66_AGENDA_SPIRAL';
@@ -558,4 +566,86 @@ function proposalAgendaSync_(slides) {
   const more = proposalAgenda_(agenda, all, { agendaWide: agenda.agendaWide });
   const cont = agendas.filter(function (sp) { return sp.continued; })[0];
   if (cont) cont.items = more ? more.items : [];
+}
+
+/* ---------- 6. Every content slide of a Proposal Deck in a proposal design (V.1_42b) ----------
+   When no proposal design can draw a slide as Gemini wrote it (plain stats, bullets with a callout, a chart, a quote,
+   a team written as stakeholders...), the same content is reshaped into a type that a proposal design can draw:
+   "Label: text" bullets become cards, a small chart becomes KPI tiles, a quote becomes a statement, items move to
+   cards / process / diagram. The slide keeps its title, lead, notes and section. */
+function proposalPointItems_(points) {
+  return (Array.isArray(points) ? points : []).map(function (p) {
+    if (p && typeof p === 'object') return { title: String(p.title || p.label || '').trim(), text: String(p.text || '').trim() };
+    const m = String(p || '').match(/^(.{3,60}?):\s+(.+)$/);
+    return m ? { title: m[1].trim(), text: m[2].trim() } : { title: '', text: String(p || '').trim() };
+  }).filter(function (it) { return it.title || it.text; });
+}
+function proposalAlternatives_(sp) {
+  const t = proposalTypeOf_(sp);
+  const base = function (type, extra) {
+    const o = Object.assign({}, sp, { type: type, reference: null }, extra || {});
+    delete o.design;
+    return o;
+  };
+  const out = [];
+  const items = Array.isArray(sp.items) ? sp.items.filter(Boolean) : [];
+  const pts = proposalPointItems_(sp.points);
+  const callout = sp.callout ? String(sp.callout.text || sp.callout.title || '').trim() : '';
+  const take = String(sp.takeaway || callout || sp.statement || '').trim();
+  if (pts.length >= 3 && pts.every(function (it) { return it.title; })) {
+    out.push(base('cards', { items: pts.slice(0, 8), points: [], takeaway: take }));
+    out.push(base('process', { items: pts.slice(0, 6), points: [], takeaway: take }));
+  }
+  if (t === 'chart' && sp.chart && Array.isArray(sp.chart.categories) && sp.chart.series && sp.chart.series[0]) {
+    const unit = String(sp.chart.unit || '');
+    const vals = sp.chart.series[0].values || [];
+    const st = sp.chart.categories.slice(0, 4).map(function (c, i) { return { value: String(vals[i] != null ? vals[i] : '') + unit, label: String(c) }; })
+      .filter(function (x) { return x.value !== unit; });
+    if (st.length >= 3) out.push(base('stats', { items: st, takeaway: sp.insight ? String(sp.insight.text || sp.insight.title || '') : take, chart: null }));
+  }
+  // risks with their mitigation -> the risk table (Risk | Mitigation)
+  if (/\b(risks?|mitigat\w*)\b/i.test(String(sp.title || '')) && items.length >= 2 && t !== 'table' &&
+      items.every(function (it) { return it && typeof it === 'object' && (it.title || it.label) && it.text; })) {
+    out.push(base('table', { columns: ['Risk', 'Mitigation'], rows: items.slice(0, 7).map(function (it) { return [String(it.title || it.label), String(it.text)]; }), items: [] }));
+  }
+  if (t === 'quote' && sp.quote) out.push(base('statement', { statement: String(sp.quote), text: String(sp.attribution || '') }));
+  if (Array.isArray(sp.teams) && sp.teams.length === 2 && t !== 'team') out.push(base('team'));
+  if (sp.org && t !== 'team') out.push(base('team'));
+  if (items.length >= 2) {
+    const its = items.map(function (it) {
+      if (typeof it === 'string') return { title: '', text: it };
+      return Object.assign({}, it, { title: it.title || it.label || it.name || '', text: it.text || (it.value ? String(it.value) + (it.label && it.title ? ' ' + it.label : '') : '') });
+    });
+    if (t !== 'cards') out.push(base('cards', { items: its }));
+    if (t !== 'process') out.push(base('process', { items: its }));
+    if (t !== 'diagram') out.push(base('diagram', { items: its }));
+  }
+  if (t !== 'statement' && (sp.statement || sp.lead)) out.push(base('statement', { statement: String(sp.statement || sp.lead), text: String(sp.text || callout || '') }));
+  return out;
+}
+// used = designs already placed in this deck (a design is shown once): they do not count as available
+function proposalDrawable_(sp, used) {
+  if (typeof ENGINE === 'undefined' || typeof drawableDesigns_ !== 'function') return [];
+  const type = typeof normalizeType_ === 'function' ? normalizeType_(sp.type) : proposalTypeOf_(sp);
+  const P = ENGINE.PROPOSAL_TAGS || {};
+  return drawableDesigns_(type, itemCount_(sp), sp).filter(function (d) {
+    return P[d.tag] && !(used && used[d.tag]) && (!ENGINE.canDraw || ENGINE.canDraw(Object.assign({}, sp, { reference: { tag: d.tag } })));
+  });
+}
+function proposalCoerce_(sp, ctx, used) {
+  if (!sp || sp.deckLibrary !== 'proposal' || sp.lockTag) return false;
+  const t = proposalTypeOf_(sp);
+  if (['cover', 'agenda', 'closing', 'section', 'template'].indexOf(t) !== -1) return false;
+  if (proposalDrawable_(sp, used).length) return false;
+  const alts = proposalAlternatives_(sp);
+  for (let i = 0; i < alts.length; i++) {
+    if (!proposalDrawable_(alts[i], used).length) continue;
+    Object.keys(sp).forEach(function (k) { delete sp[k]; });
+    Object.assign(sp, alts[i]);
+    if (ctx && ctx.log) ctx.log.push('Proposal design: "' + String(sp.title || '').slice(0, 50) + '" shown as ' + sp.type + ' (a proposal design for its content).');
+    return true;
+  }
+  // nothing new fits: a proposal design already used is drawn again (never the plain layout when one can draw it)
+  if (!proposalDrawable_(sp).length && ctx && ctx.log) ctx.log.push('No proposal design for "' + String(sp.title || '').slice(0, 50) + '": plain ' + t + ' layout used.');
+  return false;
 }
