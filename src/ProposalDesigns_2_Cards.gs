@@ -566,10 +566,11 @@
     var items = itemsOf(s, 3), n = items.length;
     if (n !== 3 || items.some(function (it) { return !it.text; })) return null;
     var els = [];
-    var px = 604;
+    var px = 620;
     photoPanel(els, px);
     var top = K.header(els, s, { maxW: 480 }) + 4;
-    var gap = 12, cw = (W - 70 - CX - gap * 2) / 3, pad = 14, iw = cw - 2 * pad, bd = 28, chipH = 20, cs = 9.5;
+    // V.1_46: the cards end before the photo strip (the third card ran 46pt into it in deck 19)
+    var gap = 12, cw = (px - 16 - CX - gap * 2) / 3, pad = 14, iw = cw - 2 * pad, bd = 28, chipH = 20, cs = 9.5;
     var hB = K.linesBlock(items.map(function (it) { return it.title; }), iw, TSZ.heading, 500, 2);
     var bB = maxH(items.map(function (it) { return it.text; }), iw, TSZ.body);
     var chips = items.map(function (it) { return chipRows(it.points, iw, cs); });
