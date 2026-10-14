@@ -122,6 +122,6 @@ test("pillars: the cards end before the photo strip", () => {
   assert.ok(right <= strip - 8, "cards end at " + right + ", strip starts at " + strip);
 });
 
-test("version label is V.1_46", () => {
-  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_46'/.test(read("src/Code.gs")));
+test("version label is V.1_46 or later", () => {
+  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_(4[6-9]|[5-9][0-9])'/.test(read("src/Code.gs")));
 });

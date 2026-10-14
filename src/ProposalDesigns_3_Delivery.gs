@@ -79,9 +79,18 @@
     }
     return h1 + gap + h2;
   }
-  function phaseLabel_(t, i) {
+  function phaseLabel_(t, i, s) {
     t = String(t || '');
-    return /^(phase|stage|step|wave|sprint)\b/i.test(t) ? t : 'Phase ' + (i + 1) + ': ' + t;
+    if (/^(phase|stage|step|wave|sprint)\b/i.test(t)) return t;
+    // V.1_47: "Phase n:" only on a plan (roadmap, rollout, methodology); other steps keep their own names
+    var plan = !s || /phase|stage|wave|roadmap|rollout|roll-out|deploy|implementation|delivery plan|methodology|go-?live|pilot/i.test(String(s.title || '') + ' ' + String(s.lead || ''));
+    return plan ? 'Phase ' + (i + 1) + ': ' + t : t;
+  }
+
+  // V.1_47: data sources, systems or tools side by side are not levels: never on a pyramid or a layer stack
+  function sourcesList_(items) {
+    var k = items.filter(function (it) { return /\b(data|sources?|systems?|feeds?|tools?|apps?|platforms?|crm|erp)\s*$/i.test(String(it.title || '')); }).length;
+    return k >= Math.ceil(items.length / 2);
   }
 
   /* ---------- 1. Numbered step bars with panels — proposals pages 13, 128, 149, 61, 196, 303 ---------- */
@@ -145,11 +154,11 @@
     while (size > 9.5 && need(size) > avail) size -= 0.5;
     if (need(size) > avail + 1) return null;
     var ch = Math.min(avail, Math.max(need(size), avail * 0.86));
-    var hSize = K.uniformSize(items.map(function (it, i) { return phaseLabel_(it.title, i); }), colW - 20, headH - 4, { weight: 500, max: 11.5, min: 10, maxLines: 2 });
+    var hSize = K.uniformSize(items.map(function (it, i) { return phaseLabel_(it.title, i, s); }), colW - 20, headH - 4, { weight: 500, max: 11.5, min: 10, maxLines: 2 });
     items.forEach(function (it, i) {
       var x = CX + i * (colW + gap);
       K.rect(els, x, top, colW, headH, fills[i]);
-      K.text(els, x + 10, top, colW - 20, headH, phaseLabel_(it.title, i), { weight: 500, max: hSize, min: hSize, maxLines: 2, align: 'center', valign: 'middle', color: T.white });
+      K.text(els, x + 10, top, colW - 20, headH, phaseLabel_(it.title, i, s), { weight: 500, max: hSize, min: hSize, maxLines: 2, align: 'center', valign: 'middle', color: T.white });
       K.rect(els, x, top + headH, colW, ch, T.bgLight);
       K.bulletList(els, x + 14, top + headH + 15, bw, ch - 24, lists[i], { max: size, min: size, gap: 7 });
     });
@@ -187,11 +196,11 @@
     return lanes.filter(function (l) { return l.name && l.bars.length; });
   }
   add('P66_GANTT', 'timeline', { min: 2, max: 8, needs: 'periods',
-    desc: 'Gantt roadmap: blue period header, workstream rows, bars spanning periods with short labels, legend (periods[] 4-12, lanes[{name, bars[{start, end, label, group}]}] or tasks[{name, lane, start, end, label, group}], start/end = period numbers from 1; legend[] names the groups; a bar with milestone:true is a diamond)', words: '30-60' }, function (s) {
+    desc: 'Gantt roadmap: blue period header, 3-6 workstream rows (never fewer than 3), bars spanning periods with short labels, legend (periods[] 4-12, lanes[{name, bars[{start, end, label, group}]}] or tasks[{name, lane, start, end, label, group}], start/end = period numbers from 1; legend[] names the groups; a bar with milestone:true is a diamond)', words: '30-60' }, function (s) {
     var periods = pointsOf_(s.periods, 12);
     if (periods.length < 4) return null;
     var lanes = ganttLanes_(s, periods), nl = lanes.length, np = periods.length;
-    if (nl < 2 || nl > 8) return null;
+    if (nl < 3 || nl > 8) return null;                         // V.1_47: a roadmap of 1-2 lanes leaves the slide empty (phases instead)
     var els = [];
     var top = K.header(els, s);
     var palette = [T.blue, T.ink, B2, T.slate, B3, B1];
@@ -224,7 +233,7 @@
       units += l.u;
     });
     var hasMs = lanes.some(function (l) { return l.bars.some(function (b) { return b.milestone && b.label; }); });
-    var rowsTop = top + headH + 4, unitH = Math.min(nl <= 5 ? 38 : (hasMs ? 36 : 32), (BOTTOM - legH - rowsTop) / units);
+    var rowsTop = top + headH + 4, unitH = Math.min(nl <= 3 ? 64 : nl <= 4 ? 52 : nl <= 5 ? 42 : (hasMs ? 36 : 32), (BOTTOM - legH - rowsTop) / units);   // V.1_47: few lanes fill the slide
     if (unitH < 24) return null;
     var gridH = units * unitH;
     // header row
@@ -681,7 +690,7 @@
   add('P66_ISO_CALLOUTS', 'diagram', { min: 3, max: 4, needs: 'items',
     desc: 'layered platform: an isometric stack of 3-4 layers with a callout (heading + text) joined to each layer, optional statement card top right (items[{title, text}] from the top layer down, statement)', words: '8-20' }, function (s) {
     var items = itemsOf_(s, 4), n = items.length;
-    if (n < 3 || n > 4) return null;
+    if (n < 3 || n > 4 || sourcesList_(items)) return null;
     var els = [];
     var top = K.header(els, s, { maxW: 600 });
     var stmt = String(s.statement || s.takeaway || '');
@@ -827,7 +836,7 @@
   add('P66_PYRAMID', 'diagram', { min: 3, max: 4, needs: 'items',
     desc: 'pyramid of 3-4 levels (top = most important): level names on the left, text or bullets on the right (items[{title, text or points[]}], top level first)', words: '10-25' }, function (s) {
     var items = itemsOf_(s, 4), n = items.length;
-    if (n < 3 || n > 4) return null;
+    if (n < 3 || n > 4 || sourcesList_(items)) return null;
     var els = [];
     var top = K.header(els, s);
     var ay = top + 4, Hp = BOTTOM - 6 - ay, B = Math.min(290, Hp * 1.12), cx = 348;
@@ -866,9 +875,11 @@
 
   /* ---------- 15. Puzzle blocks — proposals page 93 ---------- */
   add('P66_PUZZLE', 'diagram', { min: 4, max: 6, needs: 'items',
-    desc: 'considerations that fit together: 4-6 puzzle blocks in blue tints, one short label each, optional sentence under the block (items[{title}], text)', words: '1-4 per block' }, function (s) {
+    desc: 'considerations that fit together: 4 or 6 puzzle blocks in blue tints, one short label each (labels only, no text per block), optional sentence under the block (items[{title}], text)', words: '1-4 per block' }, function (s) {
     var items = itemsOf_(s, 6), n = items.length;
-    if (n < 4 || n > 6) return null;
+    if (n !== 4 && n !== 6) return null;                       // V.1_47: an even puzzle (2 + 2 or 3 + 3), never 3 + 2
+    // V.1_47: the puzzle shows labels only: content with a sentence per item goes to a design that shows it
+    if (items.filter(function (it) { return String(it.text || '').trim().split(/\s+/).length >= 3; }).length >= 2) return null;
     var els = [];
     var top = K.header(els, s);
     var note = String(s.text || s.takeaway || '');
