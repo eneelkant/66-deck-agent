@@ -224,7 +224,8 @@ var ENGINE = (function () {
   function image(els, asset, x, y, w, h) { els.push({ t: 'image', asset: asset, x: x, y: y, w: w, h: h }); }
   function icon(els, item, x, y, size, onDark, fallback) {
     if (!item || (!item.icon && !item.material)) return;
-    els.push({ t: 'icon', name: item.icon || '', material: item.material || '', x: x, y: y, size: size, dark: !!onDark, fallback: fallback || '' });
+    // hint: the item's heading, a second concept when the icon would repeat one already on the slide (V.1_48)
+    els.push({ t: 'icon', name: item.icon || '', material: item.material || '', hint: String(item.title || item.label || ''), x: x, y: y, size: size, dark: !!onDark, fallback: fallback || '' });
   }
   function arr(a, max) { return (Array.isArray(a) ? a : []).slice(0, max); }
   function pad2(n) { return n < 10 ? '0' + n : String(n); }
@@ -3810,6 +3811,9 @@ var ENGINE = (function () {
       .replace(/\s*[\[(]\s*66D_[A-Z0-9_]+(?:\s*[,;\]\[)(]+\s*66D_[A-Z0-9_]+)*\s*[\])]/g, '')   // [66D_FACT_COMPANY_013]
       .replace(/\s*\[\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\](?:\s*\[\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\])*/g, '')  // research markers [1][4]
       .replace(/\s*66D_[A-Z]+_[A-Z0-9_]+/g, '')                                       // bare tags
+      .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1')                   // V.1_48: markdown bold **text** (never shown as asterisks)
+      .replace(/(^|[\s(])\*([^*\s][^*]*[^*\s]|[^*\s])\*(?=[\s).,;:!?]|$)/g, '$1$2')       // markdown italic *text*
+      .replace(/\*{2,}/g, '')                                                          // stray ** left over
       .replace(/[ \t]{2,}/g, ' ').replace(/\s+([.,;:])/g, '$1').replace(/^\s+|\s+$/g, '');
   }
   function cleanSpec(v) {

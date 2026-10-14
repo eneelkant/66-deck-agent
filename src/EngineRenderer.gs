@@ -235,6 +235,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
 
   slide.getPageElements().forEach(function (el) { try { el.remove(); } catch (e) {} });
   ctx.slideIcons = {};
+  ctx.slideIconFamilies = {};                                             // V.1_48: one icon of a kind per slide
   // V.1_42: built-in pictures (navy background of the proposal divider) first, then the Drive design assets
   const bgInline = out.bgImage && typeof inlineAssetBlob_ === 'function' ? inlineAssetBlob_(out.bgImage) : null;
   const bgId = out.bgImage && !bgInline ? engineAssetId(out.bgImage, ctx) : null;
@@ -433,14 +434,23 @@ function drawEngineIcon(slide, e, s, ctx) {
       const concept = e.concept || e.name || e.material || '';
       const pre = (ctx && ctx.currentSpec && ctx.currentSpec.resolvedIcons &&
         (ctx.currentSpec.resolvedIcons[concept] || ctx.currentSpec.resolvedIcons[e.nodeId])) || null;
-      const resolved = pre && pre.svg ? pre : resolveIconRequest_({
-        concept: concept,
-        brandColor: e.color || (e.dark ? '#FFFDF9' : '#0052FF'),
-        onDark: !!e.dark,
-        size: Math.max(16, Math.round(size)),
-        style: 'outline'
-      }, ctx);
+      const req = function (c) {
+        return resolveIconRequest_({ concept: c, brandColor: e.color || (e.dark ? '#FFFDF9' : '#0052FF'), onDark: !!e.dark, size: Math.max(16, Math.round(size)), style: 'outline' }, ctx);
+      };
+      let resolved = pre && pre.svg ? pre : req(concept);
+      // V.1_48: three light bulbs on one slide (deck 21 slide 4): an icon of a kind already on the slide is replaced by the
+      // icon for the item's heading when that one is of another kind
+      const fams = ctx.slideIconFamilies || (ctx.slideIconFamilies = {});
+      let fam = iconFamily_(resolved);
+      if (fam && fams[fam] && e.hint && e.hint !== concept) {
+        try {
+          const alt = req(e.hint);
+          const af = iconFamily_(alt);
+          if (alt && alt.ok !== false && af && !fams[af]) { resolved = alt; fam = af; }
+        } catch (err) {}
+      }
       if (resolved && insertResolvedIcon_(slide, resolved, e.x * s, e.y * s, size, ctx)) {
+        if (fam) fams[fam] = true;
         ctx.providerIconsPlaced = (ctx.providerIconsPlaced || 0) + 1;
         return;
       }
@@ -501,6 +511,16 @@ function drawEngineIcon(slide, e, s, ctx) {
       return;
     }
   }
+}
+
+// V.1_48: the kind of an icon ("lucide:lightbulb", "mdi:lightbulb-on-outline", "tabler:bulb" -> "bulb")
+function iconFamily_(r) {
+  if (!r || r.ok === false) return '';
+  const id = String(r.iconId || (r.driveMatch && r.driveMatch.key) || r.id || '').toLowerCase().replace(/^[a-z0-9-]+:/, '').replace(/^drive:/, '');
+  if (!id) return '';
+  const words = id.split(/[^a-z0-9]+/).filter(Boolean).map(function (w) { return /^(light)?bulb$|^idea$/.test(w) ? 'bulb' : w; });
+  const strong = words.filter(function (w) { return /^(bulb|gear|cog|globe|chart|graph|users?|people|person|team|shield|lock|cloud|database|server|target|rocket|handshake|dollar|money|clock|calendar|document|file|brain|robot|search|magnifier|truck|box|cart|star|check)$/.test(w); })[0];
+  return strong || words[0] || '';
 }
 
 var GENERIC_ICON_WORDS_ = ['idea', 'target', 'growth', 'team', 'check', 'chart', 'cloud', 'settings', 'search', 'star', 'rocket', 'shield'];

@@ -604,10 +604,13 @@ function proposalAlternatives_(sp) {
       .filter(function (x) { return x.value !== unit; });
     if (st.length >= 3) out.push(base('stats', { items: st, takeaway: sp.insight ? String(sp.insight.text || sp.insight.title || '') : take, chart: null }));
   }
-  // risks with their mitigation -> the risk table (Risk | Mitigation)
+  // risks with their mitigation -> the risk table (Risk | Mitigation, or Risk | Impact | Mitigation when the mitigations are points)
   if (/\b(risks?|mitigat\w*)\b/i.test(String(sp.title || '')) && items.length >= 2 && t !== 'table' &&
-      items.every(function (it) { return it && typeof it === 'object' && (it.title || it.label) && it.text; })) {
-    out.push(base('table', { columns: ['Risk', 'Mitigation'], rows: items.slice(0, 7).map(function (it) { return [String(it.title || it.label), String(it.text)]; }), items: [] }));
+      items.every(function (it) { return it && typeof it === 'object' && (it.title || it.label) && (it.text || (it.points || []).length); })) {
+    const withPts = items.some(function (it) { return (it.points || []).length; });
+    out.push(base('table', withPts
+      ? { columns: ['Risk', 'Impact', 'Mitigation'], rows: items.slice(0, 7).map(function (it) { return [String(it.title || it.label), String(it.text || ''), (it.points || []).map(String).join('; ')]; }), items: [] }
+      : { columns: ['Risk', 'Mitigation'], rows: items.slice(0, 7).map(function (it) { return [String(it.title || it.label), String(it.text)]; }), items: [] }));
   }
   // V.1_47: a roadmap the Gantt cannot draw (too few lanes) becomes its phases: one step per bar, in time order
   if (t === 'timeline' && Array.isArray(sp.lanes) && Array.isArray(sp.periods)) {
@@ -627,7 +630,12 @@ function proposalAlternatives_(sp) {
   if (items.length >= 2) {
     const its = items.map(function (it) {
       if (typeof it === 'string') return { title: '', text: it };
-      return Object.assign({}, it, { title: it.title || it.label || it.name || '', text: it.text || (it.value ? String(it.value) + (it.label && it.title ? ' ' + it.label : '') : '') });
+      // V.1_48: a step written as points ({title, points[]}) keeps them as its text, so other designs can show it
+      const pts = Array.isArray(it.points) ? it.points.map(function (p) { return typeof p === 'string' ? p : (p && (p.text || p.title)) || ''; }).filter(Boolean) : [];
+      const fromPts = pts.length ? pts.map(function (p) { return /[.!?]$/.test(p) ? p : p + '.'; }).join(' ') : '';
+      // a stats item keeps its figure in its heading ("65% · Fewer lost sales"), never loses it
+      const title = it.value && /\d/.test(String(it.value)) ? String(it.value) + ' · ' + String(it.label || it.title || '') : (it.title || it.label || it.name || '');
+      return Object.assign({}, it, { title: title, text: it.text || fromPts || '' });
     });
     if (t !== 'cards') out.push(base('cards', { items: its }));
     if (t !== 'process') out.push(base('process', { items: its }));
@@ -650,8 +658,18 @@ function proposalCoerce_(sp, ctx, used) {
   const t = proposalTypeOf_(sp);
   if (['cover', 'agenda', 'closing', 'section', 'template'].indexOf(t) !== -1) return false;
   if (proposalDrawable_(sp, used).length) return false;
+  // V.1_48: figures stay figures: a KPI / stats slide whose only design is taken uses it again (deck 21: the KPI targets
+  // lost their numbers on a layer stack); the same for a risk slide that the risk rows can show
+  const numeric = (Array.isArray(sp.items) ? sp.items : []).filter(function (it) { return it && /\d/.test(String(it.value || '')); }).length;
+  if (t === 'stats' && numeric >= 2 && proposalDrawable_(sp).length) return false;
+  if (/\b(risks?|mitigat\w*)\b/i.test(String(sp.title || '')) && (sp.items || []).some(function (it) { return it && (it.points || []).length; }) &&
+      proposalDrawable_(sp).some(function (d) { return d.tag === 'P66_IMPACT_MITIGATION'; })) return false;
   const alts = proposalAlternatives_(sp);
+  // V.1_48: a slide with several points is never reduced to one statement (it would lose them): a design already used
+  // that shows all the points is better
+  const many = (Array.isArray(sp.items) ? sp.items.filter(Boolean).length : 0) >= 2 || (Array.isArray(sp.points) ? sp.points.length : 0) >= 2;
   for (let i = 0; i < alts.length; i++) {
+    if (many && proposalTypeOf_(alts[i]) === 'statement') continue;
     if (!proposalDrawable_(alts[i], used).length) continue;
     Object.keys(sp).forEach(function (k) { delete sp[k]; });
     Object.assign(sp, alts[i]);
