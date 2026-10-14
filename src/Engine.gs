@@ -3900,6 +3900,13 @@ var ENGINE = (function () {
       }) : []).filter(function (x) { return x && (x.title || x.text || typeof x === 'string'); });
       if (its.length >= 2) alt = L.cards(Object.assign({}, s, { items: its, reference: null }), lctx);
       else if (arr(s.points, 6).length) alt = L.bullets(Object.assign({}, s, { reference: null }), lctx);
+      // 3. V.1_47: nothing left to list (a KPI slide whose figures were all removed): the slide's message as a statement
+      if ((!alt || contentCount_(alt) === 0) && (s.takeaway || s.lead || s.statement || s.text)) {
+        try {
+          alt = L.statement({ title: s.title, statement: String(s.takeaway || s.statement || s.lead || s.text),
+            text: s.takeaway && s.lead && s.lead !== s.takeaway ? String(s.lead) : '', notes: s.notes }, lctx);
+        } catch (e) { alt = null; }
+      }
       if (alt && contentCount_(alt) > 0) out = alt;
     }
     if (['cover', 'agenda', 'closing', 'section', 'statement', 'chart', 'quote'].indexOf(type) === -1 && !out.noBalance &&

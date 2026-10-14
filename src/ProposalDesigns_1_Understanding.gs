@@ -616,9 +616,11 @@
     }
     function noteLabW_(p) { return p.label ? K.textWidth(p.label, 'sans', 500, 9.5) / 0.94 + 8 : 0; }
     function noteH_(note) { var p = splitNote_(note); return K.textH(p.text, noteW - noteLabW_(p), 9.5); }
+    // V.1_47: rows are measured a little narrower than drawn, so a line that wraps in Slides still fits in its row
+    var SAFE = 14;
     function needsFor(tw, tsz) {
       return items.map(function (it) {
-        var a = K.textH(it.title, tw, tsz, 500) + 2 + K.textH(it.text, tw, 10);
+        var a = K.textH(it.title, tw - SAFE, tsz, 500) + 2 + K.textH(it.text, tw - SAFE, 10);
         var b = it.note ? noteH_(it.note) : 0;
         return Math.max(a, b, 30) + 16;
       });
@@ -652,11 +654,11 @@
       var sq = Math.min(34, h - 14);
       K.rect(els, x + 10, y + (h - sq) / 2, sq, sq, T.blue);
       K.text(els, x + 10, y + (h - sq) / 2, sq, sq, K.pad2(i + 1), { font: 'mono', weight: 500, max: 12, min: 11, maxLines: 1, color: T.white, align: 'center', valign: 'middle' });
-      var th = K.textH(it.title, tw, ts, 500);
-      var blockH = th + (it.text ? 2 + K.textH(it.text, tw, 10) : 0);
+      var th = K.textH(it.title, tw - SAFE, ts, 500), bh2 = it.text ? K.textH(it.text, tw - SAFE, 10) : 0;
+      var blockH = th + (it.text ? 2 + bh2 : 0);
       var cy = y + (h - blockH) / 2;
       K.text(els, tx, cy, tw, th + 1, it.title, { weight: 500, max: ts, min: ts, color: T.ink });
-      if (it.text) K.text(els, tx, cy + th + 2, tw, K.textH(it.text, tw, 10) + 1, it.text, { weight: 400, max: 10, min: 10, color: T.ink });
+      if (it.text) K.text(els, tx, cy + th + 2, tw, bh2 + 1, it.text, { weight: 400, max: 10, min: 10, color: T.ink });
       if (it.note && cols === 1) {
         var nx = x + colW - noteW - 14;
         K.line(els, nx - 14, y + 10, nx - 14, y + h - 10, LINE_C, 0.75);

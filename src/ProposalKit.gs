@@ -609,6 +609,18 @@ function proposalAlternatives_(sp) {
       items.every(function (it) { return it && typeof it === 'object' && (it.title || it.label) && it.text; })) {
     out.push(base('table', { columns: ['Risk', 'Mitigation'], rows: items.slice(0, 7).map(function (it) { return [String(it.title || it.label), String(it.text)]; }), items: [] }));
   }
+  // V.1_47: a roadmap the Gantt cannot draw (too few lanes) becomes its phases: one step per bar, in time order
+  if (t === 'timeline' && Array.isArray(sp.lanes) && Array.isArray(sp.periods)) {
+    const per = sp.periods.map(String);
+    const bars = [];
+    sp.lanes.forEach(function (l) { ((l && l.bars) || []).forEach(function (b) { if (b && (b.label || (l && l.name))) bars.push({ l: l, b: b }); }); });
+    bars.sort(function (a, b) { return (a.b.start || 0) - (b.b.start || 0); });
+    const steps = bars.slice(0, 6).map(function (x) {
+      const from = per[(x.b.start || 1) - 1] || '', to = per[(x.b.end || x.b.start || 1) - 1] || '';
+      return { title: String(x.b.label || x.l.name), text: String(x.l.name || '') + (from ? ' · ' + from + (to && to !== from ? ' to ' + to : '') : '') };
+    });
+    if (steps.length >= 3) out.push(base('process', { items: steps, lanes: null, periods: null }));
+  }
   if (t === 'quote' && sp.quote) out.push(base('statement', { statement: String(sp.quote), text: String(sp.attribution || '') }));
   if (Array.isArray(sp.teams) && sp.teams.length === 2 && t !== 'team') out.push(base('team'));
   if (sp.org && t !== 'team') out.push(base('team'));

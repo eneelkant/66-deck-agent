@@ -345,7 +345,7 @@ function referenceForTag_(lib, tag) {
 
 // Designs whose look carries a meaning: only used when the slide is about that (e.g. the "!" warning badges = risks)
 // designs that never show some content, even when Gemini picks them (risks on a pyramid or a stack of layers)
-const HARD_TOPIC_GATES_ = { P66_PYRAMID: true, P66_ISO_CALLOUTS: true };
+const HARD_TOPIC_GATES_ = { P66_PYRAMID: true, P66_ISO_CALLOUTS: true, P66_PHASE_COLUMNS: true };   // V.1_47: phase columns only for a plan
 const DESIGN_TOPICS_ = {
   '66D_LAYOUT_CARDS_024': /\b(risks?|challenges?|issues?|barriers?|pitfalls?|concerns?|threats?|problems?|obstacles?|gaps?|blockers?|hurdles?|warnings?)\b/i,
   // V.1_42 Proposal Deck designs whose look says what the slide is about
@@ -367,7 +367,10 @@ const DESIGN_TOPICS_ = {
   P66_GOV_COLUMNS: /governance|standards?|operating model|raci|oversight/i,
   P66_KEY_INPUTS: /inputs?|requirements?|questions?|assumptions?|needs|what we heard/i,
   P66_PHASE_DETAIL: /phase|stage|wave|workstream|sprint/i,
-  P66_PYRAMID: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?)\b)/i,             // levels, never a list of risks
+  P66_PHASE_COLUMNS: /phase|stage|wave|roadmap|rollout|roll-out|deploy\w*|implementation|delivery plan|methodology|go-?live|pilot/i,   // V.1_47: phases only for a plan
+  P66_GANTT: /roadmap|timeline|plan|schedule|phases?|milestones?|weeks?|months?|quarters?/i,
+  // levels of a hierarchy only (V.1_47: never data sources, systems or a list of risks)
+  P66_PYRAMID: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|data sources?|sources)\b)[\s\S]*\b(hierarch\w*|levels?|maturity|tiers?|priorit\w*|pyramid|ladder|stages? of|building blocks|layers? of|value chain of needs)\b/i,
   P66_ISO_CALLOUTS: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?)\b)/i,        // stacked layers, never a list of risks
   P66_CATEGORY_LEGEND: /framework|categor|criteria|validation|readiness|classification/i
 };

@@ -180,7 +180,7 @@
     function bh(it) { return (it.text ? th(it.text, iw, TSZ.body) : 0) + (it.text && it.points.length ? 10 : 0) + ptsH(it.points, iw, TSZ.body, 6); }
     var need = pad + bd + 12 + hB + 10 + Math.max(bh(items[0]), bh(items[1])) + 18, avail = BOTTOM - top;
     if (need > avail) return null;
-    var ch = Math.min(avail, Math.max(need, avail * 0.62));
+    var ch = Math.min(avail, Math.max(need, avail * 0.86));        // V.1_47: the two cards fill the slide (not its top half)
     var y0 = top + Math.max(0, (avail - ch) * 0.45);
     items.forEach(function (it, i) {
       var x = CX + i * (cw + gap), y = y0;
@@ -209,7 +209,7 @@
     var need1 = vp + hB + 3 + bB + vp, avail = BOTTOM - top;
     var needAll = rows * need1 + (rows - 1) * gap;
     if (needAll > avail) return null;
-    var total = K.boxH(needAll, avail), rh = (total - (rows - 1) * gap) / rows;
+    var total = Math.min(avail, Math.max(needAll, avail * 0.9)), rh = (total - (rows - 1) * gap) / rows;   // V.1_47: no empty bottom band
     items.forEach(function (it, i) {
       var r = Math.floor(i / 2), c = i % 2, full = (n % 2 === 1 && i === n - 1);
       var x = CX + (full ? 0 : c * (cw + cgap)), y = top + r * (rh + gap), w = full ? CW : cw;
@@ -247,7 +247,7 @@
     var need1 = pad + hB + 10 + 1 + 10 + bB + pad, avail = BOTTOM - top;
     var needAll = 2 * need1 + gap;
     if (needAll > avail) return null;
-    var total = K.boxH(needAll, avail), ch = (total - gap) / 2;
+    var total = Math.min(avail, Math.max(needAll, avail * 0.9)), ch = (total - gap) / 2;   // V.1_47: the grid reaches the bottom
     items.forEach(function (it, i) {
       var x = CX + inset + (i % 2) * (cw + gap), y = top + Math.floor(i / 2) * (ch + gap);
       K.rect(els, x, y, cw, ch, T.bgLight);
@@ -265,17 +265,19 @@
     desc: '3-5 white rows (icon, short label, one-line text) and a blue "Deliverable" bar at the bottom, dark photo strip on the right (one workstream or phase and what it delivers)', words: '8-16; label 1-3 words' }, function (s) {
     var items = itemsOf(s, 5), n = items.length;
     if (n < 3 || n > 5) return null;
-    var del = String(s.deliverable || (s.callout && (s.callout.text || s.callout.title)) || s.takeaway || '').trim();
+    // V.1_47: the "Deliverable" bar only shows a deliverable; a general takeaway sits on the bar without that label
+    var delGiven = String(s.deliverable || (s.callout && /deliverable/i.test(String(s.callout.label || s.callout.title || '')) && s.callout.text) || '').trim();
+    var del = delGiven || String(s.takeaway || '').trim();
     var els = [];
     var px = 500;
     photoPanel(els, px);
-    var top = K.header(els, s) + 2;
+    var top = K.header(els, s, { maxW: px - 50 }) + 2;               // V.1_47: the title stops before the photo strip
     var x0 = CX - 14, rw = px - 16 - x0, bd = 26, labW = 100, tx = x0 + 14 + bd + 12 + labW + 10, tw = x0 + rw - 14 - tx;
     var lab = items.map(function (it) { return th(it.title, labW, TSZ.heading, 500); });
     var txt = items.map(function (it) { return th(it.text, tw, TSZ.body); });
     var need = items.map(function (it, i) { return Math.max(lab[i], txt[i], bd) + 16; });
-    var barLbl = String(s.deliverableLabel || 'Deliverable');
-    var lw = K.textWidth(barLbl, 'sans', 500, TSZ.heading) + 6;
+    var barLbl = delGiven ? String(s.deliverableLabel || 'Deliverable') : '';
+    var lw = barLbl ? K.textWidth(barLbl, 'sans', 500, TSZ.heading) + 6 : -12;
     var barH = del ? Math.max(28, th(del, rw - 46 - lw - 12, TSZ.body) + 14) : 0;
     var gap = 8, avail = BOTTOM - top - (del ? barH + gap : 0);
     var sum = need.reduce(function (a, b) { return a + b; }, 0) + gap * (n - 1);
@@ -292,8 +294,10 @@
     });
     if (del) {
       K.rect(els, x0, y, rw, barH, T.blue);
-      K.icon(els, { icon: 'document deliverable' }, x0 + 14, y + barH / 2 - 7, 14, true);
-      K.text(els, x0 + 34, y, lw, barH, barLbl, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 1, valign: 'middle', color: T.white });
+      if (barLbl) {
+        K.icon(els, { icon: 'document deliverable' }, x0 + 14, y + barH / 2 - 7, 14, true);
+        K.text(els, x0 + 34, y, lw, barH, barLbl, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 1, valign: 'middle', color: T.white });
+      }
       K.text(els, x0 + 34 + lw + 12, y, rw - 46 - lw - 12, barH, del, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3, valign: 'middle', color: T.white });
     }
     return photoOut(els);
