@@ -371,8 +371,8 @@ const DESIGN_TOPICS_ = {
   P66_PHASE_COLUMNS: /\b(phases?|phased|stages?|waves?|roadmap|rollout|roll-out|deployment (plan|phases|roadmap)|implementation (plan|phases|roadmap)|delivery plan|methodology|go-?live|pilot)\b/i,
   P66_GANTT: /roadmap|timeline|plan|schedule|phases?|milestones?|weeks?|months?|quarters?/i,
   // levels of a hierarchy only (V.1_47: never data sources, systems or a list of risks)
-  P66_PYRAMID: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|data sources?|sources|kpis?|metrics?|key performance|indicators?|measur\w*|targets?)\b)[\s\S]*\b(hierarch\w*|levels?|maturity|tiers?|priorit\w*|pyramid|ladder|stages? of|building blocks|layers? of|value chain of needs)\b/i,
-  P66_ISO_CALLOUTS: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|kpis?|metrics?|key performance|indicators?|measur\w* success|targets?)\b)/i,   // stacked layers, never risks or KPIs (V.1_48)
+  P66_PYRAMID: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|data sources?|sources|kpis?|metrics?|key performance|indicators?|measur\w*|targets?|loop|cycle|lifecycle|workflow)\b)[\s\S]*\b(hierarch\w*|levels?|maturity|tiers?|priorit\w*|pyramid|ladder|stages? of|building blocks|layers? of|value chain of needs)\b/i,
+  P66_ISO_CALLOUTS: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|kpis?|metrics?|key performance|indicators?|measur\w* success|targets?|loop|cycle|lifecycle|workflow|continuous)\b)/i,   // stacked layers, never risks, KPIs or a loop (V.1_48/50)
   P66_CATEGORY_LEGEND: /framework|categor|criteria|validation|readiness|classification/i
 };
 

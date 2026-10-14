@@ -580,6 +580,10 @@
   /* ---------- 14. Opening statement in a framed box — proposals page 164 ---------- */
   add('P66_STATEMENT_BOX', 'statement', { desc: 'opening statement: a big title (statement) and a blue subtitle (text) inside a large framed box on a light background', words: '6-14 statement, 6-12 subtitle' }, function (s) {
     var st = K.str(s.statement || s.title), sub = K.str(s.text || s.lead);
+    // V.1_50: never the same sentence twice (deck 22 slide 11): a subtitle that repeats the statement makes way for the
+    // slide title, or goes
+    var same = function (a, b) { return String(a || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() === String(b || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+    if (sub && same(sub, st)) sub = s.title && !same(s.title, st) ? K.str(s.title) : '';
     if (!st) return null;
     var els = [];
     var bx = 24, by = 52, bw = W - 48, bh = 278, tw = 480;

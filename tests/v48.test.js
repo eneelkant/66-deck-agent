@@ -134,12 +134,15 @@ test("a risk slide without mitigations gets them and is drawn as impact + mitiga
     var risky = { type: 'cards', title: 'Anticipated risks and mitigation strategies', items: [{ title: 'Technical', points: ['Potential challenges related to data integration.'] }, { title: 'Operational', points: ['Workflow disruption.'] }, { title: 'Adoption', points: ['User acceptance.'] }] };
     var fine = { type: 'cards', title: 'Key risks', items: [{ title: 'Data gaps', text: 'Forecasts miss demand.', points: ['Profile data in month one'] }, { title: 'Adoption', text: 'Planners ignore models.', points: ['Champions in each region'] }] };
     riskSlidesWithMitigations_([risky, fine], ctx);
-    return JSON.stringify({ risky: risky, fine: fine.type });
+    return JSON.stringify({ risky: risky, fine: fine.type, fineDesign: fine.design, finePts: fine.items[0].points });
   })()`));
   assert.equal(R.risky.type, "comparison");
   assert.equal(R.risky.design, "P66_IMPACT_MITIGATION");
   assert.ok(R.risky.items.every((it) => it.title && it.text && it.points.length >= 2));
-  assert.equal(R.fine, "cards", "a risk slide that already has mitigations is kept");
+  // (V.1_50: a risk slide that already has its mitigations keeps them and is drawn as the risk rows too)
+  assert.equal(R.fine, "comparison");
+  assert.equal(R.fineDesign, "P66_IMPACT_MITIGATION");
+  assert.deepEqual(R.finePts, ["Profile data in month one"]);
   const g = engine();
   const sl = lay(g, Object.assign({}, R.risky, { reference: { tag: "P66_IMPACT_MITIGATION" } }));
   assert.ok(sl.els.some((e) => e.t === "text" && /Profile and cleanse/.test(e.text)));

@@ -641,8 +641,33 @@ function proposalAlternatives_(sp) {
     if (t !== 'process') out.push(base('process', { items: its }));
     if (t !== 'diagram') out.push(base('diagram', { items: its }));
   }
-  if (t !== 'statement' && (sp.statement || sp.lead)) out.push(base('statement', { statement: String(sp.statement || sp.lead), text: String(sp.text || callout || '') }));
+  // (V.1_50: the statement is the slide's message (its title); the lead is the line under it, never the same sentence twice)
+  if (t !== 'statement' && (sp.statement || sp.lead || sp.title)) {
+    const stm = String(sp.statement || sp.title || sp.lead), sub = String(sp.text || callout || (sp.lead && sp.lead !== stm ? sp.lead : '') || '');
+    out.push(base('statement', { statement: stm, text: sub !== stm ? sub : '' }));
+  }
   return out;
+}
+// V.1_50: a loop is drawn as a cycle (deck 22: "an integrated loop" on a stack of layers, "continuous improvement" on
+// numbered bars). A slide whose title or lead says loop / cycle / lifecycle / continuous improvement, with 4-6 steps,
+// becomes the cycle design when it is free and can show the steps.
+const CYCLE_WORDS_RE_ = /\b(loop|cycle|lifecycle|life cycle|continuous(ly)? (improvement|optimi[sz]ation|learning|improve)|flywheel|iterative|feedback loop)\b/i;
+function proposalCycle_(sp, used) {
+  if (!sp || sp.deckLibrary !== 'proposal' || sp.lockTag || (used && used.P66_CYCLE)) return false;
+  const t = proposalTypeOf_(sp);
+  if (['process', 'diagram', 'cards'].indexOf(t) === -1) return false;
+  if (!CYCLE_WORDS_RE_.test(String(sp.title || '') + ' ' + String(sp.lead || ''))) return false;
+  if (/\b(risks?|kpis?|team|architecture)\b/i.test(String(sp.title || ''))) return false;
+  const items = (Array.isArray(sp.items) ? sp.items : []).filter(function (it) { return it && typeof it === 'object' && (it.title || it.label); });
+  if (items.length < 4 || items.length > 6) return false;
+  const trial = Object.assign({}, sp, { type: 'diagram', items: items.map(function (it) {
+    const pts = Array.isArray(it.points) ? it.points.map(String) : [];
+    return { title: String(it.title || it.label), text: String(it.text || pts.join(' ')), icon: it.icon };
+  }), center: sp.center || (typeof centerLabel_ === 'function' ? centerLabel_(sp.title) : ''), reference: { tag: 'P66_CYCLE' } });
+  if (typeof ENGINE !== 'undefined' && ENGINE.canDraw && !ENGINE.canDraw(trial)) return false;
+  Object.keys(sp).forEach(function (k) { delete sp[k]; });
+  Object.assign(sp, trial, { design: 'P66_CYCLE', reference: null });
+  return true;
 }
 // used = designs already placed in this deck (a design is shown once): they do not count as available
 function proposalDrawable_(sp, used) {
@@ -667,7 +692,8 @@ function proposalCoerce_(sp, ctx, used) {
   const alts = proposalAlternatives_(sp);
   // V.1_48: a slide with several points is never reduced to one statement (it would lose them): a design already used
   // that shows all the points is better
-  const many = (Array.isArray(sp.items) ? sp.items.filter(Boolean).length : 0) >= 2 || (Array.isArray(sp.points) ? sp.points.length : 0) >= 2;
+  const many = (Array.isArray(sp.items) ? sp.items.filter(Boolean).length : 0) >= 2 || (Array.isArray(sp.points) ? sp.points.length : 0) >= 2 ||
+    ((sp.left && (sp.left.points || []).length) || 0) + ((sp.right && (sp.right.points || []).length) || 0) >= 2 || (Array.isArray(sp.rows) && sp.rows.length >= 2);   // V.1_50: two columns of points too
   for (let i = 0; i < alts.length; i++) {
     if (many && proposalTypeOf_(alts[i]) === 'statement') continue;
     if (!proposalDrawable_(alts[i], used).length) continue;

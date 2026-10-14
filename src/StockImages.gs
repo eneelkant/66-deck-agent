@@ -38,7 +38,7 @@ function stockImagesList_(ctx) {
       if (ctx && ctx.log) ctx.log.push('Stock images folder not readable (' + e.message + '): the streak pattern is used.');
     }
   }
-  if (ctx) { ctx.stockImages = list; ctx.stockUsed = ctx.stockUsed || {}; }
+  if (ctx) { ctx.stockImages = list; ctx.stockUsed = ctx.stockUsed || {}; }   // (long decks keep stockUsed in the run state)
   return list;
 }
 

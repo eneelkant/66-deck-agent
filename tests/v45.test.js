@@ -141,5 +141,5 @@ test("client logo: a 32 px website icon is still used when nothing better is fou
 });
 
 test("version label is V.1_45 or later", () => {
-  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_4[5-9]'/.test(read("src/Code.gs")));
+  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_(4[5-9]|[5-9][0-9])'/.test(read("src/Code.gs")));
 });
