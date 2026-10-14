@@ -158,7 +158,7 @@ test("built-in pictures: navy background and band are JPEG in ProposalAssets.gs,
   });
   const kit = read("src/ProposalKit.gs"), r = read("src/EngineRenderer.gs");
   assert.ok(/asset === 'navy-bg'/.test(kit) && /asset === 'navy-band'/.test(kit));
-  assert.ok(/bgInline \|\| getBlobCached\(bgId, ctx\)/.test(r));
+  assert.ok(/bgInline \|\| \(bgId \? getBlobCached\(bgId, ctx\)/.test(r));
 });
 
 test("chooser: frame slides keep their design; the only proposal design of a type is used; Gemini's fitting design wins", () => {

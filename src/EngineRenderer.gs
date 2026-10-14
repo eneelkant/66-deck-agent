@@ -240,18 +240,38 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   const bgId = out.bgImage && !bgInline ? engineAssetId(out.bgImage, ctx) : null;
   // V.1_44: the photo (dark streaks, navy) is a normal picture behind everything, not the slide background, so it can
   // be selected, replaced (Replace image) or deleted in Slides. The background underneath is the design's solid colour.
-  slide.getBackground().setSolidFill(out.bg);
-  if (bgInline || bgId) {
+  // V.1_45 / V.1_46: a design that shows the photo only in a strip, panel or band gets a picture of exactly that size:
+  // a stock image from the brand folder (about 95 slides in 100) or the streak photo cut to it. The slide underneath
+  // is pale, so deleting the picture leaves a clean slide. A full-slide photo (dividers) stays the full streak photo.
+  const region = out.bgImage === 'section-bg' && typeof photoRegion_ === 'function' ? photoRegion_(out.els, ENGINE.W, ENGINE.H) : null;
+  const partial = !!region && !(region[0] <= 1 && region[1] <= 1 && region[2] >= ENGINE.W - 1 && region[3] >= ENGINE.H - 1);
+  let stock = null, cut = null;
+  if (partial) {
+    try { stock = typeof pickStockImage_ === 'function' ? pickStockImage_(region, spec, ctx) : null; } catch (e) { stock = null; }
+    if (!stock && typeof streakCropBlob_ === 'function') cut = streakCropBlob_(region, ENGINE.W, ENGINE.H);
+  }
+  slide.getBackground().setSolidFill(partial && (stock || cut) ? ENGINE.TOKENS.white : out.bg);
+  const photo = stock || cut || bgInline || (bgId ? getBlobCached(bgId, ctx) : null);
+  if (photo) {
     try {
-      // V.1_45: a design that shows the photo only in a strip, panel or band gets a picture of exactly that size (the
-      // streak photo cut to it), so selecting it selects just the strip; a full-slide photo stays full size
-      const region = out.bgImage === 'section-bg' && typeof photoRegion_ === 'function' ? photoRegion_(out.els, ENGINE.W, ENGINE.H) : null;
-      const cut = region && typeof streakCropBlob_ === 'function' ? streakCropBlob_(region, ENGINE.W, ENGINE.H) : null;
-      const box = cut ? safeBox_(region[0] * s, region[1] * s, (region[2] - region[0]) * s, (region[3] - region[1]) * s)
+      const box = (stock || cut) ? safeBox_(region[0] * s, region[1] * s, (region[2] - region[0]) * s, (region[3] - region[1]) * s)
         : { x: 0, y: 0, w: safeSize_(pageW, ENGINE.W), h: safeSize_(pageH, ENGINE.H) };
-      const bgPic = slide.insertImage(cut || bgInline || getBlobCached(bgId, ctx), box.x, box.y, box.w, box.h);
+      const bgPic = slide.insertImage(photo);
+      // exactly the box (insertImage keeps the picture's own shape and would leave bands of background around it)
+      bgPic.setLeft(box.x).setTop(box.y).setWidth(box.w).setHeight(box.h);
+      // a stock image is cropped to fill the box at its own proportions (never stretched)
+      if (stock) { try { bgPic.replace(stock, true); bgPic.setLeft(box.x).setTop(box.y).setWidth(box.w).setHeight(box.h); } catch (err) {} }
       try { bgPic.sendToBack(); } catch (err) {}
-      try { bgPic.setDescription('Background photo (replace or delete)'); } catch (err) {}
+      try { bgPic.setDescription(stock ? 'Stock image (replace, crop or delete)' : 'Background photo (replace or delete)'); } catch (err) {}
+      // text or the white 66° mark on the photo stays readable on a stock image: a dark veil over the image only
+      if (stock && out.els.some(function (e) {
+        const cx = (e.t === 'line' ? e.x1 : e.x + (e.w || e.size || 0) / 2), cy = (e.t === 'line' ? e.y1 : e.y + (e.h || e.size || 0) / 2);
+        return (e.t === 'text' || (e.t === 'image' && e.asset === 'mark-white')) && cx >= region[0] && cx <= region[2] && cy >= region[1] && cy <= region[3];
+      })) {
+        const veil = insertShapeSafe_(slide, 'RECTANGLE', box.x, box.y, box.w, box.h);
+        veil.getFill().setSolidFill(ENGINE.TOKENS.ink, 0.55);
+        veil.getBorder().setTransparent();
+      }
     } catch (e) {
       Logger.log('Background photo not placed: ' + e.message);
     }

@@ -23,12 +23,12 @@ function mock(log, name) {
   } });
 }
 function load(extra) {
-  const sandbox = Object.assign({ console, Logger: { log() {} }, Math, JSON, Date, CONFIG: { iconOrder: ["material"], maxSourceChars: 60000 },
+  const sandbox = Object.assign({ PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k === "STOCK_IMAGES_FOLDER_ID" ? "off" : null) }) }, console, Logger: { log() {} }, Math, JSON, Date, CONFIG: { iconOrder: ["material"], maxSourceChars: 60000 },
     progressStage_() {}, checkCancel_() {}, Session: { getScriptTimeZone: () => "UTC" },
     Utilities: { newBlob: (b, t, n) => ({ blob: n, type: t }), base64Decode: () => [], formatDate: () => "x" },
     SlidesApp: { ParagraphAlignment: {}, ContentAlignment: {}, ShapeType: { RECTANGLE: "RECTANGLE", ELLIPSE: "ELLIPSE" }, LineCategory: {}, ArrowStyle: {}, DashStyle: {} } }, extra || {});
   vm.createContext(sandbox);
-  ["src/Engine.gs"].concat(DESIGN_FILES.map((f) => "src/" + f)).concat(["src/EngineRenderer.gs", "src/PhotoStrips.gs", "src/Reference.gs", "src/ProposalKit.gs", "src/Code.gs"])
+  ["src/Engine.gs"].concat(DESIGN_FILES.map((f) => "src/" + f)).concat(["src/EngineRenderer.gs", "src/PhotoStrips.gs", "src/StockImages.gs", "src/Reference.gs", "src/ProposalKit.gs", "src/Code.gs"])
     .forEach((f) => vm.runInContext(read(f), sandbox, { filename: f }));
   sandbox.getBlobCached = (id) => ({ blob: "drive:" + id });
   if (extra) Object.assign(sandbox, extra);
@@ -41,7 +41,12 @@ function drawn(g, spec) {
   try { g.renderEngineSlide(mock(log, "slide"), spec, 1, ctx, 720, 405, "x"); } catch (e) {}
   return log;
 }
-const firstImage = (log) => log.find((c) => c[0] === "slide.insertImage");
+const firstImage = (log) => {
+  const i = log.find((c) => c[0] === "slide.insertImage");
+  if (!i) return null;
+  const at = (m) => (log.find((c) => c[0].startsWith("slide.insertImage") && c[0].endsWith("." + m)) || [])[1];
+  return [i[0], i[1], at("setLeft"), at("setTop"), at("setWidth"), at("setHeight")];
+};
 
 test("photo strip: the picture is exactly the visible strip (cut from the streak photo), not the whole slide", () => {
   const g = load();
@@ -135,6 +140,6 @@ test("client logo: a 32 px website icon is still used when nothing better is fou
   assert.ok(g.fetchImage_("https://x/i.png", 2500, "Website icon"));
 });
 
-test("version label is V.1_45", () => {
-  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_45'/.test(read("src/Code.gs")));
+test("version label is V.1_45 or later", () => {
+  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_4[5-9]'/.test(read("src/Code.gs")));
 });

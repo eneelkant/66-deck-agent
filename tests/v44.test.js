@@ -54,7 +54,8 @@ test("navy divider: the navy photo is a picture at the back (selectable), not th
   assert.ok(firstImage !== -1);
   const call = log[firstImage];
   assert.equal(call[1].blob, "navy-bg.jpg");
-  assert.deepEqual(call.slice(2, 6), [0, 0, 720, 405], "covers the whole slide");
+  const at = (m) => (log.find((c) => c[0].startsWith("slide.insertImage") && c[0].endsWith("." + m)) || [])[1];
+  assert.deepEqual([at("setLeft"), at("setTop"), at("setWidth"), at("setHeight")], [0, 0, 720, 405], "covers the whole slide");
   assert.ok(log.some((c) => c[0] === "slide.insertImage.sendToBack"), "sent to the back");
   assert.ok(!log.slice(0, firstImage).some((c) => /insertTextBox|insertShape/.test(c[0])), "placed before any text or shape");
 });
@@ -72,7 +73,7 @@ test("a slide without a photo only gets its solid background", () => {
   const g = load();
   const log = drawn(g, { type: "cards", title: "Plain", items: [{ title: "A", text: "a" }, { title: "B", text: "b" }, { title: "C", text: "c" }] });
   assert.ok(log.some((c) => c[0] === "slide.getBackground.setSolidFill"));
-  assert.ok(!log.some((c) => c[0] === "slide.insertImage" && c[2] === 0 && c[3] === 0 && c[4] === 720));
+  assert.ok(!log.some((c) => c[0] === "slide.insertImage"));
 });
 
 test("version label is V.1_44 or later", () => {

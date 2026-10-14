@@ -24,6 +24,7 @@
     "Engine.gs",
     "EngineRenderer.gs",
     "PhotoStrips.gs",
+    "StockImages.gs",
     "ProposalAssets.gs",
     "ProposalDesigns_0_Frame.gs",
     "ProposalDesigns_1_Understanding.gs",
