@@ -40,7 +40,7 @@ function load(opts) {
     CacheService: { getScriptCache: () => ({ get: () => null, put() {} }) },
     ScriptApp: { getOAuthToken: () => "t" },
     DriveApp: {
-      getFolderById: (id) => { if (id !== "1hlpJeCwfLMNTfYjw97vJjj-Ug5se4rIL") throw new Error("no folder"); let i = 0;
+      getFolderById: (id) => { if (id !== "1DVsF7jnyWonnKW7z6GlUgDUvR8UA68_T") throw new Error("no folder"); let i = 0;
         return { getFiles: () => ({ hasNext: () => i < files.length, next: () => { const f = files[i++];
           return { getId: () => f.id, getName: () => f.name, getDescription: () => f.desc || "", getSize: () => 5e6, getMimeType: () => "image/jpeg" }; } }) }; },
       getFileById: () => { throw new Error("not used"); }
