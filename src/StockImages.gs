@@ -5,16 +5,19 @@
    its shape (tall images for strips, wide images for bands), its name / description against the slide's words, and
    images not used yet in the deck first. It is cropped to fill the strip exactly (no bands, no stretching), placed
    behind the content as a normal picture (select, replace, crop or delete), on a pale background.
-   Folder: Script property STOCK_IMAGES_FOLDER_ID (Brand assets > Images > Stock Images Testing by default);
+   Folder: Script property STOCK_IMAGES_FOLDER_ID (Brand assets > Images > Stock Images by default, V.1_49);
    STOCK_IMAGES_FOLDER_ID = off switches stock images off. Images: JPEG or PNG; a short descriptive file name
    ("human-robot-hand-touching.jpg") or a Drive description helps the agent match them to slides.
    ========================================================================================================= */
-var STOCK_IMAGES_DEFAULT_FOLDER_ = '1hlpJeCwfLMNTfYjw97vJjj-Ug5se4rIL';
+// V.1_49: the "Stock Images" folder (it replaces "Stock Images Testing", 1hlpJeCwfLMNTfYjw97vJjj-Ug5se4rIL)
+var STOCK_IMAGES_DEFAULT_FOLDER_ = '1DVsF7jnyWonnKW7z6GlUgDUvR8UA68_T';
+var STOCK_IMAGES_OLD_TEST_FOLDER_ = '1hlpJeCwfLMNTfYjw97vJjj-Ug5se4rIL';
 var STOCK_IMAGE_SHARE_ = 0.95;              // share of photo strips that get a stock image (the rest: the streak pattern)
 
 function stockImagesFolderId_() {
   let id = STOCK_IMAGES_DEFAULT_FOLDER_;
   try { id = String(PropertiesService.getScriptProperties().getProperty('STOCK_IMAGES_FOLDER_ID') || id).trim(); } catch (e) {}
+  if (id === STOCK_IMAGES_OLD_TEST_FOLDER_) id = STOCK_IMAGES_DEFAULT_FOLDER_;   // a property still pointing at the testing folder
   return /^(off|false|none|0)$/i.test(id) ? '' : id;
 }
 
@@ -88,8 +91,9 @@ function stockImageBlob_(img, portrait) {
 }
 
 function stockWords_(str) {
-  const STOP = /^(the|and|for|with|from|into|your|our|their|this|that|jpg|jpeg|png|img|image|photo|stock|shutterstock|istock|adobe|getty|concept|background|by|of|in|on|to|a|an|is|are)$/;
-  return String(str || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(function (w) { return w.length > 2 && !STOP.test(w); })
+  // (V.1_49: "AdobeStock_124720034.jpeg" names say nothing: the Drive description carries the words)
+  const STOP = /^(the|and|for|with|from|into|your|our|their|this|that|jpg|jpeg|png|img|image|photo|stock|shutterstock|istock|adobe|adobestock|getty|concept|background|job|by|of|in|on|to|a|an|is|are)$/;
+  return String(str || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(function (w) { return w.length > 2 && !STOP.test(w) && !/^\d+$/.test(w); })
     .map(function (w) { return w.slice(0, 6); });
 }
 

@@ -299,6 +299,6 @@ test("long deck of 30 for Unilever: 30 slides; risks with mitigations; team lane
   assert.ok(kpi.items.every((it) => /\d/.test(it.value)));
 });
 
-test("version label is V.1_48", () => {
-  assert.match(read("src/Code.gs"), /AGENT_VERSION_ = '66° Deck Agent V\.1_48'/);
+test("version label is V.1_48 or later", () => {
+  assert.match(read("src/Code.gs"), /AGENT_VERSION_ = '66° Deck Agent V\.1_(4[8-9]|[5-9][0-9])'/);
 });
