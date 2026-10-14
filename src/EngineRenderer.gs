@@ -238,10 +238,17 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   // V.1_42: built-in pictures (navy background of the proposal divider) first, then the Drive design assets
   const bgInline = out.bgImage && typeof inlineAssetBlob_ === 'function' ? inlineAssetBlob_(out.bgImage) : null;
   const bgId = out.bgImage && !bgInline ? engineAssetId(out.bgImage, ctx) : null;
+  // V.1_44: the photo (dark streaks, navy) is a normal picture behind everything, not the slide background, so it can
+  // be selected, replaced (Replace image) or deleted in Slides. The background underneath is the design's solid colour.
+  slide.getBackground().setSolidFill(out.bg);
   if (bgInline || bgId) {
-    try { slide.getBackground().setPictureFill(bgInline || getBlobCached(bgId, ctx)); } catch (e) { slide.getBackground().setSolidFill(out.bg); }
-  } else {
-    slide.getBackground().setSolidFill(out.bg);
+    try {
+      const bgPic = slide.insertImage(bgInline || getBlobCached(bgId, ctx), 0, 0, safeSize_(pageW, ENGINE.W), safeSize_(pageH, ENGINE.H));
+      try { bgPic.sendToBack(); } catch (err) {}
+      try { bgPic.setDescription('Background photo (replace or delete)'); } catch (err) {}
+    } catch (e) {
+      Logger.log('Background photo not placed: ' + e.message);
+    }
   }
 
   const ALIGN = { left: SlidesApp.ParagraphAlignment.START, center: SlidesApp.ParagraphAlignment.CENTER, right: SlidesApp.ParagraphAlignment.END };
