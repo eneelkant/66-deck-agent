@@ -97,9 +97,10 @@ function stockWords_(str) {
 // region = [x0, y0, x1, y1] in slide points
 function pickStockImage_(region, spec, ctx) {
   if (!ctx) return null;
-  if (Math.random() >= STOCK_IMAGE_SHARE_) return null;
+  const what = '"' + String((spec && spec.title) || '').slice(0, 40) + '"';
+  if (Math.random() >= STOCK_IMAGE_SHARE_) { if (ctx.log) ctx.log.push('Photo strip on ' + what + ': the streak pattern (about 1 slide in 20 keeps it).'); return null; }
   const list = stockImagesList_(ctx);
-  if (!list.length) return null;
+  if (!list.length) { if (ctx.log) ctx.log.push('Photo strip on ' + what + ': no stock images found in the folder, the streak pattern is used.'); return null; }
   const used = ctx.stockUsed || (ctx.stockUsed = {});
   const words = {};
   stockWords_([spec.title, spec.lead, spec.statement, ctx.userPrompt].join(' ')).forEach(function (w) { words[w] = true; });
@@ -115,7 +116,11 @@ function pickStockImage_(region, spec, ctx) {
     const d = stockImageDims_(c.img);
     const ia = d[0] && d[1] ? d[0] / d[1] : 1.5;
     const shape = -Math.abs(Math.log(ia / ra)) * 12;            // a tall image for a tall strip, a wide one for a band
-    const score = c.pre + shape;
+    // V.1_48: a narrow strip shows a slice of the picture: photos of people become unreadable there (deck 21 slide 4),
+    // abstract / technology pictures read well at any width
+    const narrow = (region[2] - region[0]) < 130 && (region[3] - region[1]) > (region[2] - region[0]);   // a thin upright strip
+    const person = /\b(person|people|man|woman|men|women|businessman|businesswoman|portrait|human|hand|hands|face|team|worker|employee|robot)\b/i.test(c.img.name + ' ' + c.img.desc);
+    const score = c.pre + shape + (narrow && person ? -25 : 0);
     if (!best || score > best.score) best = { img: c.img, score: score, portrait: ia < 1 };
   });
   if (!best) return null;

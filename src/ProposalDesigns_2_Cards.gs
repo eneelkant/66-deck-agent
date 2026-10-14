@@ -50,6 +50,9 @@
     return K.text(els, x, y, w, Math.max(h, lh(TSZ.body)), str, { weight: 400, max: TSZ.body, min: TSZ.body, color: color || T.ink });
   }
   function bullets(els, x, y, w, h, points, gap, color) {
+    // V.1_48: one point is a sentence, not a lone bullet (deck 21 slides 14 and 26)
+    var pts = K.arr(points, 12).map(K.str).filter(Boolean);
+    if (pts.length === 1) return body(els, x, y, w, h, pts[0], color);
     return K.bulletList(els, x, y, w, Math.max(h, lh(TSZ.body)), points, { max: TSZ.body, min: TSZ.body, gap: gap || 6, color: color || T.ink, bullet: color || T.ink });
   }
   // right-pointing thin arrow
@@ -570,9 +573,9 @@
     var items = itemsOf(s, 3), n = items.length;
     if (n !== 3 || items.some(function (it) { return !it.text; })) return null;
     var els = [];
-    var px = 620;
+    var px = 560;                                                // V.1_48: a 160pt strip (100pt cut a photo of a person to a sliver)
     photoPanel(els, px);
-    var top = K.header(els, s, { maxW: 480 }) + 4;
+    var top = K.header(els, s, { maxW: px - 60 }) + 4;
     // V.1_46: the cards end before the photo strip (the third card ran 46pt into it in deck 19)
     var gap = 12, cw = (px - 16 - CX - gap * 2) / 3, pad = 14, iw = cw - 2 * pad, bd = 28, chipH = 20, cs = 9.5;
     var hB = K.linesBlock(items.map(function (it) { return it.title; }), iw, TSZ.heading, 500, 2);
@@ -590,7 +593,7 @@
       badge(els, it, x + pad, y + pad, bd, T.bgLight);
       var hy = y + pad + bd + 12;
       heading(els, x + pad, hy, iw, it.title, T.ink, 2);
-      body(els, x + pad, hy + hB + 8, iw, bB, it.text);
+      body(els, x + pad, hy + hB + 8, iw, Math.max(bB, ch - (pad + bd + 12 + hB + 8) - pad - (cRows ? chipBlock + 14 : 0)), it.text);   // V.1_48: the fit step sees the free space
       if (cRows) {
         var cy = y + ch - pad - (cRows * chipH + (cRows - 1) * 6);
         K.line(els, x + pad, cy - 12, x + cw - pad, cy - 12, LINE, 0.75);
@@ -652,7 +655,7 @@
     var barH = bar ? 30 : 0, conn = bar ? 22 : 0;
     var need = hh + 4 + 10 + pB + 12, avail = BOTTOM - top - barH - conn;
     if (need > avail) return null;
-    var ch = K.boxH(need, avail);
+    var ch = Math.min(avail, Math.max(need, avail * 0.88));          // V.1_48: the columns reach the bottom (deck 21 slides 21, 29)
     items.forEach(function (it, i) {
       var x = CX + i * (cw + gap);
       K.roundrect(els, x, top, cw, hh, T.blue);

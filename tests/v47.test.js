@@ -262,6 +262,6 @@ test("numbered rows: each row is tall enough for its text measured a little narr
   });
 });
 
-test("version label is V.1_47", () => {
-  assert.match(read("src/Code.gs"), /AGENT_VERSION_ = '66° Deck Agent V\.1_47'/);
+test("version label is V.1_47 or later", () => {
+  assert.match(read("src/Code.gs"), /AGENT_VERSION_ = '66° Deck Agent V\.1_(4[7-9]|[5-9][0-9])'/);
 });

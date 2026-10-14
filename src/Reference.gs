@@ -367,11 +367,12 @@ const DESIGN_TOPICS_ = {
   P66_GOV_COLUMNS: /governance|standards?|operating model|raci|oversight/i,
   P66_KEY_INPUTS: /inputs?|requirements?|questions?|assumptions?|needs|what we heard/i,
   P66_PHASE_DETAIL: /phase|stage|wave|workstream|sprint/i,
-  P66_PHASE_COLUMNS: /phase|stage|wave|roadmap|rollout|roll-out|deploy\w*|implementation|delivery plan|methodology|go-?live|pilot/i,   // V.1_47: phases only for a plan
+  // V.1_47/48: phases only for a plan ("deploying" in a lead about a product is not a plan)
+  P66_PHASE_COLUMNS: /\b(phases?|phased|stages?|waves?|roadmap|rollout|roll-out|deployment (plan|phases|roadmap)|implementation (plan|phases|roadmap)|delivery plan|methodology|go-?live|pilot)\b/i,
   P66_GANTT: /roadmap|timeline|plan|schedule|phases?|milestones?|weeks?|months?|quarters?/i,
   // levels of a hierarchy only (V.1_47: never data sources, systems or a list of risks)
-  P66_PYRAMID: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|data sources?|sources)\b)[\s\S]*\b(hierarch\w*|levels?|maturity|tiers?|priorit\w*|pyramid|ladder|stages? of|building blocks|layers? of|value chain of needs)\b/i,
-  P66_ISO_CALLOUTS: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?)\b)/i,        // stacked layers, never a list of risks
+  P66_PYRAMID: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|data sources?|sources|kpis?|metrics?|key performance|indicators?|measur\w*|targets?)\b)[\s\S]*\b(hierarch\w*|levels?|maturity|tiers?|priorit\w*|pyramid|ladder|stages? of|building blocks|layers? of|value chain of needs)\b/i,
+  P66_ISO_CALLOUTS: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|kpis?|metrics?|key performance|indicators?|measur\w* success|targets?)\b)/i,   // stacked layers, never risks or KPIs (V.1_48)
   P66_CATEGORY_LEGEND: /framework|categor|criteria|validation|readiness|classification/i
 };
 

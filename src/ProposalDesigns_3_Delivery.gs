@@ -83,7 +83,7 @@
     t = String(t || '');
     if (/^(phase|stage|step|wave|sprint)\b/i.test(t)) return t;
     // V.1_47: "Phase n:" only on a plan (roadmap, rollout, methodology); other steps keep their own names
-    var plan = !s || /phase|stage|wave|roadmap|rollout|roll-out|deploy|implementation|delivery plan|methodology|go-?live|pilot/i.test(String(s.title || '') + ' ' + String(s.lead || ''));
+    var plan = !s || /\b(phases?|phased|stages?|waves?|roadmap|rollout|roll-out|deployment (plan|phases)|implementation (plan|phases)|delivery plan|methodology|go-?live|pilot)\b/i.test(String(s.title || ''));   // V.1_48: the title says it is a plan
     return plan ? 'Phase ' + (i + 1) + ': ' + t : t;
   }
 
