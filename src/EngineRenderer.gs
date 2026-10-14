@@ -243,7 +243,13 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   slide.getBackground().setSolidFill(out.bg);
   if (bgInline || bgId) {
     try {
-      const bgPic = slide.insertImage(bgInline || getBlobCached(bgId, ctx), 0, 0, safeSize_(pageW, ENGINE.W), safeSize_(pageH, ENGINE.H));
+      // V.1_45: a design that shows the photo only in a strip, panel or band gets a picture of exactly that size (the
+      // streak photo cut to it), so selecting it selects just the strip; a full-slide photo stays full size
+      const region = out.bgImage === 'section-bg' && typeof photoRegion_ === 'function' ? photoRegion_(out.els, ENGINE.W, ENGINE.H) : null;
+      const cut = region && typeof streakCropBlob_ === 'function' ? streakCropBlob_(region, ENGINE.W, ENGINE.H) : null;
+      const box = cut ? safeBox_(region[0] * s, region[1] * s, (region[2] - region[0]) * s, (region[3] - region[1]) * s)
+        : { x: 0, y: 0, w: safeSize_(pageW, ENGINE.W), h: safeSize_(pageH, ENGINE.H) };
+      const bgPic = slide.insertImage(cut || bgInline || getBlobCached(bgId, ctx), box.x, box.y, box.w, box.h);
       try { bgPic.sendToBack(); } catch (err) {}
       try { bgPic.setDescription('Background photo (replace or delete)'); } catch (err) {}
     } catch (e) {

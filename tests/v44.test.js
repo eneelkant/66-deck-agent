@@ -75,6 +75,6 @@ test("a slide without a photo only gets its solid background", () => {
   assert.ok(!log.some((c) => c[0] === "slide.insertImage" && c[2] === 0 && c[3] === 0 && c[4] === 720));
 });
 
-test("version label is V.1_44", () => {
-  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_44'/.test(read("src/Code.gs")));
+test("version label is V.1_44 or later", () => {
+  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_(4[4-9]|[5-9]\d)'/.test(read("src/Code.gs")));
 });

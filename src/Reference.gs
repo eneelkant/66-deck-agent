@@ -344,6 +344,8 @@ function referenceForTag_(lib, tag) {
 }
 
 // Designs whose look carries a meaning: only used when the slide is about that (e.g. the "!" warning badges = risks)
+// designs that never show some content, even when Gemini picks them (risks on a pyramid or a stack of layers)
+const HARD_TOPIC_GATES_ = { P66_PYRAMID: true, P66_ISO_CALLOUTS: true };
 const DESIGN_TOPICS_ = {
   '66D_LAYOUT_CARDS_024': /\b(risks?|challenges?|issues?|barriers?|pitfalls?|concerns?|threats?|problems?|obstacles?|gaps?|blockers?|hurdles?|warnings?)\b/i,
   // V.1_42 Proposal Deck designs whose look says what the slide is about
@@ -366,6 +368,7 @@ const DESIGN_TOPICS_ = {
   P66_KEY_INPUTS: /inputs?|requirements?|questions?|assumptions?|needs|what we heard/i,
   P66_PHASE_DETAIL: /phase|stage|wave|workstream|sprint/i,
   P66_PYRAMID: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?)\b)/i,             // levels, never a list of risks
+  P66_ISO_CALLOUTS: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?)\b)/i,        // stacked layers, never a list of risks
   P66_CATEGORY_LEGEND: /framework|categor|criteria|validation|readiness|classification/i
 };
 
@@ -378,7 +381,7 @@ function drawableDesigns_(type, n, spec) {
     if (proposal !== !!P[v.tag]) return false;      // libraries never mix (Proposal Deck <-> General)
     // a design with a meaning (warning badges) only for slides about that meaning
     // (in a Proposal Deck Gemini may pick such a design itself: it wrote the slide for it)
-    if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words) && !(proposal && String(spec.design || '').trim() === v.tag && v.tag !== 'P66_PYRAMID')) return false;
+    if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words) && !(proposal && String(spec.design || '').trim() === v.tag && !HARD_TOPIC_GATES_[v.tag])) return false;
     // designs that need extra fields (e.g. the client journey needs spec.cases) are only offered when the slide has them
     return !v.needs || designNeedsMet_(v.needs, spec);
   });

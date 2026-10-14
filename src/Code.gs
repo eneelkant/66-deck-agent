@@ -985,12 +985,16 @@ suits it in "design" and write the fields its description names (for example gro
 columns[...], periods[...], workstreams[...], left{...}/right{...}, challenge, value) next to the slide type's usual fields.
 Use each design at most once and use many different designs: a proposal reads like a designed consulting document.
 ` : ''}${proposalDeck ? `PROPOSAL RULES:
+- Every body slide has a "title": the slide's key message in sentence case, max 58 characters. The design shows it at the
+  top of the slide; the "lead" is a separate sentence under it, never instead of it.
 - Every body slide uses one design from the menu above and is written in that design's fields. Do not write slide types the
   menu has no design for (no "quote", no plain bar or line "chart"): show figures as stats (KPI tiles) instead.
 - A team structure is ONE slide: type "team" with teams[{name, roles[{title, text}]}] (2: the client team and the 66degrees team,
   roles only, never invented names) and governance, or an org chart org{name, role, reports[...]}, or role blocks
   items[{title, text}]. Never a second team slide in other words.
-- Risks use the risk / impact / mitigation design (comparison), never a pyramid or a funnel.
+- Risks are ONE slide: the risk / impact / mitigation design (comparison) or a risk table, never a pyramid, a stack of layers or a funnel.
+- Team and governance are ONE slide (the team structure with its governance), never a second governance slide, unless the
+  request lists governance as its own topic.
 ` : ''}${proposalDeck && !batch && ctx.proposalSections ? `PROPOSAL SECTIONS: the body slides are grouped into exactly ${ctx.proposalSections} sections (the code adds a divider slide before
 each section and lists the sections in the agenda). Give every body slide a "section" field: the name of its section,
 2-4 words in sentence case (for example "Understanding your needs", "Our approach", "Delivery plan", "Why 66degrees").
@@ -1024,6 +1028,7 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
   if (!plan || !Array.isArray(plan.slides) || !plan.slides.length) throw new Error('Gemini returned no slide content.');
   plan.slides = plan.slides.map(function (sp) { return ENGINE.cleanSpec(sp); });   // strip stray color codes
   plan.slides = normalizeSpecialSlides_(plan.slides, userPrompt, sources, ctx);    // real template slides, real people only
+  ensureTitles_(plan.slides, ctx);                                                // V.1_45: every content slide has a title
   plan.slides.forEach(function (sp) { removeHypeWords_(sp); tidyItemText_(sp); });   // brand voice: no hype words, no filler tails
   plan.slides = plan.slides.map(function (sp) { return realChartOrStats_(sp); }); // charts only with real multi-point data
   plan.slides.forEach(function (sp) { dropRepeatedHighlights_(sp); sentenceCaseHeadings_(sp); });
@@ -1074,11 +1079,59 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
     if (sp.title && tt !== 'closing' && tt !== 'template') sp.title = sentenceCase_(sp.title, 2);
     if (sp.statement) sp.statement = sentenceCase_(sp.statement);
   });
+  ensureTitles_(plan.slides, ctx);                                                // (slides written late too)
   finalVoicePass_(plan.slides, ctx);                                             // the same clean-up on slides written late
   plan.slides = enforceDeckStructure_(plan.slides, n, plan.deck_title);          // cover, agenda, body, closing — exactly n
   syncAgendaToSlides_(plan.slides);                                             // agenda lists exactly the slides that exist
   if (!plan.deck_title) plan.deck_title = plan.slides[0].title || 'Presentation';
   return plan;
+}
+
+/* ---------- Slide titles (V.1_45) ----------
+   A content slide without a title (Gemini sometimes leaves it out and writes only the lead) gets one: Gemini writes the
+   missing titles in one call (the key message, max 58 characters); without an answer the lead is shortened to a title. */
+const NO_TITLE_TYPES_ = { cover: 1, agenda: 1, closing: 1, section: 1, template: 1 };
+function titleFromText_(sp) {
+  const heads = (Array.isArray(sp.items) ? sp.items : []).map(function (it) { return it && typeof it === 'object' ? (it.title || it.label) : it; }).filter(Boolean);
+  let t = String(sp.lead || sp.statement || sp.subtitle || sp.text || '').replace(/\s+/g, ' ').trim();
+  if (!t && heads.length) t = heads.slice(0, 3).join(', ');
+  t = t.split(/(?<=[.!?])\s/)[0].replace(/[.!?]+$/, '');                      // first sentence
+  if (t.length > 58) {
+    const cut = t.slice(0, 58);
+    const clause = cut.search(/,|;|:| – | — | - | (?:to|by|so|while|through|across|with|for) [^ ]*$/);
+    t = (clause > 25 ? cut.slice(0, clause) : cut.replace(/\s+\S*$/, '')).replace(/[\s,;:–—-]+$/, '');
+    t = t.replace(/\s+(?:and|or|of|the|a|an|to|for|with|in|on|by|our|your|their)$/i, '');
+  }
+  return t || 'Overview';
+}
+function ensureTitles_(slides, ctx) {
+  const missing = (slides || []).filter(function (sp) {
+    return sp && !NO_TITLE_TYPES_[String(sp.type || '').toLowerCase()] && !String(sp.title || '').trim();
+  });
+  if (!missing.length) return 0;
+  let answer = null;
+  try {
+    const list = missing.map(function (sp, i) {
+      const heads = (Array.isArray(sp.items) ? sp.items : []).map(function (it) { return it && typeof it === 'object' ? (it.title || it.label || '') : String(it || ''); }).filter(Boolean).slice(0, 6);
+      return { id: i, type: sp.type, lead: String(sp.lead || sp.statement || '').slice(0, 220), parts: heads };
+    });
+    answer = callGeminiJSON([{ text: [
+      'These presentation slides have no title. Write one title for each slide.',
+      'A title is the slide\'s key message: specific, sentence case (only the first word and names capitalised), max 58 characters,',
+      'no full stop, never a copy of the lead sentence, no hype words.',
+      'Return ONLY JSON: {"titles":[{"id":0,"title":"..."}]}',
+      'SLIDES:', JSON.stringify(list)
+    ].join('\n') }], ctx.apiKey, 0.3);
+  } catch (e) { answer = null; }
+  const got = {};
+  ((answer && answer.titles) || []).forEach(function (t) { if (t && t.title != null) got[t.id] = String(t.title); });
+  missing.forEach(function (sp, i) {
+    let t = String(got[i] || '').replace(/\s+/g, ' ').replace(/[.]+$/, '').trim();
+    if (!t || t.length > 70) t = titleFromText_(sp);
+    sp.title = sentenceCase_(t, 2);
+  });
+  if (ctx && ctx.log) ctx.log.push('Titles written for ' + missing.length + ' slide(s) that had none.');
+  return missing.length;
 }
 
 /* ---------- Item text tidy-up (V.1_34) ----------
@@ -3858,7 +3911,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_44';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_45';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck

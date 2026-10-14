@@ -95,7 +95,8 @@ function fetchImage_(url, minBytes, label) {
     if (!/^image\/(png|jpeg|jpg|gif|webp)/i.test(type)) { LOGO_TRAIL_.push((label || 'image') + ': not an image (' + type + ')'); return null; }
     // V.1_42b: a simple logo (one-colour mark such as a swoosh) is a small file: the size check is on pixels, not bytes
     const w = imageWidth_(blob);
-    if (blob.getBytes().length < 200 || (w && w < 64) || (!w && blob.getBytes().length < (minBytes || 1500))) { LOGO_TRAIL_.push((label || 'image') + ': too small'); return null; }
+    // (a 32 px website icon is still kept: it is better than no client logo at all; a full logo is looked for first)
+    if (blob.getBytes().length < 200 || (w && w < 32) || (!w && blob.getBytes().length < (minBytes || 1500))) { LOGO_TRAIL_.push((label || 'image') + ': too small (' + (w || '?') + ' px)'); return null; }
     if (/webp/i.test(type)) { LOGO_TRAIL_.push((label || 'image') + ': WebP not supported by Slides'); return null; }
     return blob;
   } catch (e) { LOGO_TRAIL_.push((label || 'image') + ': ' + e.message); return null; }
