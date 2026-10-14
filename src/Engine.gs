@@ -70,24 +70,33 @@ var ENGINE = (function () {
     }
     return sum * size / 1000;
   }
+  var WRAP_SPLIT_ = false;                          // V.1_45: the last wrap() had to cut a word in the middle
   function wrap(text, maxW, font, weight, size) {
     maxW = maxW * 0.94;                              // safety margin: Google Slides sets Plus Jakarta Sans wider than the metrics
     var lines = [];
+    WRAP_SPLIT_ = false;
     String(text).split('\n').forEach(function (para) {
       var words = para.split(/\s+/).filter(function (w) { return w.length; });
       if (!words.length) { lines.push(''); return; }
       var line = '';
-      words.forEach(function (word) {
-        var test = line ? line + ' ' + word : word;
+      var place = function (word, glued) {
+        var test = line ? line + (glued ? '' : ' ') + word : word;
         if (textWidth(test, font, weight, size) <= maxW) { line = test; return; }
         if (line) lines.push(line);
         while (textWidth(word, font, weight, size) > maxW && word.length > 1) {
+          WRAP_SPLIT_ = true;
           var k = word.length - 1;
           while (k > 1 && textWidth(word.slice(0, k), font, weight, size) > maxW) k--;
           lines.push(word.slice(0, k));
           word = word.slice(k);
         }
         line = word;
+      };
+      words.forEach(function (word) {
+        // a hyphenated word wider than the line breaks after a hyphen, as Google Slides does ("Hyper-" / "personalized")
+        if (/-./.test(word) && textWidth(word, font, weight, size) > maxW) {
+          word.split(/(?<=-)/).forEach(function (part, i) { place(part, i > 0); });
+        } else place(word, false);
       });
       lines.push(line);
     });
@@ -98,6 +107,7 @@ var ENGINE = (function () {
     var font = spec.font || 'sans', weight = Math.min(spec.weight || 400, 500), maxLines = spec.maxLines || 99;
     for (var size = spec.max; size >= spec.min; size -= 0.5) {
       var lines = wrap(text, w, font, weight, size);
+      if (WRAP_SPLIT_) continue;                     // V.1_45: never a word cut in the middle ("personalize" / "d"): smaller type first
       var height = lines.length * lineHeight(font, size);
       // a single line always fits its box; otherwise allow a 2pt tolerance for rounding
       if (lines.length <= maxLines && (lines.length === 1 || height <= h + 2)) return { size: size, lines: lines, height: height, text: text };
@@ -105,6 +115,8 @@ var ENGINE = (function () {
     var sz = spec.min;
     var cap = Math.max(1, Math.min(maxLines, Math.floor((h + 2) / lineHeight(font, sz))));
     var all = wrap(text, w, font, weight, sz);
+    // only a word too long for the box (nothing to cut): the text stays whole and is marked, so the fit step shortens it
+    if (all.length <= cap) return { size: sz, lines: all, height: all.length * lineHeight(font, sz), text: text, truncated: true };
     var kept = all.slice(0, cap);
     if (all.length > cap) {
       var joined = kept.join(' ');

@@ -136,8 +136,8 @@ test("client logo: simple logos (small files) are kept by pixel size; WebP pictu
   const g = load({ UrlFetchApp: { fetch: () => resp } });
   resp = mk("image/png", png(256, 900));
   assert.ok(g.fetchImage_("https://x/logo.png", 2500, "Website icon"), "a 256 px swoosh of 900 bytes is a logo");
-  resp = mk("image/png", png(32, 900));
-  assert.equal(g.fetchImage_("https://x/logo.png", 2500, "Website icon"), null, "a 32 px icon is too small");
+  resp = mk("image/png", png(24, 900));
+  assert.equal(g.fetchImage_("https://x/logo.png", 2500, "Website icon"), null, "a 24 px icon is too small");
   resp = mk("image/webp", png(256, 4000));
   assert.equal(g.fetchImage_("https://x/logo.webp", 800, "logo"), null);
 });

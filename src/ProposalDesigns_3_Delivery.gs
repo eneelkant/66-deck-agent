@@ -655,7 +655,7 @@
     K.ellipse(els, cx - cr - 7, cy - cr - 7, cr * 2 + 14, cr * 2 + 14, B4);
     K.ellipse(els, cx - cr, cy - cr, cr * 2, cr * 2, T.blue);
     K.text(els, cx - cr + 12, cy - cr + 10, cr * 2 - 24, cr * 2 - 20, s.center || s.statement || '', { weight: 500, max: 13, min: 10, maxLines: 4, align: 'center', valign: 'middle', color: T.white });
-    var tooTall = false;
+    var tooTall = false, boxes = [];
     items.forEach(function (it, i) {
       var p = pos[i], c = Math.cos(p.a), sn = Math.sin(p.a);
       K.ellipse(els, p.x - nd / 2, p.y - nd / 2, nd, nd, T.white);
@@ -666,6 +666,9 @@
       else if (c < -0.2) { x = p.x - nd / 2 - 8 - bw; y = p.y - hh / 2; al = 'left'; al = 'right'; }
       else { x = p.x - bw / 2; al = 'center'; y = sn < 0 ? p.y - nd / 2 - 6 - hh : p.y + nd / 2 + 6; }
       if (y < top - 4 || y + hh > BOTTOM + 2 || x < X0 - 1 || x + bw > CX + CW + 1) tooTall = true;
+      // V.1_45: captions never run into each other ("Loyalty app" over the hotel operations text in deck 19)
+      boxes.forEach(function (b) { if (x < b.x + b.w && b.x < x + bw && y < b.y + b.h + 6 && b.y < y + hh + 6) tooTall = true; });
+      boxes.push({ x: x, y: y, w: bw, h: hh });
       var tw = Math.min(bw, Math.max(K.textWidth(String(it.title || ''), 'sans', 500, TSZ.heading), it.text ? bw : 0));
       K.rect(els, al === 'right' ? x + bw - tw : al === 'center' ? x + (bw - tw) / 2 : x, y - 1, tw, hh + 2, T.white);
       cap_(els, x, y, bw, it.title, it.text, al);
