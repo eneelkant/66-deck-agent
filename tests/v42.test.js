@@ -201,5 +201,5 @@ test("text screenshot design never draws an empty screenshot frame", () => {
 });
 
 test("version label is V.1_42 or later", () => {
-  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_4[2-9]'/.test(read("src/Code.gs")));
+  assert.ok(/AGENT_VERSION_ = '66° Deck Agent V\.1_(4[2-9]|[5-9][0-9])'/.test(read("src/Code.gs")));
 });

@@ -3814,6 +3814,7 @@ var ENGINE = (function () {
       .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1')                   // V.1_48: markdown bold **text** (never shown as asterisks)
       .replace(/(^|[\s(])\*([^*\s][^*]*[^*\s]|[^*\s])\*(?=[\s).,;:!?]|$)/g, '$1$2')       // markdown italic *text*
       .replace(/\*{2,}/g, '')                                                          // stray ** left over
+      .replace(/[ \t]*[\r\n]+[ \t]*/g, ' ')                                             // V.1_50: no line breaks inside a text (each line became a paragraph)
       .replace(/[ \t]{2,}/g, ' ').replace(/\s+([.,;:])/g, '$1').replace(/^\s+|\s+$/g, '');
   }
   function cleanSpec(v) {

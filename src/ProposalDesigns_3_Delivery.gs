@@ -379,15 +379,17 @@
     var top = K.header(els, s);
     var half = (BOTTOM - top) / 2, cy = top + half;
     var cx = pts.length ? 474 : 360, R = Math.min(pts.length ? 72 : 80, half - 58), lw = pts.length ? 128 : 170;
-    if (R < 56) return null;
     var sweep = 360 / n, fills = ramp_(n, 1);
-    // label sizes must fit above / below the ring
-    var tooTall = items.some(function (it, i) {
-      var mid = -90 + i * sweep, sn = Math.sin(mid * Math.PI / 180), c = Math.cos(mid * Math.PI / 180);
-      var hh = cap_(null, 0, 0, Math.abs(c) < 0.3 ? 200 : lw, it.title, it.text);
-      return Math.abs(c) < 0.3 ? hh > half - R - 14 : hh > 90;
-    });
-    if (tooTall) return null;
+    // label sizes must fit above / below the ring (V.1_50: the ring gets smaller, down to 48pt, until they do)
+    var tooTall = function (r) {
+      return items.some(function (it, i) {
+        var mid = -90 + i * sweep, c = Math.cos(mid * Math.PI / 180);
+        var hh = cap_(null, 0, 0, Math.abs(c) < 0.3 ? 200 : lw, it.title, it.text);
+        return Math.abs(c) < 0.3 ? hh > half - r - 14 : hh > 90;
+      });
+    };
+    while (R > 48 && tooTall(R)) R -= 4;
+    if (R < 48 || tooTall(R)) return null;
     items.forEach(function (it, i) {
       K.arc(els, 'ring', cx, cy, R, sweep, -90 + i * sweep - sweep / 2, fills[i]);
     });
