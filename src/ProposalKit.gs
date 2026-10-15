@@ -366,7 +366,28 @@ function applyProposalFrame_(slides, ctx) {
       if (!sp.lockTag) sp.lockTag = Number(sp.level) === 2 ? 'P66_SECTION_LIGHT' : p.dividerTag;
       if (sp.lockTag === 'P66_SECTION_LIGHT') delete sp.number;
     }
+    if (t === 'stats') proposalKpiLabels_(sp);
     if (p.client) restoreName_(sp, p.client);
+  });
+}
+
+// V.1_51 (deck 23 slide 28): a KPI label says which way it goes ("Target: unscheduled maintenance" -> "Target: less
+// unscheduled maintenance"), and "(up to)" moves from the label to the value ("Up to 35%")
+const KPI_DIRECTION_RE_ = /\b(fewer|less|lower|reduc\w*|cut|decreas\w*|increas\w*|higher|more|faster|quicker|improv\w*|better|grow\w*|boost\w*|gain\w*|rais\w*|accura\w*|availab\w*|rate|uptime|adoption|satisfaction|savings?|saved|roi|return|reliab\w*|on-time|coverage|precision|recall|score)\b/i;
+const KPI_NEGATIVE_RE_ = /\b(unscheduled|unplanned|downtime|delays?|costs?|errors?|defects?|failures?|incidents?|churn|fraud|losses?|waste|backlog|false positives?|turnaround|cycle time|time to|aog|disruptions?|outages?|removals?|complaints?|rework)\b/i;
+function proposalKpiLabels_(sp) {
+  (Array.isArray(sp.items) ? sp.items : []).forEach(function (it) {
+    if (!it || typeof it !== 'object') return;
+    let label = String(it.label || '');
+    const upTo = /\(\s*up to\s*\)/i.test(label);
+    label = label.replace(/\s*\(\s*(up to|at least)\s*\)\s*/ig, ' ').replace(/\s+/g, ' ').trim();
+    if (upTo && it.value && String(it.value).length <= 6 && !/^up to/i.test(String(it.value))) it.value = 'Up to ' + String(it.value).trim();
+    const m = label.match(/^(target:\s*)(.+)$/i);
+    if (m && !KPI_DIRECTION_RE_.test(m[2]) && KPI_NEGATIVE_RE_.test(m[2])) {
+      const word = /\b(costs?|time|turnaround|cycle)\b/i.test(m[2]) ? 'lower ' : /s\b/i.test(m[2].split(/\s+/).pop()) ? 'fewer ' : 'less ';
+      label = m[1] + word + m[2].charAt(0).toLowerCase() + m[2].slice(1);
+    }
+    it.label = label;
   });
 }
 
@@ -705,4 +726,189 @@ function proposalCoerce_(sp, ctx, used) {
   // nothing new fits: a proposal design already used is drawn again (never the plain layout when one can draw it)
   if (!proposalDrawable_(sp).length && ctx && ctx.log) ctx.log.push('No proposal design for "' + String(sp.title || '').slice(0, 50) + '": plain ' + t + ' layout used.');
   return false;
+}
+
+/* =========================================================================================================
+   V.1_51 — How Gemini writes a Proposal Deck
+   Before: every part of the deck was written by one prompt of ~46,000 characters (222 rules, all 65 designs), each slide
+   seeing only the titles of the others. Gemini kept some rules and dropped others, repeated points across slides and
+   picked designs from text it had never seen. Now:
+   1. The outline is a storyline (Gemini Pro): each section says what it proves, each slide has its own message and the
+      points only it covers.
+   2. Each slide is written from that plan with a short prompt (~30 rules) and a shortlist of the 3-8 designs that suit it,
+      each with "use for / never for".
+   3. A record of what earlier slides already said (headings, figures, designs) goes with every part: nothing is repeated.
+   The code still checks and enforces everything afterwards (count, designs, risks, KPIs, team, sentence case...).
+   ========================================================================================================= */
+
+// "Use for / never for" for every Proposal design: Gemini picks from what each design is FOR, not from its look alone
+const PROPOSAL_DESIGN_GUIDE_ = {
+  P66_KEY_INPUTS: 'use for: open questions or inputs we need from the client, grouped. never for: findings or benefits',
+  P66_TEXT_SCREENSHOT: 'use for: one product feature next to a screenshot the user supplied. never without a supplied screenshot',
+  P66_CARDS_2X2: 'use for: exactly four parallel ideas of equal weight (objectives, pain points, principles) with a short side note',
+  P66_CARD_GRID: 'use for: 4-8 parallel items explained in one or two lines (components, requirements, workstreams)',
+  P66_CATEGORY_LEGEND: 'use for: a framework of 4-5 named categories with definitions. never for: steps in time or data sources',
+  P66_COLUMNS_PHOTO: 'use for: 3-4 short question-style themes (what / how / who) with 2-5 bullets each',
+  P66_DELIVERABLE_ROWS: 'use for: one workstream or phase and the deliverable it hands over. never for: general benefits',
+  P66_DIAGONAL_OPTIONS: 'use for: three options or maturity levels that grow (good / better / best). never for: a list of features',
+  P66_GOV_COLUMNS: 'use for: a governance model (3 bodies, what each decides, how often it meets)',
+  P66_ICON_COLUMNS: 'use for: 3-6 parallel capabilities, challenges or benefits, each a heading and one or two sentences',
+  P66_ICON_GRID: 'use for: 6-10 named tools, apps or use cases, each one line',
+  P66_ILLUSTRATION_TEXT: 'use for: how two teams or roles work together, with a short paragraph and 2-4 labelled points',
+  P66_LOGO_WALL: 'use for: why 66degrees, ONLY when the request asks for it',
+  P66_PACKAGES: 'use for: 2-4 commercial packages with a price each, ONLY with prices from the request',
+  P66_PARADIGM_DARK: 'use for: the opening statement of a section with 3-4 short supporting cards (one dark slide per deck at most)',
+  P66_PERSONAS: 'use for: 3-5 user groups or personas and what each needs',
+  P66_PILLARS: 'use for: three pillars of the solution, each with the product names that deliver it',
+  P66_STORIES: 'use for: several client results, ONLY when the request asks for client proof',
+  P66_TIERS: 'use for: 2-4 service or support tiers / levels (L0, L1, L2) and their benefits',
+  P66_TWO_CARDS_PHOTO: 'use for: a from -> to shift (today -> with AI) in two cards',
+  P66_CASE_STUDY: 'use for: one client result, ONLY when the request asks for a case study',
+  P66_RADAR: 'use for: a maturity or readiness score on 5-6 dimensions with real scores',
+  P66_CHECKLIST_DECISIONS: 'use for: a go-live checklist next to the decisions still open',
+  P66_CHECK_MATRIX: 'use for: comparing 2-4 options against 4-11 capabilities (tick / cross)',
+  P66_IMPACT_MITIGATION: 'use for: THE risk slide: each risk (2-3) with a one-line impact and 2-3 mitigation actions',
+  P66_PROS_CONS: 'use for: the pros and cons of one option',
+  P66_TWO_PANELS: 'use for: a two-sided comparison (current state vs future state), 3-5 short points per side; at most twice per deck',
+  P66_ARCH_FLOW: 'use for: THE solution architecture: sources -> Google Cloud platform -> users, with labelled arrows',
+  P66_CYCLE: 'use for: a loop that repeats (continuous improvement, model retraining, feedback cycle), 4-6 stages',
+  P66_DELIVERY_FLOW: 'use for: how messages or data move between named systems and actors',
+  P66_HUB: 'use for: one platform at the centre with 5-8 capabilities or connected systems around it',
+  P66_ISO_CALLOUTS: 'use for: 3-4 technology layers that build on each other (data -> models -> apps). never for: steps, loops, lists, risks or KPIs',
+  P66_PUZZLE: 'use for: 4 or 6 short labels that fit together into one whole (labels only). never for: anything that needs sentences',
+  P66_PYRAMID: 'use for: a true hierarchy of 3-4 levels (maturity, priority). never for: data sources, steps, risks or KPIs',
+  P66_NEXT_STEPS: 'use for: next steps, ONLY when the request asks for them',
+  P66_CHEVRON_PHASES: 'use for: the methodology or delivery steps in order (3-6), each a short title and 1-2 sentences',
+  P66_CURVE: 'use for: an adoption or maturity journey that rises over time (5-8 stages, 2-4 words each). never for: a list of data sources or components',
+  P66_NUMBERED_ROWS: 'use for: 3-6 principles, requirements or recommendations, each a heading and one line',
+  P66_PARADIGM_COLUMNS: 'use for: 4-6 stages of a method with 2-4 short bullets each and one theme across all of them',
+  P66_PHASE_COLUMNS: 'use for: the delivery phases ("Phase 1: ...") with 2-4 activities each. ONLY for the delivery plan',
+  P66_STEP_FLOW: 'use for: how something works, step by step (3-5 steps, each a heading and one sentence)',
+  P66_EXEC_KEYWORDS: 'use for: an executive summary with three key words and a number or fact under each',
+  P66_EXEC_TWO_COL: 'use for: an executive overview: summary paragraph, the ask and the key message',
+  P66_PHASE_DETAIL: 'use for: one delivery phase in detail (description and deliverable)',
+  P66_PITCH: 'use for: an elevator pitch in three keywords',
+  P66_STATEMENT_BOX: 'use for: ONE opening or closing statement of a section. never for: a slide that has steps or points to show',
+  P66_BADGES: 'use for: Google partner status, ONLY when the request asks for credentials',
+  P66_CREDENTIALS: 'use for: 66degrees in numbers, ONLY when the request asks for credentials',
+  P66_INVESTMENT: 'use for: one headline number (total investment or total value) with 2-4 supporting numbers',
+  P66_KPI_TILES: 'use for: 3-4 numbers: the KPI targets (label "Target: ...") or market figures from the research',
+  P66_ICON_TABLE: 'use for: three themes above a small table of details',
+  P66_PRICING: 'use for: a rate card, ONLY with prices from the request',
+  P66_TABLE: 'use for: structured facts in rows and 2-5 columns (scope in / out, data sources and their role, risks with impact and mitigation)',
+  P66_ORG_TREE: 'use for: a governance or team structure with levels (steering committee -> leads -> teams)',
+  P66_TEAM_PHOTOS: 'use for: the named team, ONLY when the request names the people',
+  P66_TEAM_ROLES: 'use for: 4-6 roles of the delivery team with what each does',
+  P66_TEAM_STRUCTURE: 'use for: THE team slide: the client team and the 66degrees team as two lanes of roles, with the governance body on top',
+  P66_GANTT: 'use for: THE roadmap: periods (months or quarters) across, 3-6 workstreams down, bars for the activities',
+  P66_PHASE_MATRIX: 'use for: a dense plan: 3-5 periods across, 2-4 workstreams down, short points in each cell'
+};
+
+// The slide types whose designs suit a planned slide (its own type first)
+const PROPOSAL_TYPE_OPTIONS_ = {
+  cards: ['cards', 'diagram', 'process'], process: ['process', 'diagram', 'cards'], diagram: ['diagram', 'cards', 'process'],
+  comparison: ['comparison', 'table'], stats: ['stats'], table: ['table', 'comparison'], timeline: ['timeline'], team: ['team'],
+  bullets: ['cards', 'bullets', 'statement'], statement: ['statement', 'cards'], case_study: ['case_study'], chart: ['stats', 'chart']
+};
+
+// The 3-8 designs Gemini may choose from for one planned slide: drawn in a Proposal Deck, not used yet in this deck, and
+// allowed for the slide's subject (the same topic rules the code enforces afterwards)
+function proposalShortlist_(o, used) {
+  if (typeof ENGINE === 'undefined' || !ENGINE.VARIANTS) return [];
+  const P = ENGINE.PROPOSAL_TAGS || {};
+  const words = [o.title, o.message, o.brief].filter(Boolean).join(' ');
+  const asked = /\b(credential|why 66degrees|why us|partner status|case stud|client result|success stor|next steps|pricing|price|rate card|package|screenshot)\b/i;
+  const onlyIfAsked = { P66_LOGO_WALL: 1, P66_PACKAGES: 1, P66_STORIES: 1, P66_CASE_STUDY: 1, P66_NEXT_STEPS: 1, P66_BADGES: 1, P66_CREDENTIALS: 1, P66_PRICING: 1, P66_TEAM_PHOTOS: 1, P66_TEXT_SCREENSHOT: 1 };
+  const types = PROPOSAL_TYPE_OPTIONS_[String(o.type || 'cards').toLowerCase()] || ['cards', 'diagram', 'process'];
+  const out = [];
+  types.forEach(function (type) {
+    (ENGINE.VARIANTS[type] || []).forEach(function (v) {
+      if (!P[v.tag] || out.some(function (x) { return x.tag === v.tag; })) return;
+      if (onlyIfAsked[v.tag] && !asked.test(String(o.request || '') + ' ' + words)) return;
+      if (used && used[v.tag]) return;
+      if (typeof DESIGN_TOPICS_ !== 'undefined' && DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words)) return;
+      out.push({ tag: v.tag, type: type, v: v });
+    });
+  });
+  return out.slice(0, 8);
+}
+function proposalShortlistText_(list) {
+  return list.map(function (x) {
+    const v = x.v, count = v.max != null && v.max < 99 && v.min != null ? v.min + '-' + v.max + ' items; ' : '';
+    return '    - ' + x.tag + ' (type "' + x.type + '"; ' + count + (PROPOSAL_DESIGN_GUIDE_[x.tag] || '') + '; layout: ' + String(v.desc || '').slice(0, 170) +
+      (v.fields ? '; fields: ' + v.fields : '') + (v.words ? '; ' + v.words + ' words' : '') + ')';
+  }).join('\n');
+}
+
+// The short prompt that writes Proposal Deck slides from the storyline plan.
+// a = { userPrompt, n, batch, ctx, sources, approvedFacts, facts, iconNames }
+function proposalContentPrompt_(a) {
+  const ctx = a.ctx, b = a.batch, sources = a.sources || {};
+  const used = (ctx.chooserState && ctx.chooserState.used) || {};
+  const client = String((ctx.proposal && ctx.proposal.client && ctx.proposal.client.name) || ctx.clientName || 'the client');
+  const plan = b && Array.isArray(b.plan) ? b.plan : [];
+  // V.1_51: each slide names its shortlist; every design is described once, in the catalogue after the slides
+  const catalogue = [], inCat = {};
+  const write = (b ? b.slides : []).map(function (o, k) {
+    const sl = proposalShortlist_(Object.assign({ request: a.userPrompt }, o), used);
+    sl.forEach(function (x) { if (!inCat[x.tag]) { inCat[x.tag] = true; catalogue.push(x); } });
+    return [(k + 1) + '. type "' + o.type + '" | title "' + o.title + '"',
+      o.message ? '   message (what this slide proves): ' + o.message : (o.brief ? '   about: ' + o.brief : ''),
+      Array.isArray(o.points) && o.points.length ? '   points ONLY this slide covers: ' + o.points.join('; ') : '',
+      sl.length ? '   designs to choose from: ' + sl.map(function (x) { return x.tag; }).join(', ') : ''].filter(Boolean).join('\n');
+  }).join('\n');
+  const ledger = (b && b.ledger || []).slice(-150);
+  return [
+    'You are a senior consultant at ' + ctx.brand.name + ' (a Google Cloud partner) writing a proposal for ' + client + '.',
+    'REQUEST: "' + String(a.userPrompt || '').slice(0, 1500) + '"',
+    plan.length ? 'THE STORYLINE OF THE WHOLE DECK (fixed; every slide advances it, no slide repeats another):\n' + plan.join('\n') : '',
+    ledger.length ? 'ALREADY SAID ON EARLIER SLIDES (never say these again, in any words):\n- ' + ledger.join('\n- ') : '',
+    Object.keys(used).length ? 'Designs already used on earlier slides of this deck (not offered again): ' + Object.keys(used).slice(0, 40).join(', ') : '',
+    (b && (b.usedNumbers || []).length) ? 'FIGURES ALREADY SHOWN (never show them again): ' + b.usedNumbers.slice(-80).join(', ') : '',
+    'THIS IS PART OF A LONG DECK (' + ((b && b.deckSize) || a.n) + ' slides in all). WRITE EXACTLY THESE ' + a.n + ' SLIDES, in this order, keeping each title word for word (the type is the planned kind of slide):',
+    write,
+    catalogue.length ? 'THE DESIGNS (write "design" and exactly the fields, item counts and words it needs):\n' + proposalShortlistText_(catalogue) : '',
+    'RULES',
+    '- Each slide proves its message with its own points: specific to ' + client + ' and the request, concrete (named systems, data, actions, numbers).',
+    '- Never repeat a point, challenge, benefit, product explanation or figure that another slide of the storyline covers.',
+    '- Choose ONE design per slide from its list and write exactly the fields, item counts and word counts that design needs.',
+    '- Title: the planned title. "lead": one sentence (max 110 characters) under the title; never the same words as the title.',
+    '- Sentence case everywhere (titles, headings, labels): only the first word, names and acronyms capitalised. Never ALL CAPS, never Title Case.',
+    '- Item headings 2-5 words, never starting with a number; item texts 12-30 words, one or two specific sentences, similar length on one slide.',
+    '- No filler sentences ("This ensures...", "This helps..."), no hype (revolutionary, game-changer, cutting-edge, seamless, unparalleled).',
+    '- Numbers only from the research sources, the approved facts or the request. A number you need but do not have is a target:',
+    '  value = the number, label starts with "Target: " (e.g. "Target: fewer unplanned removals"). KPI values are short ("40%", "3x", "2 days").',
+    '- A KPI slide: 3-4 stats items, all targets. Risks: 2-3 risks, each {title: risk, text: one-line impact, points: [2-3 mitigation actions]}.',
+    '- The team slide: teams [{name: "' + client + ' team", roles:[{title, text}]}, {name: "66degrees team", roles:[...]}] (roles, never names) and',
+    '  governance {title, text}. The roadmap: periods [4-9 months or quarters] and lanes [3-6 {name, bars:[{start, end, label}]}].',
+    '- The architecture: columns [{label, items:[{title, text}]}] (sources -> Google Cloud -> users) and links [arrow labels].',
+    '- Only real Google Cloud product names; never invent products, clients, awards or claims about ' + ctx.brand.name + '.',
+    '- No 66degrees credentials, case study, next steps or pricing unless the request asks for them.',
+    '- Process / cards items carry an "icon": one concrete concept for that item (e.g. "shield", "database", "wrench"), each different on a slide.',
+    '- Plain text only: no markdown, no asterisks, no line breaks inside a text, no reference markers like [1] in slide text.',
+    '- "notes": 2-3 sentences for the presenter, with research source numbers like [2] when used. "fact_tags": IDs of approved facts used, or [].',
+    'APPROVED FACTS ABOUT ' + ctx.brand.name.toUpperCase() + ' (the only claims allowed about it):\n' + (a.approvedFacts || []).slice(0, 25).map(function (f) { return '- ' + f; }).join('\n'),
+    (a.facts && a.facts.verify && a.facts.verify.length) ? 'Facts to use only if essential (add "Verify before sharing." to the notes): ' + a.facts.verify.slice(0, 6).join(' | ') : '',
+    sources.research && sources.research.length && typeof formatSciteForPrompt === 'function' ? formatSciteForPrompt(sources.research, sources.researchProvider) : '',
+    sources.text ? 'USER SOURCE MATERIAL:\n' + String(sources.text).slice(0, 8000) : '',
+    a.iconNames && a.iconNames.length ? 'ICON NAMES you may use: ' + a.iconNames.slice(0, 80).join(', ') : '',
+    'OUTPUT: ONLY JSON {"deck_title":"","facts_note":"","slides":[{"type":"","design":"","title":"","lead":"", ...fields of the design..., "notes":"","fact_tags":[]}]} with exactly ' + a.n + ' slides.'
+  ].filter(Boolean).join('\n');
+}
+
+// What a written slide says, as short lines for the record of the deck (headings and short points, not whole texts)
+function proposalLedgerOf_(sp) {
+  const out = [];
+  if (!sp) return out;
+  const t = String(sp.type || '').toLowerCase();
+  if (['cover', 'agenda', 'closing', 'section', 'template'].indexOf(t) !== -1) return out;
+  const head = String(sp.title || '').trim();
+  const add = function (x) { x = String(x || '').replace(/\s+/g, ' ').trim(); if (x && x.length <= 90) out.push(head ? head + ' — ' + x : x); };
+  (sp.items || []).forEach(function (it) { if (it && typeof it === 'object') add(it.title || it.label || (it.value ? it.value + ' ' + (it.label || '') : '')); else add(it); });
+  (sp.points || []).forEach(function (p) { add(typeof p === 'string' ? p.split(':')[0] : (p && p.title)); });
+  ['left', 'right'].forEach(function (k) { if (sp[k]) (sp[k].points || []).forEach(function (p) { add(typeof p === 'string' ? p : (p && p.title)); }); });
+  (sp.columns || []).forEach(function (c) { if (c && typeof c === 'object') (c.items || []).forEach(function (it) { add(it && (it.title || it)); }); });
+  (sp.rows || []).forEach(function (r) { if (Array.isArray(r)) add(r[0]); });
+  if (!out.length && head) out.push(head);
+  return out.slice(0, 8);
 }

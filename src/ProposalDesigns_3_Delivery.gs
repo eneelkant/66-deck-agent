@@ -427,9 +427,17 @@
     var top = K.header(els, s);
     var note = String(s.text || s.takeaway || '');
     var noteH = note ? th_(note, CW - 40, TSZ.body) + 22 : 0;
-    var lw = Math.min(120, 570 / (n - 1) * 0.92 + 20);
-    var labH = 0;
-    items.forEach(function (it) { labH = Math.max(labH, th_(it.title, lw, TSZ.heading, 500) + (it.text ? 2 + th_(it.text, lw, 9.5) : 0)); });
+    // V.1_51 (deck 23 slide 18): a label is never wider than the gap to the next step (they overlapped), and the design
+    // refuses labels that do not fit in that width (2 lines for a step, 3 for its text): another design is used
+    var lw = Math.min(120, 570 * 0.86 / (n - 1) - 6);
+    var oneT = th_('Step', lw, TSZ.heading, 500), oneB = th_('step', lw, 9.5);
+    var labH = 0, tooBig = false;
+    items.forEach(function (it) {
+      var ht = th_(it.title, lw, TSZ.heading, 500), hb = it.text ? th_(it.text, lw, 9.5) : 0;
+      if (ht > oneT * 2 + 1 || hb > oneB * 3 + 1) tooBig = true;
+      labH = Math.max(labH, ht + (it.text ? 2 + hb : 0));
+    });
+    if (tooBig) return null;
     var x0 = 70, x1 = 640, yb = BOTTOM - (note ? noteH + 14 : 0) - labH - 12, yt = top + 14;
     if (yb - yt < 120) return null;
     var k = 2.4;
