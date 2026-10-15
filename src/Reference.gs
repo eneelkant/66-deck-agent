@@ -979,6 +979,10 @@ function designNeedsMet_(need, spec) {
     // V.1_52 Solution Deck designs
     case 'context': return !!String(spec.context || '').trim();
     case 'what': return !!String(spec.what || '').trim();
+    // V.1_53 Solution Deck designs (batch 2)
+    case 'code': return !!String(spec.code || spec.script || '').trim();
+    case 'center': return !!String(spec.center || spec.hub || '').trim();
+    case 'chart': return !!(spec.chart && Array.isArray(spec.chart.series) && spec.chart.series.length && Array.isArray(spec.chart.categories) && spec.chart.categories.length >= 3);
     default: return Array.isArray(spec[need]) && spec[need].length >= 2;
   }
 }

@@ -248,7 +248,9 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   const partial = !!region && !(region[0] <= 1 && region[1] <= 1 && region[2] >= ENGINE.W - 1 && region[3] >= ENGINE.H - 1);
   let stock = null, cut = null;
   if (partial) {
-    try { stock = typeof pickStockImage_ === 'function' ? pickStockImage_(region, spec, ctx) : null; } catch (e) { stock = null; }
+    // V.1_53: a Solution Deck keeps the 66degrees streak photo in every strip (like the solution decks it is built from)
+    const solutionSlide = !!spec && spec.deckLibrary === 'solution';
+    try { stock = !solutionSlide && typeof pickStockImage_ === 'function' ? pickStockImage_(region, spec, ctx) : null; } catch (e) { stock = null; }
     if (!stock && typeof streakCropBlob_ === 'function') cut = streakCropBlob_(region, ENGINE.W, ENGINE.H);
   }
   slide.getBackground().setSolidFill(partial && (stock || cut) ? ENGINE.TOKENS.white : out.bg);

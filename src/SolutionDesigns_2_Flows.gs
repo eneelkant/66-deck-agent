@@ -40,7 +40,9 @@
     };
   }
   function itemsOf(s, max) { return K.items(s, max + 1).map(norm).filter(function (it) { return it.title; }); }
-  function linesOf(it) { return it.points.length ? it.points : (it.text ? [it.text] : []); }
+  // V.1_53: a point or text with no real words (".", "-") counts as empty (deck 24: a card with a heading only)
+  function real(t) { return /[A-Za-z0-9]{2,}/.test(String(t || '')); }
+  function linesOf(it) { var p = it.points.filter(real); return p.length ? p : (real(it.text) ? [it.text] : []); }
   function heading(els, x, y, w, str, color, maxLines, align) {
     return K.text(els, x, y, w, 60, str, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: maxLines || 3, color: color || T.ink, align: align || 'left' });
   }
@@ -61,6 +63,22 @@
   }
   function photoOut(els) { return { bg: T.ink, bgImage: 'section-bg', els: els, noBalance: true }; }
   function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.7)); }
+  // V.1_53: dark slides (black with the content in white), like the dark card slides of the solution decks
+  var DARK_BG = '#050B1F', DARK_CARD = '#111A33', DARK_LINE = '#26324F', DARK_HEAD = '#7FA4FF', DARK_BODY = '#D8DEEA', DARK_MUTED = '#9AA6BF';
+  function pal(s) {
+    return s && s.dark ? { dark: true, bg: DARK_BG, card: DARK_CARD, panel: DARK_CARD, line: DARK_LINE, ink: T.white, body: DARK_BODY, head: DARK_HEAD, rule: DARK_LINE, muted: DARK_MUTED }
+      : { dark: false, bg: T.white, card: T.white, panel: T.bgLight, line: LINE, ink: T.ink, body: T.ink, head: T.blue, rule: SLATE, muted: MUTED };
+  }
+  // the slide title and lead: the engine header on light slides, the same place in white on a dark slide
+  function hdr(els, s, P, opts) {
+    if (!P || !P.dark) return K.header(els, s, opts);
+    var tw = (opts && opts.maxW) || (W - 2 * X0);
+    var t = K.text(els, X0, 24, tw, 50, s.title || '', { weight: 500, max: 20, min: 15, maxLines: 2, color: T.white });
+    var y = 24 + t.height + 5, lead = s.lead || s.subtitle;
+    if (lead) { var l = K.text(els, X0, y, Math.min(tw, W - 2 * X0 - 40), 30, lead, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, color: DARK_BODY }); y += l.height; }
+    return Math.max(y + 16, 68);
+  }
+  function done(els, P) { var o = { bg: P.bg, els: els, noBalance: true }; if (P.dark) o.dark = true; return o; }
   function cellText(c) { return clean(c && typeof c === 'object' ? (c.text || c.value || c.title || '') : c); }
   // table rows and columns as written by Gemini: columns ["", ...] and rows [[...], ...] (or rows of {cells})
   function tableOf(s, maxCols, maxRows) {
@@ -144,6 +162,7 @@
     if (items.length !== 3) return null;
     if (items.some(function (it) { return !linesOf(it).length || linesOf(it).length > 4; })) return null;
     var loops = K.arr(s.loop || s.loops || s.feedback, 2).map(K.str).map(clean).filter(Boolean);
+    if (!loops.length) return null;                                       // V.1_53: without its feedback loop this is not an operating model
     var els = [];
     var top = K.header(els, s) + 6;
     var aw = 74, bw = (CW - 2 * aw) / 3, pad = 12, iw = bw - 2 * pad;
@@ -192,8 +211,8 @@
     var items = itemsOf(s, 6), n = items.length;
     if (n < 4 || n > 6) return null;
     if (items.some(function (it) { return !linesOf(it).length; })) return null;
-    var els = [];
-    var top = K.header(els, s) + 2;
+    var els = [], P = pal(s);
+    var top = hdr(els, s, P) + 2;
     var take = clean(s.takeaway), takeH = take ? 22 : 0;
     var gap = 8, cw = (CW - gap * (n - 1)) / n, pad = 9, iw = cw - 2 * pad, d = 22;
     var hB = K.linesBlock(items.map(function (it) { return it.title; }), iw, TSZ.heading, 500, 3);
@@ -202,20 +221,20 @@
     var need = pad + d + 10 + hB + 8 + (hasTag ? 24 : 0) + tB + pad, avail = BOTTOM - top - takeH;
     if (need > avail) return null;
     var ch = boxH(need, avail);
-    K.line(els, CX + cw / 2, top + pad + d / 2, CX + CW - cw / 2, top + pad + d / 2, SLATE, 1);
+    K.line(els, CX + cw / 2, top + pad + d / 2, CX + CW - cw / 2, top + pad + d / 2, P.rule, 1);
     items.forEach(function (it, i) {
       var x = CX + i * (cw + gap), cx = x + cw / 2;
-      K.rect(els, x, top, cw, ch, T.white, { color: LINE, width: 0.75 });
+      K.rect(els, x, top, cw, ch, P.card, { color: P.line, width: 0.75 });
       K.ellipse(els, cx - d / 2, top + pad, d, d, T.blue);
       K.text(els, cx - d / 2, top + pad, d, d, String(i + 1), { weight: 500, max: 10, min: 9, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
       var yy = top + pad + d + 10;
-      heading(els, x + pad, yy, iw, it.title, T.ink, 3, 'center');
+      heading(els, x + pad, yy, iw, it.title, P.ink, 3, 'center');
       yy += hB + 8;
-      if (hasTag) { if (it.tag) chip(els, cx, yy, it.tag, TINT, T.blue, iw, true); yy += 24; }
-      K.text(els, x + pad, yy, iw, top + ch - yy - pad, linesOf(it).join(' '), { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: T.ink });
+      if (hasTag) { if (it.tag) chip(els, cx, yy, it.tag, P.dark ? DARK_LINE : TINT, P.dark ? T.white : T.blue, iw, true); yy += 24; }
+      K.text(els, x + pad, yy, iw, top + ch - yy - pad, linesOf(it).join(' '), { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: P.body });
     });
-    if (take) K.text(els, CX, BOTTOM - 16, CW, 16, take, { weight: 400, max: 9.5, min: 9, maxLines: 1, align: 'center', color: MUTED });
-    return { bg: T.white, els: els, noBalance: true };
+    if (take) K.text(els, CX, BOTTOM - 16, CW, 16, take, { weight: 400, max: 9.5, min: 9, maxLines: 1, align: 'center', color: P.muted });
+    return done(els, P);
   });
 
   /* ---------- 5. Labelled rows: coloured label block + two bullet columns — SQL AG p13 (layers), p16 (phases),
@@ -225,6 +244,9 @@
     var items = itemsOf(s, 4), n = items.length;
     if (n < 3 || n > 4) return null;
     if (items.some(function (it) { return linesOf(it).length < 2 || linesOf(it).length > 6; })) return null;
+    // V.1_53: a timing is a duration ("5-10 min", "2 weeks"); one that every row repeats ("near real-time") is left out
+    var tset = {}; items.forEach(function (it) { tset[it.timing.toLowerCase()] = 1; });
+    items.forEach(function (it) { if (!/\d|ongoing/i.test(it.timing) || (n > 1 && Object.keys(tset).length === 1)) it.timing = ''; });
     var els = [];
     var top = K.header(els, s) + 2;
     var take = clean(s.takeaway), takeH = take ? 20 : 0;
@@ -308,6 +330,8 @@
     var items = itemsOf(s, 3);
     if (items.length !== 3) return null;
     if (items.some(function (it) { return !linesOf(it).length || linesOf(it).length > 5; })) return null;
+    // V.1_53: value over time needs its three stage labels, and a process (training, a pipeline) is never a value curve
+    if (items.some(function (it) { return !it.label; }) || /\b(train\w*|pipeline|process|steps?|workflow|how .+ works)\b/i.test(String(s.title || ''))) return null;
     var els = [];
     var top = K.header(els, s) + 2;
     var gap = 14, cw = (CW - 2 * gap) / 3, iw = cw - 8;

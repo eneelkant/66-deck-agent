@@ -323,7 +323,7 @@ function prepareProposal_(userPrompt, sources, ctx, opts) {
   if (!(isProposalDeck_(ctx) || solution) || ctx.proposal) return ctx.proposal || null;
   opts = opts || {};
   const p = proposalStyles_({ client: null, logoId: '', sectionStyle: Math.random() < 1 / 3 ? 'light' : 'dark' }, solution ? 'solution' : 'proposal');
-  progressStage_(ctx, 'match', 'active', 'Finding the client and its logo');
+  progressStage_(ctx, 'match', 'active', solution ? 'Finding the client' : 'Finding the client and its logo');
   // Explicit sidebar client name/domain take precedence (never inferred from email/uploads alone).
   let c = null;
   const explicitName = String(opts.clientName || ctx.clientName || '').replace(/\s+/g, ' ').trim().slice(0, 60);
@@ -335,7 +335,11 @@ function prepareProposal_(userPrompt, sources, ctx, opts) {
   } else {
     c = detectClient_(userPrompt, sources, ctx);
   }
-  if (c) {
+  if (c && solution) {
+    // V.1_53: a Solution Deck never shows a client logo (the client is named in the text only), so no logo is looked up
+    p.client = c.name;
+    ctx.log.push('Client: ' + c.name + ' (a Solution Deck carries no client logo).');
+  } else if (c) {
     p.client = c.name;
     const logo = findClientLogo_(c, ctx);
     if (logo) { p.logoId = logo.id; if (logo.blob) ctx.clientLogoBlob = logo.blob; ctx.log.push('Client: ' + c.name + ' (logo from ' + logo.source + ').'); }
@@ -361,8 +365,8 @@ function applyProposalFrame_(slides, ctx) {
     if (!sp) return;
     const t = String(sp.type || '').toLowerCase();
     sp.deckLibrary = p.lib === 'solution' ? 'solution' : 'proposal';
-    sp.cobrand = !!p.logoId && t !== 'cover' && t !== 'closing';
-    if (t === 'cover') sp.clientLogo = !!p.logoId;
+    sp.cobrand = !!p.logoId && p.lib !== 'solution' && t !== 'cover' && t !== 'closing';   // V.1_53: never a client logo in a Solution Deck
+    if (t === 'cover') sp.clientLogo = !!p.logoId && p.lib !== 'solution';
     if (t === 'section') {
       sp.sectionStyle = p.sectionStyle;
       // V.1_42: one divider style per deck; a workstream inside a section (level 2) is the light divider, not numbered
@@ -730,6 +734,14 @@ function proposalCoerce_(sp, ctx, used) {
     if (ctx && ctx.log) ctx.log.push((sp.deckLibrary === 'solution' ? 'Solution' : 'Proposal') + ' design: "' + String(sp.title || '').slice(0, 50) + '" shown as ' + sp.type + ' (a design of its library for its content).');
     return true;
   }
+  // V.1_53: a Solution slide no Solution design can show becomes text sections or a bullet list (never a General layout)
+  if (sp.deckLibrary === 'solution' && !proposalDrawable_(sp).length && typeof solutionRescue_ === 'function') {
+    const before = sp.type;
+    if (solutionRescue_(sp) && proposalDrawable_(sp).length) {
+      if (ctx && ctx.log) ctx.log.push('Solution design: "' + String(sp.title || '').slice(0, 50) + '" shown as text (no Solution design could show it as ' + before + ').');
+      return true;
+    }
+  }
   // nothing new fits: a proposal design already used is drawn again (never the plain layout when one can draw it)
   if (!proposalDrawable_(sp).length && ctx && ctx.log) ctx.log.push('No ' + (sp.deckLibrary === 'solution' ? 'solution' : 'proposal') + ' design for "' + String(sp.title || '').slice(0, 50) + '": plain ' + t + ' layout used.');
   return false;
@@ -828,7 +840,7 @@ function proposalShortlist_(o, used, lib) {
   const FRAME_ = { agenda: 1, section: 1, cover: 1, closing: 1 };
   const words = [o.title, o.message, o.brief].filter(Boolean).join(' ');
   const asked = /\b(credential|why 66degrees|why us|partner status|case stud|client result|success stor|next steps|pricing|price|rate card|package|screenshot)\b/i;
-  const onlyIfAsked = { P66_LOGO_WALL: 1, P66_PACKAGES: 1, P66_STORIES: 1, P66_CASE_STUDY: 1, P66_NEXT_STEPS: 1, P66_BADGES: 1, P66_CREDENTIALS: 1, P66_PRICING: 1, P66_TEAM_PHOTOS: 1, P66_TEXT_SCREENSHOT: 1 };
+  const onlyIfAsked = { P66_LOGO_WALL: 1, P66_PACKAGES: 1, P66_STORIES: 1, P66_CASE_STUDY: 1, P66_NEXT_STEPS: 1, P66_BADGES: 1, P66_CREDENTIALS: 1, P66_PRICING: 1, P66_TEAM_PHOTOS: 1, P66_TEXT_SCREENSHOT: 1, S66_CLIENT_STORY: 1 };
   const types = PROPOSAL_TYPE_OPTIONS_[String(o.type || 'cards').toLowerCase()] || ['cards', 'diagram', 'process'];
   const out = [];
   types.forEach(function (type) {

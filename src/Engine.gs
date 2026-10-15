@@ -3817,6 +3817,7 @@ var ENGINE = (function () {
       .replace(/\s*[\[(]\s*66D_[A-Z0-9_]+(?:\s*[,;\]\[)(]+\s*66D_[A-Z0-9_]+)*\s*[\])]/g, '')   // [66D_FACT_COMPANY_013]
       .replace(/\s*\[\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\](?:\s*\[\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\])*/g, '')  // research markers [1][4]
       .replace(/\s*66D_[A-Z]+_[A-Z0-9_]+/g, '')                                       // bare tags
+      .replace(/`([^`\n]+)`/g, '$1').replace(/`/g, '')                                    // V.1_53: markdown code marks (`truck_id`)
       .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1')                   // V.1_48: markdown bold **text** (never shown as asterisks)
       .replace(/(^|[\s(])\*([^*\s][^*]*[^*\s]|[^*\s])\*(?=[\s).,;:!?]|$)/g, '$1$2')       // markdown italic *text*
       .replace(/\*{2,}/g, '')                                                          // stray ** left over
@@ -3829,7 +3830,7 @@ var ENGINE = (function () {
     if (v && typeof v === 'object') {
       var out = {};
       // reference: design data; notes / fact_tags: speaker-notes material handled by Code.gs (citations kept there)
-      Object.keys(v).forEach(function (k) { out[k] = (k === 'reference' || k === 'notes' || k === 'fact_tags') ? v[k] : cleanSpec(v[k]); });
+      Object.keys(v).forEach(function (k) { out[k] = (k === 'reference' || k === 'notes' || k === 'fact_tags' || k === 'code') ? v[k] : cleanSpec(v[k]); });   // V.1_53: a code block keeps its lines
       return out;
     }
     return v;
@@ -3880,6 +3881,37 @@ var ENGINE = (function () {
     LIB_MODE_ = libOf_(s);
     try { return layoutSlideGuarded_(s, type, lctx); } finally { LIB_MODE_ = wasMode; }
   }
+  var SOLUTION_FALLBACK_TAGS_ = ['S66_TEXT_SECTIONS', 'S66_TWO_COL_BULLETS', 'S66_HEADER_COLUMNS', 'S66_NUMBERED_CARD_GRID', 'S66_ICON_CARD_GRID', 'S66_BOLD_LEAD_LIST', 'S66_BULLETS_PHOTO_HALF'];
+  function solutionFallback_(s, type, tag, lctx) {
+    var tryTag = function (t, spec) {
+      if (!t || t === tag || !V[t] || !inLib_(t, 'solution')) return null;
+      try { var o = V[t](spec, lctx); if (o && contentCount_(o) > 0) { o.drawnWith = t; return o; } return null; } catch (e) { return null; }
+    };
+    var out = null;
+    (VARIANTS[type] || []).forEach(function (v) { if (!out) out = tryTag(v.tag, s); });
+    SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, s); });
+    if (out) return out;
+    // the slide's text as headed sections (or one list): every Solution deck can show that
+    var real = function (t) { return /[A-Za-z0-9]{2,}/.test(String(t || '')); };
+    var str = function (v) { return String(v == null ? '' : (typeof v === 'object' ? (v.text || v.title || v.label || '') : v)).trim(); };
+    var groups = arr(s.items, 8).map(function (it) {
+      if (typeof it === 'string') return { title: '', points: [it] };
+      var pts = arr(it && (it.points || it.bullets), 6).map(str);
+      if (it && (it.text || it.description)) pts.unshift(str(it.text || it.description));
+      return { title: str(it && (it.title || it.label || it.name)), points: pts.filter(real) };
+    });
+    var full = groups.filter(function (g) { return g.title && g.points.length; });
+    var spec = Object.assign({}, s);
+    if (full.length >= 2) spec.items = full.slice(0, 5);
+    else {
+      var flat = groups.map(function (g) { return g.points.length ? (g.title ? g.title + ': ' : '') + g.points.join(' ') : g.title; })
+        .concat(arr(s.points, 10).map(str)).filter(real);
+      if (!flat.length) return null;
+      spec.items = []; spec.points = flat.slice(0, 10);
+    }
+    SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, spec); });
+    return out;
+  }
   function layoutSlideGuarded_(s, type, lctx) {
     var tag = s.reference && s.reference.tag;
     // Design libraries never mix: a Proposal Deck only uses proposal designs (frame slides have one strict design),
@@ -3890,7 +3922,12 @@ var ENGINE = (function () {
     if (lib !== 'general' ? ((FRAME_TYPES_[type] && !(type === 'section' && inLib_(tag, lib))) || !inLib_(tag, lib)) : !inLib_(tag, 'general')) tag = null;
     var out = (tag && V[tag] && variantOf(type, tag)) ? V[tag](s, lctx) : null;
     if (out && contentCount_(out) === 0) out = null;
+    // V.1_53: a Solution slide is never drawn with a General layout (deck 24): another Solution design that can show the
+    // content, or the content gathered as headed text sections / two bullet columns
+    if (out) out.drawnWith = tag;
+    if (!out && lib === 'solution' && !FRAME_TYPES_[type]) out = solutionFallback_(s, type, tag, lctx);
     out = out || L[type](s, lctx);
+    if (!out.drawnWith) out.drawnWith = 'base:' + type;                   // V.1_53: which design drew the slide (checks and tests)
     // Never an empty slide: content the chosen type cannot show is drawn as cards (items) or bullets (points)
     if (['cover', 'agenda', 'closing', 'section', 'statement', 'quote', 'template'].indexOf(type) === -1 && contentCount_(out) === 0) {
       var alt = null;
@@ -4054,7 +4091,7 @@ var ENGINE = (function () {
         out = applyDiagramIrToEngineOutput_(out, s, ctx.tokens || null);
       }
       if (!out.noFooter) footerMark(out.els, out.dark);
-      if (s.cobrand && type !== 'cover' && type !== 'closing') clientCorner_(out, type, libOf_(s) !== 'general');
+      if (s.cobrand && libOf_(s) !== 'solution' && type !== 'cover' && type !== 'closing') clientCorner_(out, type, libOf_(s) !== 'general');
       out.type = type;
       out.notes = s.notes || '';
       slides.push(out);

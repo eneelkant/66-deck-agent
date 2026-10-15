@@ -39,7 +39,9 @@
     };
   }
   function itemsOf(s, max) { return K.items(s, max + 1).map(norm).filter(function (it) { return it.title; }); }
-  function linesOf(it) { return it.points.length ? it.points : (it.text ? [it.text] : []); }
+  // V.1_53: a point or text with no real words (".", "-") counts as empty (deck 24: a card with a heading only)
+  function real(t) { return /[A-Za-z0-9]{2,}/.test(String(t || '')); }
+  function linesOf(it) { var p = it.points.filter(real); return p.length ? p : (real(it.text) ? [it.text] : []); }
   function heading(els, x, y, w, str, color, maxLines, align) {
     return K.text(els, x, y, w, 60, str, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: maxLines || 3, color: color || T.ink, align: align || 'left' });
   }
@@ -75,6 +77,23 @@
     return t;
   }
   function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.7)); }
+
+  // V.1_53: dark slides (black with the content in white), like the dark card slides of the solution decks
+  var DARK_BG = '#050B1F', DARK_CARD = '#111A33', DARK_LINE = '#26324F', DARK_HEAD = '#7FA4FF', DARK_BODY = '#D8DEEA', DARK_MUTED = '#9AA6BF';
+  function pal(s) {
+    return s && s.dark ? { dark: true, bg: DARK_BG, card: DARK_CARD, panel: DARK_CARD, line: DARK_LINE, ink: T.white, body: DARK_BODY, head: DARK_HEAD, rule: DARK_LINE, muted: DARK_MUTED }
+      : { dark: false, bg: T.white, card: T.white, panel: T.bgLight, line: LINE, ink: T.ink, body: T.ink, head: T.blue, rule: SLATE, muted: MUTED };
+  }
+  // the slide title and lead: the engine header on light slides, the same place in white on a dark slide
+  function hdr(els, s, P, opts) {
+    if (!P || !P.dark) return K.header(els, s, opts);
+    var tw = (opts && opts.maxW) || (W - 2 * X0);
+    var t = K.text(els, X0, 24, tw, 50, s.title || '', { weight: 500, max: 20, min: 15, maxLines: 2, color: T.white });
+    var y = 24 + t.height + 5, lead = s.lead || s.subtitle;
+    if (lead) { var l = K.text(els, X0, y, Math.min(tw, W - 2 * X0 - 40), 30, lead, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, color: DARK_BODY }); y += l.height; }
+    return Math.max(y + 16, 68);
+  }
+  function done(els, P) { var o = { bg: P.bg, els: els, noBalance: true }; if (P.dark) o.dark = true; return o; }
 
   /* ---------- 1. Header columns: 2-4 columns under blue header bars (optional photo banner) — Managed Services p31-38,
      GWS GE p17, SQL AG p4/p15, HCA p20, MCO p7 ---------- */
@@ -150,8 +169,8 @@
     var items = itemsOf(s, 3);
     if (items.length !== 3) return null;
     if (items.some(function (it) { return !linesOf(it).length || linesOf(it).length > 6; })) return null;
-    var els = [];
-    var top = K.header(els, s) + 2;
+    var els = [], P = pal(s);
+    var top = hdr(els, s, P) + 2;
     var take = clean(s.takeaway), takeH = take ? 36 : 0;
     var gap = 14, cw = (CW - 2 * gap) / 3, pad = 16, iw = cw - 2 * pad;
     var hB = K.linesBlock(items.map(function (it) { return it.title; }), iw, TSZ.heading, 500, 2);
@@ -161,18 +180,18 @@
     var ch = boxH(need, avail);
     items.forEach(function (it, i) {
       var x = CX + i * (cw + gap);
-      K.rect(els, x, top, cw, ch, T.bgLight);
-      heading(els, x + pad, top + pad, iw, it.title, T.blue, 2);
+      K.rect(els, x, top, cw, ch, P.panel);
+      heading(els, x + pad, top + pad, iw, it.title, P.head, 2);
       var ly = top + pad + hB + 10;
-      K.line(els, x + pad, ly, x + cw - pad, ly, SLATE, 0.75);
-      bullets(els, x + pad, ly + 12, iw, top + ch - ly - 12 - pad, linesOf(it), 8);
+      K.line(els, x + pad, ly, x + cw - pad, ly, P.rule, 0.75);
+      bullets(els, x + pad, ly + 12, iw, top + ch - ly - 12 - pad, linesOf(it), 8, P.body);
     });
     if (take) {
       var ty = top + ch + 12;
       K.shape(els, 'HOME_PLATE', CX, ty, CW, 24, T.blue);
       K.text(els, CX + 16, ty, CW - 60, 24, take, { weight: 500, max: TSZ.body, min: 9, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
     }
-    return { bg: T.white, els: els, noBalance: true };
+    return done(els, P);
   });
 
   /* ---------- 4. Icon card grid: round blue badge left of each heading, 2 columns — SQL AG p8/p12, Managed Services p2x,
@@ -182,8 +201,8 @@
     var items = itemsOf(s, 6), n = items.length;
     if (n !== 4 && n !== 6) return null;
     if (items.some(function (it) { return !it.text && !it.points.length; })) return null;
-    var els = [];
-    var top = K.header(els, s) + 2;
+    var els = [], P = pal(s);
+    var top = hdr(els, s, P) + 2;
     var rows = n / 2, gapX = 16, gapY = 12, cw = (CW - gapX) / 2, pad = 14, bd = 26, tx = pad + bd + 12, iw = cw - tx - pad;
     var hB = K.linesBlock(items.map(function (it) { return it.title; }), iw, TSZ.heading, 500, 2);
     var tB = maxOf(items, function (it) { return ptsH(linesOf(it), iw, TSZ.body, 4); });
@@ -193,12 +212,12 @@
     rh = Math.min(rh, Math.max(cardNeed, rh * 0.8));
     items.forEach(function (it, i) {
       var x = CX + (i % 2) * (cw + gapX), y = top + Math.floor(i / 2) * (rh + gapY);
-      K.rect(els, x, y, cw, rh, T.white, { color: LINE, width: 0.75 });
+      K.rect(els, x, y, cw, rh, P.card, { color: P.line, width: 0.75 });
       badge(els, it, x + pad, y + pad, bd, T.blue);
-      var hr = heading(els, x + tx, y + pad + (hB < bd ? (bd - hB) / 2 : 0), iw, it.title, T.ink, 2);
-      bullets(els, x + tx, y + pad + Math.max(hB, bd - 2) + 6, iw, rh - pad * 2 - hB - 6, linesOf(it), 4);
+      var hr = heading(els, x + tx, y + pad + (hB < bd ? (bd - hB) / 2 : 0), iw, it.title, P.ink, 2);
+      bullets(els, x + tx, y + pad + Math.max(hB, bd - 2) + 6, iw, rh - pad * 2 - hB - 6, linesOf(it), 4, P.body);
     });
-    return { bg: T.white, els: els, noBalance: true };
+    return done(els, P);
   });
 
   /* ---------- 5. 2 x 2 cards with a blue left rule (optional owner chip) — GWS GE p13, SQL playbook p10/p12/p16 ---------- */
@@ -207,8 +226,8 @@
     var items = itemsOf(s, 4);
     if (items.length !== 4) return null;
     if (items.some(function (it) { return !linesOf(it).length || linesOf(it).length > 5; })) return null;
-    var els = [];
-    var top = K.header(els, s) + 2;
+    var els = [], P = pal(s);
+    var top = hdr(els, s, P) + 2;
     var gap = 14, cw = (CW - gap) / 2, pad = 16, iw = cw - 2 * pad - 4;
     var hasTag = items.some(function (it) { return it.tag; });
     var hB = K.linesBlock(items.map(function (it) { return it.title; }), iw, TSZ.heading, 500, 2);
@@ -219,13 +238,13 @@
     rh = Math.min(rh, Math.max(need, rh * 0.82));
     items.forEach(function (it, i) {
       var x = CX + (i % 2) * (cw + gap), y = top + Math.floor(i / 2) * (rh + gap);
-      K.rect(els, x, y, cw, rh, T.white, { color: LINE, width: 0.75 });
+      K.rect(els, x, y, cw, rh, P.card, { color: P.line, width: 0.75 });
       K.rect(els, x, y, 4, rh, T.blue);
-      heading(els, x + pad + 4, y + pad, iw, it.title, T.blue, 2);
-      bullets(els, x + pad + 4, y + pad + hB + 8, iw, rh - pad * 2 - hB - 8 - (hasTag ? 26 : 0), linesOf(it), 5);
-      if (it.tag) chip(els, x + pad + 4, y + rh - pad - 16, it.tag, T.bgLight, T.ink, iw);
+      heading(els, x + pad + 4, y + pad, iw, it.title, P.head, 2);
+      bullets(els, x + pad + 4, y + pad + hB + 8, iw, rh - pad * 2 - hB - 8 - (hasTag ? 26 : 0), linesOf(it), 5, P.body);
+      if (it.tag) chip(els, x + pad + 4, y + rh - pad - 16, it.tag, P.dark ? DARK_LINE : T.bgLight, P.ink, iw);
     });
-    return { bg: T.white, els: els, noBalance: true };
+    return done(els, P);
   });
 
   /* ---------- 6. Numbered card grid: 01-06 in rows of three — Managed Services p25/p27/p29, SQL AG p11 ---------- */
@@ -234,10 +253,11 @@
     var items = itemsOf(s, 6), n = items.length;
     if (n < 4 || n > 6) return null;
     if (items.some(function (it) { return !linesOf(it).length; })) return null;
-    var els = [];
-    var top = K.header(els, s) + 2;
+    var els = [], P = pal(s);
+    var top = hdr(els, s, P) + 2;
     var take = clean(s.takeaway), takeH = take ? 22 : 0;
-    var gap = 12, cw = (CW - 2 * gap) / 3, pad = 12, iw = cw - 2 * pad;
+    var cols = n === 4 ? 2 : 3;                                          // V.1_53: four cards as 2 x 2 (never 3 + 1 alone)
+    var gap = 12, cw = (CW - (cols - 1) * gap) / cols, pad = 12, iw = cw - 2 * pad;
     var hB = K.linesBlock(items.map(function (it) { return it.title; }), iw, TSZ.heading, 500, 2);
     var tB = maxOf(items, function (it) { return ptsH(linesOf(it), iw, TSZ.body, 4); });
     var need = pad + 16 + 4 + hB + 8 + 1 + 8 + tB + pad, avail = BOTTOM - top - takeH;
@@ -245,17 +265,17 @@
     if (need > rh) return null;
     rh = Math.min(rh, Math.max(need, rh * 0.85));
     items.forEach(function (it, i) {
-      var x = CX + (i % 3) * (cw + gap), y = top + Math.floor(i / 3) * (rh + gap);
-      K.rect(els, x, y, cw, rh, T.white, { color: LINE, width: 0.75 });
-      K.text(els, x + pad, y + pad, 40, 16, K.pad2(i + 1), { font: 'mono', weight: 500, max: 13, min: 12, maxLines: 1, color: T.blue });
+      var x = CX + (i % cols) * (cw + gap), y = top + Math.floor(i / cols) * (rh + gap);
+      K.rect(els, x, y, cw, rh, P.card, { color: P.line, width: 0.75 });
+      K.text(els, x + pad, y + pad, 40, 16, K.pad2(i + 1), { font: 'mono', weight: 500, max: 13, min: 12, maxLines: 1, color: P.head });
       var hy = y + pad + 20;
-      heading(els, x + pad, hy, iw, it.title, T.ink, 2);
+      heading(els, x + pad, hy, iw, it.title, P.ink, 2);
       var ly = hy + hB + 8;
-      K.line(els, x + pad, ly, x + cw - pad, ly, LINE, 0.75);
-      bullets(els, x + pad, ly + 8, iw, y + rh - ly - 8 - pad, linesOf(it), 4);
+      K.line(els, x + pad, ly, x + cw - pad, ly, P.line, 0.75);
+      bullets(els, x + pad, ly + 8, iw, y + rh - ly - 8 - pad, linesOf(it), 4, P.body);
     });
-    if (take) K.text(els, CX, BOTTOM - 16, CW, 16, '→ ' + take, { weight: 400, max: 9.5, min: 9, maxLines: 1, color: T.blue });
-    return { bg: T.white, els: els, noBalance: true };
+    if (take) K.text(els, CX, BOTTOM - 16, CW, 16, '→ ' + take, { weight: 400, max: 9.5, min: 9, maxLines: 1, color: P.head });
+    return done(els, P);
   });
 
   /* ---------- 7. Context bar + tinted panels + footer panel — HCA p5/p11, GWS GE p11 ---------- */
@@ -264,7 +284,7 @@
     var items = itemsOf(s, 3), n = items.length;
     var ctxText = clean(s.context);
     if (n < 2 || n > 3 || !ctxText) return null;
-    if (items.some(function (it) { return !linesOf(it).length; })) return null;
+    if (items.some(function (it) { return !linesOf(it).length || /^[<>~$€£]?\d/.test(it.title); })) return null;   // V.1_53: figures are not panel headings
     var foot = s.footer && typeof s.footer === 'object' ? { title: clean(s.footer.title), text: clean(s.footer.text) } : { title: '', text: clean(s.footer || s.takeaway) };
     var els = [];
     var top = K.header(els, s) + 2;
@@ -304,6 +324,9 @@
     var items = itemsOf(s, 5), n = items.length;
     if (n < 3 || n > 5) return null;
     if (!items.every(function (it) { return it.timing || it.price; })) return null;
+    // V.1_53: offers have a real timing or price (deck 24: rollout phases "Immediate / Coming Quarter" were not offers)
+    if (items.filter(function (it) { return /\d|\bday\b|\bweek|\bmonth|ongoing|custom/i.test(it.timing + ' ' + it.price); }).length < Math.ceil(n / 2)) return null;
+    if (/\b(team|governance|rollout|roll-out|phases?|roadmap)\b/i.test(String(s.title || ''))) return null;
     if (items.some(function (it) { return !linesOf(it).length; })) return null;
     var els = [];
     var top = K.header(els, s) + 2;
@@ -342,7 +365,7 @@
   /* ---------- 9. Crosses and ticks: two lists side by side + photo strip — SQL playbook p4 (contained vs traditional) ---------- */
   function sideOf(o) {
     o = o || {};
-    return { label: clean(o.label || o.title), points: K.arr(o.points, 8).map(K.str).map(clean).filter(Boolean) };
+    return { label: clean(o.label || o.title), points: K.arr(o.points, 8).map(K.str).map(clean).map(function (p) { return p.replace(/^[✓✔✗✘×❌✅☑]\uFE0F?\s*/, ''); }).filter(real) };   // V.1_53: the design adds the marks
   }
   add('S66_CROSS_CHECK', 'comparison', { min: 2, max: 2, needs: 'left{label,points[]}, right{label,points[]}',
     desc: 'two white panels beside a photo strip: the old way with a cross before each point, the new way with a tick before each point (what changes, before and after, traditional vs new)', words: '5-12 per point' }, function (s) {

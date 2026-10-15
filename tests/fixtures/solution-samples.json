@@ -923,5 +923,1173 @@
   },
   "type": "section",
   "title": "Detailed information"
+ },
+ {
+  "reference": {
+   "tag": "S66_ARCH_NUMBERED"
+  },
+  "type": "diagram",
+  "title": "Reference architecture on Google Cloud",
+  "groups": [
+   {
+    "label": "Ingest",
+    "items": [
+     {
+      "title": "IoT Core gateway",
+      "text": "MQTT from 400 trucks",
+      "icon": "truck"
+     },
+     {
+      "title": "Pub/Sub",
+      "text": "Durable event buffer",
+      "icon": "inbox"
+     }
+    ]
+   },
+   {
+    "label": "Process",
+    "items": [
+     {
+      "title": "Dataflow",
+      "text": "Parse, enrich, window",
+      "icon": "workflow"
+     },
+     {
+      "title": "Cloud Functions",
+      "text": "Alert routing",
+      "icon": "zap"
+     }
+    ]
+   },
+   {
+    "label": "Store",
+    "items": [
+     {
+      "title": "BigQuery",
+      "text": "Partitioned telemetry",
+      "icon": "database"
+     },
+     {
+      "title": "Cloud Storage",
+      "text": "Raw archive",
+      "icon": "archive"
+     }
+    ]
+   },
+   {
+    "label": "Predict",
+    "items": [
+     {
+      "title": "Vertex AI",
+      "text": "Spoilage-risk model",
+      "icon": "brain"
+     },
+     {
+      "title": "Model Registry",
+      "text": "Versions and rollback",
+      "icon": "git-branch"
+     }
+    ]
+   },
+   {
+    "label": "Act",
+    "items": [
+     {
+      "title": "Cloud Monitoring",
+      "text": "Thresholds and pages",
+      "icon": "bell"
+     },
+     {
+      "title": "Looker",
+      "text": "Fleet dashboards",
+      "icon": "chart"
+     }
+    ]
+   },
+   {
+    "label": "Secure",
+    "items": [
+     {
+      "title": "VPC Service Controls",
+      "text": "Data perimeter",
+      "icon": "shield"
+     },
+     {
+      "title": "Cloud KMS",
+      "text": "CMEK keys",
+      "icon": "key"
+     }
+    ]
+   }
+  ],
+  "callouts": [
+   "Sensors publish readings every 30 seconds over MQTT",
+   "Dataflow enriches each reading with truck and route data",
+   "BigQuery keeps 13 months of telemetry for training",
+   "Vertex AI scores spoilage risk on every new window",
+   "High-risk scores page the dispatcher within a minute",
+   "Every service sits inside one VPC Service Controls perimeter"
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_ARCH_ICON_GRAPH"
+  },
+  "type": "diagram",
+  "title": "How a temperature reading becomes an alert",
+  "columns": [
+   {
+    "label": "Fleet",
+    "items": [
+     {
+      "title": "Reefer sensors",
+      "text": "Temperature, door, GPS",
+      "icon": "thermometer"
+     },
+     {
+      "title": "Telematics unit",
+      "text": "MQTT over LTE",
+      "icon": "radio"
+     }
+    ]
+   },
+   {
+    "label": "Ingest and process",
+    "items": [
+     {
+      "title": "Pub/Sub",
+      "text": "One topic per region",
+      "icon": "inbox"
+     },
+     {
+      "title": "Dataflow",
+      "text": "5-minute windows",
+      "icon": "workflow"
+     }
+    ]
+   },
+   {
+    "label": "Predict",
+    "items": [
+     {
+      "title": "BigQuery",
+      "text": "Features and history",
+      "icon": "database"
+     },
+     {
+      "title": "Vertex AI endpoint",
+      "text": "Risk score per load",
+      "icon": "brain"
+     }
+    ]
+   },
+   {
+    "label": "Operations",
+    "items": [
+     {
+      "title": "Dispatcher console",
+      "text": "Ranked alerts",
+      "icon": "monitor"
+     },
+     {
+      "title": "Driver app",
+      "text": "Action checklist",
+      "icon": "smartphone"
+     }
+    ]
+   }
+  ],
+  "links": [
+   "Readings",
+   "Windows",
+   "Scores"
+  ],
+  "takeaway": "From sensor to dispatcher in under 60 seconds"
+ },
+ {
+  "reference": {
+   "tag": "S66_REGION_TOPOLOGY"
+  },
+  "type": "diagram",
+  "title": "Two-region design for the alerting path",
+  "regions": [
+   {
+    "label": "Primary region (us-central1)",
+    "zones": [
+     {
+      "title": "Zone A",
+      "text": "Dataflow workers"
+     },
+     {
+      "title": "Zone B",
+      "text": "Alert functions"
+     }
+    ],
+    "detail": "Pub/Sub regional topic · Vertex AI endpoint · BigQuery dataset"
+   },
+   {
+    "label": "DR region (us-east1)",
+    "zones": [
+     {
+      "title": "Zone A",
+      "text": "Standby Dataflow"
+     },
+     {
+      "title": "Zone B",
+      "text": "Standby functions"
+     }
+    ],
+    "detail": "Replicated topic · warm endpoint · cross-region dataset copy"
+   }
+  ],
+  "link": "Pub/Sub replication",
+  "note": "If the primary region fails, the standby pipeline drains the replicated topic and the dispatcher console switches to the DR endpoint; alerts resume within 5 minutes."
+ },
+ {
+  "reference": {
+   "tag": "S66_LAYER_STACK"
+  },
+  "type": "diagram",
+  "title": "The platform in five layers",
+  "layers": [
+   {
+    "label": "Operations",
+    "items": [
+     "Dispatcher console",
+     "Driver app",
+     "Looker dashboards"
+    ]
+   },
+   {
+    "label": "Intelligence",
+    "items": [
+     "Spoilage-risk model",
+     "Anomaly rules",
+     "Model monitoring"
+    ]
+   },
+   {
+    "label": "Data",
+    "items": [
+     "BigQuery telemetry",
+     "Feature store",
+     "Cloud Storage archive"
+    ]
+   },
+   {
+    "label": "Streaming",
+    "items": [
+     "Pub/Sub topics",
+     "Dataflow jobs",
+     "Dead-letter queue"
+    ]
+   },
+   {
+    "label": "Security and network",
+    "items": [
+     "VPC Service Controls",
+     "CMEK with Cloud KMS",
+     "IAM roles",
+     "Private access"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_CODE_PROBLEM_SOLUTION"
+  },
+  "type": "comparison",
+  "title": "Windowed alerts instead of single readings",
+  "problem": {
+   "title": "The problem today",
+   "points": [
+    "Every reading above 5 °C raises an alert",
+    "Door openings cause hundreds of false alarms",
+    "Dispatchers mute the channel during peaks"
+   ]
+  },
+  "solution": {
+   "title": "The solution: five-minute windows",
+   "text": "Dataflow averages readings in sliding five-minute windows and alerts only when the window stays above the threshold, so short door openings no longer page anyone."
+  },
+  "code": "-- Dataflow SQL: sliding window per truck\nSELECT truck_id, AVG(temp_c) AS avg_temp\nFROM pubsub.topic.`reefer-readings`\nGROUP BY truck_id,\n  HOP(event_ts, \"INTERVAL 1 MINUTE\", \"INTERVAL 5 MINUTE\")\nHAVING AVG(temp_c) > 5.0",
+  "note": "Threshold and window length are set per product class in the alert configuration table."
+ },
+ {
+  "reference": {
+   "tag": "S66_TABLE_NOTES"
+  },
+  "type": "table",
+  "title": "Alert thresholds by product class",
+  "columns": [
+   "Product class",
+   "Range",
+   "Window",
+   "Escalation"
+  ],
+  "rows": [
+   [
+    "Fresh produce",
+    "1–4 °C",
+    "5 min",
+    "Dispatcher"
+   ],
+   [
+    "Dairy",
+    "2–5 °C",
+    "5 min",
+    "Dispatcher"
+   ],
+   [
+    "Frozen",
+    "−25 to −18 °C",
+    "10 min",
+    "Dispatcher and driver"
+   ],
+   [
+    "Pharma",
+    "2–8 °C",
+    "2 min",
+    "Quality lead"
+   ]
+  ],
+  "tips": [
+   {
+    "title": "Why per-class windows",
+    "points": [
+     "Frozen loads tolerate short door openings",
+     "Pharma needs the fastest escalation",
+     "Windows are tuned in the pilot"
+    ]
+   },
+   {
+    "title": "What to watch",
+    "points": [
+     "Sensor drift after six months",
+     "Trucks with weak LTE coverage",
+     "Alert volume per dispatcher shift"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_PRIORITY_TABLE"
+  },
+  "type": "table",
+  "title": "Support priorities for the monitoring platform",
+  "rows": [
+   {
+    "level": "P1",
+    "points": [
+     "Alerting is down for the fleet",
+     "No workaround available"
+    ],
+    "response": "15 minutes",
+    "resolution": "4 hours"
+   },
+   {
+    "level": "P2",
+    "points": [
+     "Alerts delayed in one region",
+     "Workaround through the console"
+    ],
+    "response": "1 hour",
+    "resolution": "1 business day"
+   },
+   {
+    "level": "P3",
+    "points": [
+     "A dashboard or report fails",
+     "Operations continue"
+    ],
+    "response": "4 business hours",
+    "resolution": "5 business days"
+   },
+   {
+    "level": "P4",
+    "points": [
+     "Question or configuration change"
+    ],
+    "response": "1 business day",
+    "resolution": "Next release"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_ISSUE_ROWS"
+  },
+  "type": "cards",
+  "title": "Day-2 runbooks for the pipeline",
+  "items": [
+   {
+    "title": "Dataflow job falls behind",
+    "fix": "Scale workers to 20; check the hot key report for one truck",
+    "status": "warning"
+   },
+   {
+    "title": "Pub/Sub backlog above 10 minutes",
+    "fix": "Replay the subscription from the dead-letter topic after the fix",
+    "status": "warning"
+   },
+   {
+    "title": "Model endpoint latency above 500 ms",
+    "fix": "Roll back to the previous model version in the registry",
+    "status": "warning"
+   },
+   {
+    "title": "Sensor sends duplicate readings",
+    "fix": "Deduplicate on reading ID in the Dataflow transform",
+    "status": "minor"
+   },
+   {
+    "title": "Looker tile shows no data",
+    "fix": "Refresh the PDT; check the BigQuery partition filter",
+    "status": "minor"
+   }
+  ],
+  "takeaway": "All runbooks live in the operations repository and are tested every quarter"
+ },
+ {
+  "reference": {
+   "tag": "S66_TWO_MODE_COMPARE"
+  },
+  "type": "comparison",
+  "title": "Manual checks and automated alerts compared",
+  "columns": [
+   "Manual checks today",
+   "Automated alerts"
+  ],
+  "rows": [
+   {
+    "label": "Detection",
+    "left": "Driver checks the display every 4 hours",
+    "right": "Every reading checked within 60 seconds"
+   },
+   {
+    "label": "False alarms",
+    "left": "Not tracked",
+    "right": "Windows filter door openings"
+   },
+   {
+    "label": "Evidence",
+    "left": "Paper temperature logs",
+    "right": "Full history in BigQuery"
+   },
+   {
+    "label": "Response",
+    "left": "Phone calls after arrival",
+    "right": "Dispatcher paged with a checklist"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_NEED_MAPPING"
+  },
+  "type": "table",
+  "title": "Meridian needs mapped to the solution",
+  "columns": [
+   "Need",
+   "How the solution delivers it",
+   "Pillar"
+  ],
+  "rows": [
+   {
+    "need": "Know when a load warms up",
+    "solution": "Readings every 30 seconds, alerts within a minute",
+    "tags": [
+     "Monitor"
+    ],
+    "icon": "thermometer"
+   },
+   {
+    "need": "Fewer false alarms",
+    "solution": "Five-minute windows per product class",
+    "tags": [
+     "Monitor"
+    ],
+    "icon": "bell"
+   },
+   {
+    "need": "Predict spoilage early",
+    "solution": "Vertex AI risk score on every window",
+    "tags": [
+     "Predict"
+    ],
+    "icon": "brain"
+   },
+   {
+    "need": "Proof for customers",
+    "solution": "Temperature history per load in BigQuery",
+    "tags": [
+     "Evidence"
+    ],
+    "icon": "file"
+   },
+   {
+    "need": "Secure data",
+    "solution": "VPC Service Controls and CMEK on every store",
+    "tags": [
+     "Secure"
+    ],
+    "icon": "shield"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_CHART_INSIGHT"
+  },
+  "type": "chart",
+  "title": "Temperature excursions during the pilot",
+  "text": "Excursions per 100 loads fell from week 4, when windowed alerts went live on the 40 pilot trucks.",
+  "chart": {
+   "categories": [
+    "W1",
+    "W2",
+    "W3",
+    "W4",
+    "W5",
+    "W6",
+    "W7",
+    "W8"
+   ],
+   "series": [
+    {
+     "name": "Excursions per 100 loads",
+     "values": [
+      9,
+      8,
+      9,
+      6,
+      4,
+      3,
+      3,
+      2
+     ]
+    }
+   ]
+  },
+  "items": [
+   {
+    "title": "Alerts went live in week 4",
+    "text": "Windowed alerts replaced single-reading alarms on all 40 trucks."
+   },
+   {
+    "title": "Door openings filtered",
+    "text": "Short openings during deliveries no longer page dispatchers."
+   },
+   {
+    "title": "Next: risk scores",
+    "text": "The Vertex AI model is added to the alert in the next phase."
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_DARK_STATEMENT"
+  },
+  "type": "statement",
+  "title": "Cold chain monitoring",
+  "statement": "Every load watched every minute, and every warning reaches someone who can act on it.",
+  "text": "Meridian moves from paper logs and phone calls to a monitored fleet with alerts, evidence and a spoilage forecast for every load."
+ },
+ {
+  "reference": {
+   "tag": "S66_EXPLAINER_SPLIT"
+  },
+  "type": "statement",
+  "title": "Next step: the 40-truck pilot",
+  "statement": "Prove the alerting path on 40 trucks before the fleet rollout.",
+  "items": [
+   {
+    "title": "Scope",
+    "text": "40 refrigerated trucks on two regional routes, all product classes."
+   },
+   {
+    "title": "What we build",
+    "text": "Sensor ingestion, windowed alerts, the dispatcher console and the BigQuery history."
+   },
+   {
+    "title": "How we measure it",
+    "text": "Time to alert, false alarms per shift and excursions per 100 loads, against the baseline."
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_BANNER_SPLIT"
+  },
+  "type": "stats",
+  "title": "Pilot metrics: the alerting path",
+  "text": "How the dispatcher console tracks every load on the 40 pilot trucks.",
+  "points": [
+   "Sensors publish readings every 30 seconds",
+   "Dataflow windows readings per truck",
+   "Breaches page the dispatcher with a checklist",
+   "The driver confirms the action in the app"
+  ],
+  "items": [
+   {
+    "value": "45 s",
+    "label": "Median time to alert"
+   },
+   {
+    "value": "40",
+    "label": "Trucks in the pilot"
+   },
+   {
+    "value": "2 / shift",
+    "label": "Target: false alarms per shift"
+   },
+   {
+    "value": "13 mo",
+    "label": "Temperature history kept"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_GAP_BRIDGE"
+  },
+  "type": "comparison",
+  "title": "From paper logs to a monitored fleet",
+  "present": [
+   {
+    "title": "Manual checks",
+    "text": "Drivers read the display every four hours."
+   },
+   {
+    "title": "Paper evidence",
+    "text": "Temperature logs are scanned after delivery."
+   }
+  ],
+  "gap": [
+   "No live view",
+   "Late response",
+   "No forecast"
+  ],
+  "solution": [
+   {
+    "title": "Live alerts",
+    "text": "Every breach reaches a dispatcher within a minute."
+   },
+   {
+    "title": "Digital evidence",
+    "text": "Full history per load in BigQuery, shared with customers."
+   }
+  ],
+  "stages": [
+   "Today",
+   "The gap",
+   "With the platform"
+  ],
+  "takeaway": "The platform closes the gap between a breach and the person who can fix it"
+ },
+ {
+  "reference": {
+   "tag": "S66_BOLD_LEAD_LIST"
+  },
+  "type": "bullets",
+  "title": "Included in every monitoring plan",
+  "points": [
+   "Sensor onboarding: install, register and test each truck",
+   "Alert tuning: thresholds and windows per product class",
+   "Dispatcher console: ranked alerts with checklists",
+   "Evidence pack: temperature history per load for customers",
+   "Monthly review: false alarms, response times and model drift",
+   "Runbooks: tested day-2 procedures for the pipeline"
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_TWO_COL_BULLETS"
+  },
+  "type": "bullets",
+  "title": "Pilot scope: what is in and out",
+  "items": [
+   {
+    "title": "In scope",
+    "points": [
+     "40 trucks on two regional routes",
+     "Sensor ingestion and windowed alerts",
+     "Dispatcher console and driver checklist",
+     "Temperature history in BigQuery"
+    ]
+   },
+   {
+    "title": "Out of scope",
+    "points": [
+     "Warehouse cold rooms",
+     "Route optimisation",
+     "Customer-facing portal",
+     "Integration with the billing system"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_LIFECYCLE_COLUMNS"
+  },
+  "type": "process",
+  "title": "The life of an alert",
+  "items": [
+   {
+    "label": "Detect",
+    "title": "Reading breaches the window",
+    "points": [
+     "Dataflow flags the truck",
+     "Product class sets the limit"
+    ],
+    "footer": "Output: alert event"
+   },
+   {
+    "label": "Score",
+    "title": "Risk is scored",
+    "points": [
+     "Vertex AI adds the risk score",
+     "History sets the confidence"
+    ],
+    "footer": "Output: ranked alert"
+   },
+   {
+    "label": "Route",
+    "title": "The right person is paged",
+    "points": [
+     "Dispatcher on shift",
+     "Quality lead for pharma"
+    ],
+    "footer": "Output: page and checklist"
+   },
+   {
+    "label": "Act",
+    "title": "The driver acts",
+    "points": [
+     "Check doors and settings",
+     "Confirm in the app"
+    ],
+    "footer": "Output: action record"
+   },
+   {
+    "label": "Learn",
+    "title": "The case is closed",
+    "points": [
+     "Outcome stored with the load",
+     "Model retrained monthly"
+    ],
+    "footer": "Output: training data"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_RISING_STAGES"
+  },
+  "type": "process",
+  "title": "From pilot to a predictive fleet",
+  "items": [
+   {
+    "title": "Instrument"
+   },
+   {
+    "title": "Stream"
+   },
+   {
+    "title": "Alert"
+   },
+   {
+    "title": "Evidence"
+   },
+   {
+    "title": "Predict"
+   },
+   {
+    "title": "Optimise"
+   }
+  ],
+  "takeaway": "Each stage runs on the platform of the stage before it: the pilot covers the first three, the fleet rollout adds evidence and prediction, and optimisation follows once a year of history is in BigQuery."
+ },
+ {
+  "reference": {
+   "tag": "S66_U_JOURNEY"
+  },
+  "type": "process",
+  "title": "From kickoff to a monitored fleet",
+  "items": [
+   {
+    "title": "Discovery",
+    "points": [
+     "Routes and product classes",
+     "Current alert process"
+    ]
+   },
+   {
+    "title": "Platform setup",
+    "points": [
+     "Landing zone and perimeter",
+     "Pub/Sub and Dataflow"
+    ]
+   },
+   {
+    "title": "Pilot install",
+    "points": [
+     "40 trucks fitted",
+     "Sensors registered"
+    ]
+   },
+   {
+    "title": "Pilot run",
+    "points": [
+     "Six weeks live",
+     "Weekly tuning"
+    ]
+   },
+   {
+    "title": "Fleet rollout",
+    "points": [
+     "200 trucks per wave",
+     "Driver training"
+    ]
+   },
+   {
+    "title": "Prediction",
+    "points": [
+     "Risk model trained",
+     "Scores in alerts"
+    ]
+   },
+   {
+    "title": "Managed run",
+    "points": [
+     "24/7 monitoring",
+     "Monthly reviews"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_LEVEL_CARDS"
+  },
+  "type": "cards",
+  "title": "Training path for the operations team",
+  "items": [
+   {
+    "title": "Level 1: drivers",
+    "subtitle": "Responding to an alert in the cab",
+    "points": [
+     "Format: 30-minute video",
+     "Focus: the checklist in the app",
+     "Goal: act within 10 minutes"
+    ]
+   },
+   {
+    "title": "Level 2: dispatchers",
+    "subtitle": "Running the console on shift",
+    "points": [
+     "Format: half-day workshop",
+     "Focus: ranking and routing alerts",
+     "Goal: no unanswered alerts"
+    ]
+   },
+   {
+    "title": "Level 3: analysts",
+    "subtitle": "Tuning thresholds and reports",
+    "points": [
+     "Format: two-day course",
+     "Focus: BigQuery and Looker",
+     "Goal: monthly tuning review"
+    ]
+   }
+  ],
+  "takeaway": "Learning path progression"
+ },
+ {
+  "reference": {
+   "tag": "S66_CLIENT_STORY"
+  },
+  "type": "case_study",
+  "title": "A regional grocer cut spoilage claims",
+  "client": [
+   "Regional grocery chain with 120 stores",
+   "Own fleet of 85 refrigerated trucks",
+   "Fresh and frozen deliveries twice a day"
+  ],
+  "challenge": [
+   "Spoilage claims rising every quarter",
+   "No proof of temperature on delivery",
+   "Alerts only after arrival at the store"
+  ],
+  "journey": "Started with a 20-truck pilot, then rolled out to the full fleet in three waves over six months.",
+  "items": [
+   {
+    "value": "85",
+    "label": "Trucks monitored"
+   },
+   {
+    "value": "6 mo",
+    "label": "To full fleet"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_SERVICE_HUB_DARK"
+  },
+  "type": "diagram",
+  "title": "How we run the platform for Meridian",
+  "center": "Managed monitoring",
+  "items": [
+   {
+    "title": "Site reliability engineering"
+   },
+   {
+    "title": "Pipeline operations"
+   },
+   {
+    "title": "Model operations"
+   },
+   {
+    "title": "Security operations"
+   },
+   {
+    "title": "Dispatcher support"
+   },
+   {
+    "title": "Reporting and reviews"
+   }
+  ],
+  "governance": [
+   "Monthly service review",
+   "Quarterly model review",
+   "Change board for thresholds"
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_ICON_CARD_GRID"
+  },
+  "dark": true,
+  "type": "cards",
+  "title": "What the platform gives each team",
+  "items": [
+   {
+    "title": "Dispatchers",
+    "text": "Ranked alerts with a checklist for each breach, on one console.",
+    "icon": "monitor"
+   },
+   {
+    "title": "Drivers",
+    "text": "A clear action in the app when their load warms up.",
+    "icon": "truck"
+   },
+   {
+    "title": "Quality",
+    "text": "Temperature history per load for every customer claim.",
+    "icon": "file"
+   },
+   {
+    "title": "Operations leads",
+    "text": "False alarms and response times per region and shift.",
+    "icon": "chart"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_NUMBERED_CARD_GRID"
+  },
+  "dark": true,
+  "type": "cards",
+  "title": "Cut-over run book for each truck",
+  "items": [
+   {
+    "title": "Fit the sensors",
+    "text": "Install and power the reefer sensors and the telematics unit."
+   },
+   {
+    "title": "Register the device",
+    "text": "Add the device ID to the truck master data."
+   },
+   {
+    "title": "Validate the stream",
+    "text": "Check that readings reach the BigQuery table."
+   },
+   {
+    "title": "Switch on alerts",
+    "text": "Enable the truck in the production alert configuration."
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_STEP_COLUMNS"
+  },
+  "dark": true,
+  "type": "process",
+  "title": "Cut-over run book for each truck",
+  "items": [
+   {
+    "title": "Fit sensors",
+    "tag": "Workshop",
+    "text": "Install and power the reefer sensors."
+   },
+   {
+    "title": "Register",
+    "tag": "Fleet admin",
+    "text": "Add the device ID to the truck master data."
+   },
+   {
+    "title": "Validate",
+    "tag": "Data team",
+    "text": "Readings arrive in the BigQuery table."
+   },
+   {
+    "title": "Enable alerts",
+    "tag": "Dispatch",
+    "text": "Truck switched on in the alert configuration."
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_THREE_CARD_COLUMNS"
+  },
+  "dark": true,
+  "type": "cards",
+  "title": "Three controls protect the data",
+  "items": [
+   {
+    "title": "Perimeter",
+    "points": [
+     "VPC Service Controls around BigQuery",
+     "No data leaves the perimeter"
+    ]
+   },
+   {
+    "title": "Keys",
+    "points": [
+     "CMEK with Cloud KMS",
+     "Rotation every 90 days"
+    ]
+   },
+   {
+    "title": "Access",
+    "points": [
+     "Least-privilege IAM roles",
+     "Audit logs to the SIEM"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_QUAD_RULE_CARDS"
+  },
+  "dark": true,
+  "type": "cards",
+  "title": "Four decisions for the rollout",
+  "items": [
+   {
+    "title": "Sensor vendor",
+    "text": "One vendor for the whole fleet keeps onboarding simple.",
+    "tag": "Fleet"
+   },
+   {
+    "title": "Alert owner",
+    "text": "Dispatch owns alerts on every shift.",
+    "tag": "Operations"
+   },
+   {
+    "title": "Evidence access",
+    "text": "Customers see their own loads only.",
+    "tag": "Quality"
+   },
+   {
+    "title": "Model cadence",
+    "text": "Retrain monthly with the closed cases.",
+    "tag": "Data"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_LIFECYCLE_COLUMNS"
+  },
+  "dark": true,
+  "type": "process",
+  "title": "The life of an alert",
+  "items": [
+   {
+    "label": "Detect",
+    "title": "Breach found",
+    "points": [
+     "Dataflow flags the truck",
+     "Class sets the limit"
+    ]
+   },
+   {
+    "label": "Score",
+    "title": "Risk scored",
+    "points": [
+     "Vertex AI risk score",
+     "History sets confidence"
+    ]
+   },
+   {
+    "label": "Route",
+    "title": "Paged",
+    "points": [
+     "Dispatcher on shift",
+     "Quality for pharma"
+    ]
+   },
+   {
+    "label": "Act",
+    "title": "Driver acts",
+    "points": [
+     "Check doors",
+     "Confirm in the app"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_LEVEL_CARDS"
+  },
+  "dark": true,
+  "type": "cards",
+  "title": "Training path for the operations team",
+  "items": [
+   {
+    "title": "Level 1: drivers",
+    "subtitle": "In the cab",
+    "points": [
+     "Format: 30-minute video",
+     "Goal: act within 10 minutes"
+    ]
+   },
+   {
+    "title": "Level 2: dispatchers",
+    "subtitle": "On shift",
+    "points": [
+     "Format: half-day workshop",
+     "Goal: no unanswered alerts"
+    ]
+   },
+   {
+    "title": "Level 3: analysts",
+    "subtitle": "Tuning",
+    "points": [
+     "Format: two-day course",
+     "Goal: monthly review"
+    ]
+   }
+  ]
  }
 ]

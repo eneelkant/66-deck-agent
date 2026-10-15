@@ -1061,6 +1061,10 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
   ensureTitles_(plan.slides, ctx);                                                // V.1_45: every content slide has a title
   plan.slides.forEach(function (sp) { removeHypeWords_(sp); tidyItemText_(sp); });   // brand voice: no hype words, no filler tails
   if (solutionDeck && typeof solutionVoiceClean_ === 'function') plan.slides.forEach(solutionVoiceClean_);   // V.1_52: no emoji, hashtags, ALL CAPS, "!!"
+  if (solutionDeck && typeof solutionDisplayCase_ === 'function') {
+    plan.slides.forEach(solutionDisplayCase_);                                     // V.1_53: labels, product names, no field-name lower case
+    solutionResultsGuard_(plan.slides, userPrompt, sources, ctx);                  // V.1_53: results only from the request
+  }
   plan.slides = plan.slides.map(function (sp) { return realChartOrStats_(sp); }); // charts only with real multi-point data
   plan.slides.forEach(function (sp) { dropRepeatedHighlights_(sp); sentenceCaseHeadings_(sp); });
   // Every stat on a slide must be found in the research, the approved facts or the user's material
@@ -2519,6 +2523,8 @@ function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
     }
   }
 
+  // V.1_53: some Solution slides are drawn dark (black, content in white), about one body slide in five
+  if (typeof solutionDarkRhythm_ === 'function') solutionDarkRhythm_(specs, ctx);
   slidesToRender.forEach(function (slide, i) {
     checkCancel_(ctx);
     progressSlide_(ctx, i, 'active');
@@ -4427,7 +4433,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_52';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_53';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -4631,7 +4637,8 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
   // The same checks as a short deck, on the outline: no unrequested credentials, one roadmap, no filler, each topic
   // family at most once per ~20 slides; removed entries are replaced by new topics in the same place
   const all0 = flat();
-  const removedIdx = outlineChecks_(all0, userPrompt, n);
+  const checkOpts = solutionOutline ? { solution: true, tone: ctx.solutionTone || 'executive' } : null;   // V.1_53
+  const removedIdx = outlineChecks_(all0, userPrompt, n, null, checkOpts);
   const removedSet = removedIdx.map(function (i) { return all0[i]; });
   // where each removed entry was (its section), so its replacement takes its place
   const holes = [];
@@ -4683,7 +4690,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
       }).map(function (o) { const e = entryOf(o, true); e.sec = parseInt(o.section, 10); return e; })
         // a slide written for a requested topic is kept even when its topic family is already in the deck
         .filter(function (o) { return missing.some(function (m) { return slideForTopic_([{ type: o.type, title: o.title, lead: o.brief }], m) !== -1; }) ||
-          !outlineChecks_([o], userPrompt, n, before).length; }).slice(0, want);
+          !outlineChecks_([o], userPrompt, n, before, checkOpts).length; }).slice(0, want);
     } catch (e) { ctx.log.push('Outline top-up skipped: ' + e.message); }
     fresh.forEach(function (o) { placeInSection_(secs, o, holes); });
     missing = checkable(missingTopics_(asOutline(), userPrompt, { section: 1 }).missing);
@@ -4724,6 +4731,11 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
   }
   // V.1_47: a slide that names an earlier section's subject sits in that section ("current forecasting needs" -> 01 Needs)
   moveSlidesToTheirSection_(secs);
+  // V.1_53: a Solution Deck's sections have a similar number of slides (deck 24: 8 / 4 / 5 / 7)
+  if (solutionOutline && typeof solutionBalanceSections_ === 'function') {
+    const moved = solutionBalanceSections_(secs);
+    if (moved) ctx.log.push('Outline: ' + moved + ' slide(s) moved to the next or previous section so the sections have a similar size.');
+  }
   // V.1_50: workstream dividers left without their slides (deck 22: two empty ones back to back) go; their places get slides
   if (dropEmptyWorkstreams_(secs) || flat().length < body) backlogFill_(secs, body, seen, keyOf, flat, userPrompt, []);
   secs.forEach(function (sc) { sc.count = sc.list.length; });
@@ -4774,7 +4786,7 @@ function coverTitle_(title, subtitle, ctx) {
 }
 
 // Indexes of outline entries to replace. `before` = entries already accepted (for checking new entries).
-function outlineChecks_(slides, prompt, n, before) {
+function outlineChecks_(slides, prompt, n, before, opts) {
   const out = [];
   const perFamily = Math.max(1, Math.round((n - 3) / 20));
   const asked = requestedFamilyCounts_(prompt);
@@ -4820,6 +4832,10 @@ function outlineChecks_(slides, prompt, n, before) {
       if (counts[f] > Math.max(cap, asked[f] || 0)) { out.push(i); return; }
     }
   });
+  // V.1_53: a Solution Deck also loses near copies of a slide and topics nobody asked for (market size, adjacent opportunities)
+  if (opts && opts.solution && typeof solutionOutlineChecks_ === 'function') {
+    solutionOutlineChecks_(slides, prompt, opts.tone, before).forEach(function (i) { if (out.indexOf(i) === -1) out.push(i); });
+  }
   return out;
 }
 
