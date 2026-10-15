@@ -822,7 +822,7 @@ var ENGINE = (function () {
     panel(els, CX, top, pw, ph, T.blue, headerText(left, pw - 20), left.points, left.text);
     panel(els, CX + pw + gap, top, pw, ph, T.ink, headerText(right, pw - 20), right.points, right.text);
     // V.1_39: a Proposal Deck keeps one background on every content slide (deck 15: two grey slides among cream ones)
-    return { bg: PROPOSAL_MODE_ ? T.white : T.bgLight, els: els };
+    return { bg: LIB_MODE_ !== 'general' ? T.white : T.bgLight, els: els };
   };
 
   L.next_steps = function (s, ctx) {
@@ -926,7 +926,7 @@ var ENGINE = (function () {
         text(els, px + 14, yy + 18 + h.height, pw - 28, ch - h.height - 28, bodyOf(p), { weight: 400, max: bSize, min: bSize, color: T.body });
       });
     }
-    return { bg: PROPOSAL_MODE_ ? T.white : T.bgLight, els: els };
+    return { bg: LIB_MODE_ !== 'general' ? T.white : T.bgLight, els: els };
   };
 
   // Axis maximum with 4 round gridline steps (1, 2 or 5 x 10^k), so labels read 10% / 20% / 30% / 40%, never 6.3%
@@ -1176,8 +1176,14 @@ var ENGINE = (function () {
   var V = {};
   // Designs that belong to the Proposal Deck library (filled by the proposal batches); every other V design is General
   var PROPOSAL_TAGS_ = {};
+  // V.1_52: the Solution Deck library (SolutionDesigns_*.gs). Libraries never mix: a design draws only in its own library.
+  // A few frame designs are shared (the dark streak divider and the light watermark divider of every 66degrees deck).
+  var SOLUTION_TAGS_ = {};
+  var TAG_LIBS_ = {};                   // tag -> { proposal: true, solution: true } (no entry = a General design)
   var FRAME_TYPES_ = { cover: 1, closing: 1, section: 1 };
-  var PROPOSAL_MODE_ = false;           // true while a Proposal Deck slide is laid out (see layoutSlide)
+  var LIB_MODE_ = 'general';            // the library of the slide being laid out: 'general' | 'proposal' | 'solution'
+  function libOf_(s) { var l = s && s.deckLibrary; return l === 'proposal' || l === 'solution' ? l : 'general'; }
+  function inLib_(tag, lib) { var m = TAG_LIBS_[tag]; return m ? !!m[lib] : lib === 'general'; }
   Object.keys(COVER_VARIANTS_).forEach(function (k) { V[k] = function (s, ctx) { return COVER_VARIANTS_[k](s, ctx || {}); }; });
 
   function shape(els, kind, x, y, w, h, fill, ln) { els.push({ t: 'shape', shape: kind, x: x, y: y, w: w, h: h, fill: fill, line: ln || null }); }
@@ -3836,10 +3842,10 @@ var ENGINE = (function () {
   // V.1_42: library 'proposal' lists only the Proposal Deck designs (frame slides excluded: the code places the agenda and
   // the section dividers), any other library only the General designs
   function designMenu(library) {
-    var proposal = library === 'proposal';
+    var lib = library === 'proposal' || library === 'solution' ? library : 'general';
     return Object.keys(VARIANTS).map(function (type) {
-      if (proposal && (type === 'agenda' || type === 'section')) return '';
-      var list = VARIANTS[type].filter(function (v) { return proposal === !!PROPOSAL_TAGS_[v.tag]; });
+      if (lib !== 'general' && (type === 'agenda' || type === 'section')) return '';
+      var list = VARIANTS[type].filter(function (v) { return TAG_LIBS_[v.tag] ? TAG_LIBS_[v.tag][lib] && !(lib === 'solution' && FRAME_TYPES_[type]) : lib === 'general'; });
       if (!list.length) return '';
       return type + ':\n' + list.map(function (v) {
         var count = v.max != null && v.max < 99 && v.min != null ? v.min + '-' + v.max + ' items, ' : '';
@@ -3870,16 +3876,18 @@ var ENGINE = (function () {
   function layoutSlideOnce_(s, type, lctx) {
     // While a Proposal Deck slide is drawn, every General template design is switched off - also the ones a base
     // layout would call by itself (the base diagram layout draws the hub / ring-chain designs, for example)
-    var wasMode = PROPOSAL_MODE_;
-    PROPOSAL_MODE_ = s.deckLibrary === 'proposal';
-    try { return layoutSlideGuarded_(s, type, lctx); } finally { PROPOSAL_MODE_ = wasMode; }
+    var wasMode = LIB_MODE_;
+    LIB_MODE_ = libOf_(s);
+    try { return layoutSlideGuarded_(s, type, lctx); } finally { LIB_MODE_ = wasMode; }
   }
   function layoutSlideGuarded_(s, type, lctx) {
     var tag = s.reference && s.reference.tag;
     // Design libraries never mix: a Proposal Deck only uses proposal designs (frame slides have one strict design),
     // a General deck never uses a proposal design. Content without a design in its library uses the base layout.
     // (V.1_42: a section divider may use a proposal divider design: dark streaks, navy with its topics, light workstream)
-    if (s.deckLibrary === 'proposal' ? ((FRAME_TYPES_[type] && !(type === 'section' && PROPOSAL_TAGS_[tag])) || !PROPOSAL_TAGS_[tag]) : !!PROPOSAL_TAGS_[tag]) tag = null;
+    // V.1_52: a Solution Deck the same way, with its own library (and the shared divider designs)
+    var lib = libOf_(s);
+    if (lib !== 'general' ? ((FRAME_TYPES_[type] && !(type === 'section' && inLib_(tag, lib))) || !inLib_(tag, lib)) : !inLib_(tag, 'general')) tag = null;
     var out = (tag && V[tag] && variantOf(type, tag)) ? V[tag](s, lctx) : null;
     if (out && contentCount_(out) === 0) out = null;
     out = out || L[type](s, lctx);
@@ -4010,7 +4018,7 @@ var ENGINE = (function () {
   // a proposal design in a General deck
   Object.keys(V).forEach(function (k) {
     var f = V[k];
-    V[k] = function () { return PROPOSAL_MODE_ === !!PROPOSAL_TAGS_[k] ? f.apply(null, arguments) : null; };
+    V[k] = function () { return inLib_(k, LIB_MODE_) ? f.apply(null, arguments) : null; };
   });
 
   function render(deck, ctx) {
@@ -4046,7 +4054,7 @@ var ENGINE = (function () {
         out = applyDiagramIrToEngineOutput_(out, s, ctx.tokens || null);
       }
       if (!out.noFooter) footerMark(out.els, out.dark);
-      if (s.cobrand && type !== 'cover' && type !== 'closing') clientCorner_(out, type, s.deckLibrary === 'proposal');
+      if (s.cobrand && type !== 'cover' && type !== 'closing') clientCorner_(out, type, libOf_(s) !== 'general');
       out.type = type;
       out.notes = s.notes || '';
       slides.push(out);
@@ -4058,9 +4066,15 @@ var ENGINE = (function () {
   // meta.needs may describe the fields ("items[{title,text,icon}], callout{text}"): it is kept as `fields` for the planner's
   // design menu, and `needs` keeps only the one special field the slide must have (items / points are counted by min-max)
   var PLAIN_FIELDS_ = { items: 1, points: 1, '': 1 };
-  function addProposalDesign(tag, type, meta, fn) {
-    V[tag] = function () { return PROPOSAL_MODE_ ? fn.apply(null, arguments) : null; };
-    PROPOSAL_TAGS_[tag] = true;
+  function addProposalDesign(tag, type, meta, fn) { addLibraryDesign_('proposal', tag, type, meta, fn); }
+  // V.1_52: the Solution Deck design library (SolutionDesigns_*.gs)
+  function addSolutionDesign(tag, type, meta, fn) { addLibraryDesign_('solution', tag, type, meta, fn); }
+  // V.1_52: a frame design of one library that another library uses as it is (the 66degrees section dividers)
+  function shareDesign(tag, lib) { if (TAG_LIBS_[tag]) { TAG_LIBS_[tag][lib] = true; if (lib === 'solution') SOLUTION_TAGS_[tag] = true; } }
+  function addLibraryDesign_(lib, tag, type, meta, fn) {
+    V[tag] = function () { return inLib_(tag, LIB_MODE_) ? fn.apply(null, arguments) : null; };
+    TAG_LIBS_[tag] = {}; TAG_LIBS_[tag][lib] = true;
+    if (lib === 'proposal') PROPOSAL_TAGS_[tag] = true; else SOLUTION_TAGS_[tag] = true;
     var m = Object.assign({ tag: tag }, meta || {});
     var raw = String(m.needs || '').trim(), key = (raw.match(/^[A-Za-z_]+/) || [''])[0];
     if (raw && raw !== key) m.fields = raw;
@@ -4076,7 +4090,8 @@ var ENGINE = (function () {
   };
 
   return {
-    addProposalDesign: addProposalDesign, kit: KIT,
+    addProposalDesign: addProposalDesign, addSolutionDesign: addSolutionDesign, shareDesign: shareDesign, kit: KIT,
+    inLibrary: function (tag, lib) { return inLib_(tag, lib === 'proposal' || lib === 'solution' ? lib : 'general'); },
     titleFits: function (t) { return wrap(String(t), TITLE_W, 'sans', 500, 20).length <= 1; },
     titleMaxChars: function (t) { return maxCharsFor(t, TITLE_W, 20, 500); },
     agendaTextFits: function (t) { return wrap(String(t), AGENDA_DESC_W, 'sans', 400, 11).length <= 1; },
@@ -4087,10 +4102,10 @@ var ENGINE = (function () {
       if (!tag || !V[tag]) return true;
       TSZ.body = TYPE_STEPS[0].body; TSZ.heading = TYPE_STEPS[0].heading;
       // V.1_42: drawn in the slide's own library (a proposal design only draws in a Proposal Deck)
-      var wasMode = PROPOSAL_MODE_;
-      PROPOSAL_MODE_ = s1.deckLibrary === 'proposal';
-      try { var o = V[tag](s1, {}); return !!o && contentCount_(o) > 0; } catch (e) { return false; } finally { PROPOSAL_MODE_ = wasMode; }
+      var wasMode = LIB_MODE_;
+      LIB_MODE_ = libOf_(s1);
+      try { var o = V[tag](s1, {}); return !!o && contentCount_(o) > 0; } catch (e) { return false; } finally { LIB_MODE_ = wasMode; }
     },
     render: render, measure: measure, variantsFor: function (type) { return (VARIANTS[type] || []).slice(); }, cleanSpec: cleanSpec, cleanText: cleanText, designMenu: designMenu, layouts: Object.keys(L), VARIANTS: VARIANTS, BRAND: BRAND, TOKENS: T, W: W, H: H, INSET: INSET,
-    textWidth: textWidth, wrap: wrap, fit: fit, tableRowsThatFit: tableRowsThatFit, PROPOSAL_TAGS: PROPOSAL_TAGS_, posSize: posSize, splitSpace: splitSpace, innerSize: innerSize, boxH: boxH };
+    textWidth: textWidth, wrap: wrap, fit: fit, tableRowsThatFit: tableRowsThatFit, PROPOSAL_TAGS: PROPOSAL_TAGS_, SOLUTION_TAGS: SOLUTION_TAGS_, posSize: posSize, splitSpace: splitSpace, innerSize: innerSize, boxH: boxH };
 })();

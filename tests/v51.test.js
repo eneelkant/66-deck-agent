@@ -204,7 +204,7 @@ test("the outline is planned with Gemini Pro (Script property OUTLINE_MODEL over
   assert.equal(R.after, true, "the usual model is restored");
   assert.equal(R.off, "");
   assert.equal(R.c, "gemini-2.5-flash");
-  assert.match(read("src/Code.gs"), /withModel_\(proposalOutline \? outlineModel_\(\) : ''/);
+  assert.match(read("src/Code.gs"), /withModel_\(libOutline \? outlineModel_\(\) : ''/);
 });
 
 test("each part is written from the storyline, with what earlier slides said, a short design list per slide, in a compact prompt", () => {

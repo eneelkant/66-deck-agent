@@ -381,10 +381,16 @@ const DESIGN_TOPICS_ = {
 // Template designs the layout engine can draw for a type (Engine.gs VARIANTS), filtered by item count
 function drawableDesigns_(type, n, spec) {
   const words = spec ? [spec.title, spec.lead, spec.statement].filter(Boolean).join(' ') : '';
-  const P = (typeof ENGINE !== 'undefined' && ENGINE.PROPOSAL_TAGS) || {};
-  const proposal = !!(spec && spec.deckLibrary === 'proposal');
+  // V.1_52: three libraries (General, Proposal Deck, Solution Deck); a design is offered only in its own library
+  const lib = spec && (spec.deckLibrary === 'proposal' || spec.deckLibrary === 'solution') ? spec.deckLibrary : 'general';
+  const proposal = lib !== 'general';               // (a library deck: Gemini's own design pick counts, as in a Proposal Deck)
+  const inLib = function (tag) {
+    if (typeof ENGINE !== 'undefined' && ENGINE.inLibrary) return ENGINE.inLibrary(tag, lib);
+    const P = (typeof ENGINE !== 'undefined' && ENGINE.PROPOSAL_TAGS) || {};
+    return lib === 'proposal' ? !!P[tag] : lib === 'general' && !P[tag];
+  };
   const all = ((typeof ENGINE !== 'undefined' && ENGINE.VARIANTS && ENGINE.VARIANTS[type]) || []).filter(function (v) {
-    if (proposal !== !!P[v.tag]) return false;      // libraries never mix (Proposal Deck <-> General)
+    if (!inLib(v.tag)) return false;                  // libraries never mix (General <-> Proposal Deck <-> Solution Deck)
     // a design with a meaning (warning badges) only for slides about that meaning
     // (in a Proposal Deck Gemini may pick such a design itself: it wrote the slide for it)
     if (DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words) && !(proposal && String(spec.design || '').trim() === v.tag && !HARD_TOPIC_GATES_[v.tag])) return false;
@@ -970,6 +976,9 @@ function designNeedsMet_(need, spec) {
     case 'challenge': return !!(Array.isArray(spec.challenge) ? spec.challenge.length : String(spec.challenge || '').trim());
     case 'groups': return Array.isArray(spec.groups) && spec.groups.length >= 1;
     case 'periods': return Array.isArray(spec.periods) && spec.periods.length >= 3;
+    // V.1_52 Solution Deck designs
+    case 'context': return !!String(spec.context || '').trim();
+    case 'what': return !!String(spec.what || '').trim();
     default: return Array.isArray(spec[need]) && spec[need].length >= 2;
   }
 }

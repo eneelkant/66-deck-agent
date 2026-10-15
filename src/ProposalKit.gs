@@ -28,7 +28,7 @@ function detectClient_(userPrompt, sources, ctx) {
   let raw = null;
   try {
     raw = callGeminiJSON([{ text: [
-      'A 66degrees proposal deck is being written for this request. Who is the CLIENT the proposal is addressed to?',
+      'A 66degrees ' + (typeof isSolutionDeck_ === 'function' && isSolutionDeck_(ctx) ? 'solution deck' : 'proposal deck') + ' is being written for this request. Who is the CLIENT the ' + (typeof isSolutionDeck_ === 'function' && isSolutionDeck_(ctx) ? 'deck is presented to (none for a general solution or offering overview)' : 'proposal is addressed to') + '?',
       'Rules:',
       '- The client is the organization that will receive and buy the proposal.',
       '- Never 66degrees, Google, Google Cloud, or a technology the client uses or moves from (Microsoft, AWS, Salesforce...),',
@@ -318,9 +318,11 @@ function findClientLogo_(client, ctx) {
 // Once per deck: the client and its logo, and the section divider style (dark streaks by default, light 66° watermark
 // in about one proposal in three). Kept in the long-deck run state so every part of a long deck matches.
 function prepareProposal_(userPrompt, sources, ctx, opts) {
-  if (!isProposalDeck_(ctx) || ctx.proposal) return ctx.proposal || null;
+  // V.1_52: a Solution Deck has the same frame (client optional), drawn from its own designs
+  const solution = typeof isSolutionDeck_ === 'function' && isSolutionDeck_(ctx);
+  if (!(isProposalDeck_(ctx) || solution) || ctx.proposal) return ctx.proposal || null;
   opts = opts || {};
-  const p = proposalStyles_({ client: null, logoId: '', sectionStyle: Math.random() < 1 / 3 ? 'light' : 'dark' });
+  const p = proposalStyles_({ client: null, logoId: '', sectionStyle: Math.random() < 1 / 3 ? 'light' : 'dark' }, solution ? 'solution' : 'proposal');
   progressStage_(ctx, 'match', 'active', 'Finding the client and its logo');
   // Explicit sidebar client name/domain take precedence (never inferred from email/uploads alone).
   let c = null;
@@ -350,20 +352,21 @@ function applyProposalFrame_(slides, ctx) {
   if (!ctx) return;
   // The library switch never depends on the client step: a Proposal Deck is a Proposal Deck even when the client or
   // its logo could not be found (or that step failed)
-  if (!ctx.proposal && isProposalDeck_(ctx)) ctx.proposal = { client: null, logoId: '', sectionStyle: 'dark' };
+  const solutionDeck = typeof isSolutionDeck_ === 'function' && isSolutionDeck_(ctx);      // V.1_52
+  if (!ctx.proposal && (isProposalDeck_(ctx) || solutionDeck)) ctx.proposal = { client: null, logoId: '', sectionStyle: 'dark' };
   const p = ctx.proposal;
   if (!p) return;
-  proposalStyles_(p);
+  proposalStyles_(p, solutionDeck ? 'solution' : 'proposal');
   (slides || []).forEach(function (sp) {
     if (!sp) return;
     const t = String(sp.type || '').toLowerCase();
-    sp.deckLibrary = 'proposal';
+    sp.deckLibrary = p.lib === 'solution' ? 'solution' : 'proposal';
     sp.cobrand = !!p.logoId && t !== 'cover' && t !== 'closing';
     if (t === 'cover') sp.clientLogo = !!p.logoId;
     if (t === 'section') {
       sp.sectionStyle = p.sectionStyle;
       // V.1_42: one divider style per deck; a workstream inside a section (level 2) is the light divider, not numbered
-      if (!sp.lockTag) sp.lockTag = Number(sp.level) === 2 ? 'P66_SECTION_LIGHT' : p.dividerTag;
+      if (!sp.lockTag) sp.lockTag = Number(sp.level) === 2 && p.lib !== 'solution' ? 'P66_SECTION_LIGHT' : p.dividerTag;
       if (sp.lockTag === 'P66_SECTION_LIGHT') delete sp.number;
     }
     if (t === 'stats') proposalKpiLabels_(sp);
@@ -427,8 +430,10 @@ function inlineAssetBlob_(asset) {
    The choices are made once per deck and kept in ctx.proposal (long decks keep them from run to run).
    ========================================================================================================= */
 var PROPOSAL_DIVIDER_TAGS_ = { dark: 'P66_SECTION_DARK', navy: 'P66_SECTION_NAVY', light: 'P66_SECTION_LIGHT' };
-function proposalStyles_(p) {
+function proposalStyles_(p, lib) {
   if (!p) return p;
+  // V.1_52: a Solution Deck uses the two dividers every 66degrees solution deck has: dark streaks, or the light watermark
+  if (lib === 'solution' && !p.lib) { p.lib = 'solution'; p.dividerTag = Math.random() < 1 / 3 ? PROPOSAL_DIVIDER_TAGS_.light : PROPOSAL_DIVIDER_TAGS_.dark; }
   if (!p.dividerTag) p.dividerTag = Math.random() < 0.25 ? PROPOSAL_DIVIDER_TAGS_.navy : PROPOSAL_DIVIDER_TAGS_.dark;
   if (!p.agendaWide) p.agendaWide = Math.random() < 0.25 ? 'P66_AGENDA_CONTENTS' : 'P66_AGENDA_TWO_COLUMNS';
   return p;
@@ -613,7 +618,8 @@ function proposalAlternatives_(sp) {
   const items = Array.isArray(sp.items) ? sp.items.filter(Boolean) : [];
   const pts = proposalPointItems_(sp.points);
   const callout = sp.callout ? String(sp.callout.text || sp.callout.title || '').trim() : '';
-  const take = String(sp.takeaway || callout || sp.statement || '').trim();
+  let take = String(sp.takeaway || callout || sp.statement || '').trim();
+  if (take.toLowerCase() === String(sp.title || '').trim().toLowerCase()) take = '';   // V.1_52: never the title again as the takeaway
   if (pts.length >= 3 && pts.every(function (it) { return it.title; })) {
     out.push(base('cards', { items: pts.slice(0, 8), points: [], takeaway: take }));
     out.push(base('process', { items: pts.slice(0, 6), points: [], takeaway: take }));
@@ -694,13 +700,14 @@ function proposalCycle_(sp, used) {
 function proposalDrawable_(sp, used) {
   if (typeof ENGINE === 'undefined' || typeof drawableDesigns_ !== 'function') return [];
   const type = typeof normalizeType_ === 'function' ? normalizeType_(sp.type) : proposalTypeOf_(sp);
-  const P = ENGINE.PROPOSAL_TAGS || {};
+  const lib = sp.deckLibrary === 'solution' ? 'solution' : 'proposal';              // V.1_52
+  const inLib = function (tag) { return ENGINE.inLibrary ? ENGINE.inLibrary(tag, lib) : !!(ENGINE.PROPOSAL_TAGS || {})[tag]; };
   return drawableDesigns_(type, itemCount_(sp), sp).filter(function (d) {
-    return P[d.tag] && !(used && used[d.tag]) && (!ENGINE.canDraw || ENGINE.canDraw(Object.assign({}, sp, { reference: { tag: d.tag } })));
+    return inLib(d.tag) && !(used && used[d.tag]) && (!ENGINE.canDraw || ENGINE.canDraw(Object.assign({}, sp, { reference: { tag: d.tag } })));
   });
 }
 function proposalCoerce_(sp, ctx, used) {
-  if (!sp || sp.deckLibrary !== 'proposal' || sp.lockTag) return false;
+  if (!sp || (sp.deckLibrary !== 'proposal' && sp.deckLibrary !== 'solution') || sp.lockTag) return false;
   const t = proposalTypeOf_(sp);
   if (['cover', 'agenda', 'closing', 'section', 'template'].indexOf(t) !== -1) return false;
   if (proposalDrawable_(sp, used).length) return false;
@@ -720,11 +727,11 @@ function proposalCoerce_(sp, ctx, used) {
     if (!proposalDrawable_(alts[i], used).length) continue;
     Object.keys(sp).forEach(function (k) { delete sp[k]; });
     Object.assign(sp, alts[i]);
-    if (ctx && ctx.log) ctx.log.push('Proposal design: "' + String(sp.title || '').slice(0, 50) + '" shown as ' + sp.type + ' (a proposal design for its content).');
+    if (ctx && ctx.log) ctx.log.push((sp.deckLibrary === 'solution' ? 'Solution' : 'Proposal') + ' design: "' + String(sp.title || '').slice(0, 50) + '" shown as ' + sp.type + ' (a design of its library for its content).');
     return true;
   }
   // nothing new fits: a proposal design already used is drawn again (never the plain layout when one can draw it)
-  if (!proposalDrawable_(sp).length && ctx && ctx.log) ctx.log.push('No proposal design for "' + String(sp.title || '').slice(0, 50) + '": plain ' + t + ' layout used.');
+  if (!proposalDrawable_(sp).length && ctx && ctx.log) ctx.log.push('No ' + (sp.deckLibrary === 'solution' ? 'solution' : 'proposal') + ' design for "' + String(sp.title || '').slice(0, 50) + '": plain ' + t + ' layout used.');
   return false;
 }
 
@@ -813,9 +820,12 @@ const PROPOSAL_TYPE_OPTIONS_ = {
 
 // The 3-8 designs Gemini may choose from for one planned slide: drawn in a Proposal Deck, not used yet in this deck, and
 // allowed for the slide's subject (the same topic rules the code enforces afterwards)
-function proposalShortlist_(o, used) {
+function proposalShortlist_(o, used, lib) {
   if (typeof ENGINE === 'undefined' || !ENGINE.VARIANTS) return [];
-  const P = ENGINE.PROPOSAL_TAGS || {};
+  // V.1_52: the Solution Deck shortlist comes from its own library (and puts the designs of its tone first)
+  lib = lib === 'solution' ? 'solution' : 'proposal';
+  const P = lib === 'solution' ? (ENGINE.SOLUTION_TAGS || {}) : (ENGINE.PROPOSAL_TAGS || {});
+  const FRAME_ = { agenda: 1, section: 1, cover: 1, closing: 1 };
   const words = [o.title, o.message, o.brief].filter(Boolean).join(' ');
   const asked = /\b(credential|why 66degrees|why us|partner status|case stud|client result|success stor|next steps|pricing|price|rate card|package|screenshot)\b/i;
   const onlyIfAsked = { P66_LOGO_WALL: 1, P66_PACKAGES: 1, P66_STORIES: 1, P66_CASE_STUDY: 1, P66_NEXT_STEPS: 1, P66_BADGES: 1, P66_CREDENTIALS: 1, P66_PRICING: 1, P66_TEAM_PHOTOS: 1, P66_TEXT_SCREENSHOT: 1 };
@@ -823,19 +833,24 @@ function proposalShortlist_(o, used) {
   const out = [];
   types.forEach(function (type) {
     (ENGINE.VARIANTS[type] || []).forEach(function (v) {
-      if (!P[v.tag] || out.some(function (x) { return x.tag === v.tag; })) return;
+      if (!P[v.tag] || FRAME_[type] || out.some(function (x) { return x.tag === v.tag; })) return;
       if (onlyIfAsked[v.tag] && !asked.test(String(o.request || '') + ' ' + words)) return;
       if (used && used[v.tag]) return;
       if (typeof DESIGN_TOPICS_ !== 'undefined' && DESIGN_TOPICS_[v.tag] && !DESIGN_TOPICS_[v.tag].test(words)) return;
       out.push({ tag: v.tag, type: type, v: v });
     });
   });
+  // V.1_52: in a Solution Deck the designs that suit the tone of its content come first (technical: tables and flows...)
+  if (lib === 'solution' && o.tone && typeof SOLUTION_TONE_BIAS_ !== 'undefined' && SOLUTION_TONE_BIAS_[o.tone]) {
+    const bias = SOLUTION_TONE_BIAS_[o.tone];
+    out.sort(function (a, b) { return (bias.indexOf(a.tag) === -1 ? 1 : 0) - (bias.indexOf(b.tag) === -1 ? 1 : 0); });
+  }
   return out.slice(0, 8);
 }
 function proposalShortlistText_(list) {
   return list.map(function (x) {
     const v = x.v, count = v.max != null && v.max < 99 && v.min != null ? v.min + '-' + v.max + ' items; ' : '';
-    return '    - ' + x.tag + ' (type "' + x.type + '"; ' + count + (PROPOSAL_DESIGN_GUIDE_[x.tag] || '') + '; layout: ' + String(v.desc || '').slice(0, 170) +
+    return '    - ' + x.tag + ' (type "' + x.type + '"; ' + count + (PROPOSAL_DESIGN_GUIDE_[x.tag] || (typeof SOLUTION_DESIGN_GUIDE_ !== 'undefined' && SOLUTION_DESIGN_GUIDE_[x.tag]) || '') + '; layout: ' + String(v.desc || '').slice(0, 170) +
       (v.fields ? '; fields: ' + v.fields : '') + (v.words ? '; ' + v.words + ' words' : '') + ')';
   }).join('\n');
 }

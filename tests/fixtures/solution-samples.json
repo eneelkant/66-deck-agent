@@ -1,0 +1,927 @@
+[
+ {
+  "reference": {
+   "tag": "S66_AGENDA_ROWS"
+  },
+  "type": "agenda",
+  "title": "Agenda",
+  "items": [
+   {
+    "title": "The problem",
+    "text": "Why traditional SQL AG falls short for cloud-native DR"
+   },
+   {
+    "title": "What we built",
+    "text": "Contained AGs and distributed contained AGs on GCE"
+   },
+   {
+    "title": "Architecture",
+    "text": "Two-region topology, networking and GCP-native design"
+   },
+   {
+    "title": "What we proved",
+    "text": "99 primary tests, 12 DR tests and a full failover drill"
+   },
+   {
+    "title": "How to deploy",
+    "text": "Terraform and Ansible automation, day-2 operations"
+   },
+   {
+    "title": "Next steps",
+    "text": "Production readiness and the Wave 1 engagement model"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_HEADER_COLUMNS"
+  },
+  "type": "cards",
+  "title": "From sandbox to production",
+  "lead": "What is ready today, what we recommend before go-live, and the enterprise extras.",
+  "items": [
+   {
+    "title": "Already production-grade",
+    "points": [
+     "No public IPs, IAP-only admin",
+     "gMSA service identity, auto-rotating",
+     "Terraform IaC, fully reproducible",
+     "Multi-zone VM placement"
+    ]
+   },
+   {
+    "title": "Recommended for production",
+    "points": [
+     "Measure and document RPO at load",
+     "Automate lag checks before failover",
+     "Add Cloud Monitoring alerts on ILB health"
+    ]
+   },
+   {
+    "title": "Enterprise enhancements",
+    "points": [
+     "Cloud Armor WAF on app-tier frontends",
+     "VPC Service Controls for the data perimeter",
+     "CMEK for the SQL media bucket"
+    ]
+   }
+  ],
+  "takeaway": "Total time to a fully operational two-region stack: about 90 minutes"
+ },
+ {
+  "reference": {
+   "tag": "S66_HEADER_COLUMNS"
+  },
+  "type": "cards",
+  "title": "Generative AI",
+  "banner": true,
+  "items": [
+   {
+    "title": "New use case POC",
+    "points": [
+     "Explore new LLM-powered use cases across the business",
+     "LLM-powered automations, Q&A chatbots, agents"
+    ]
+   },
+   {
+    "title": "Prompt engineering and fine-tuning",
+    "points": [
+     "Optimise existing LLM workloads",
+     "Evaluate use cases against a golden test set"
+    ]
+   },
+   {
+    "title": "Guardrails and observability",
+    "points": [
+     "Apply responsible AI practices to LLM responses",
+     "Reduce hallucinations, improve transparency"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_CARDS_PHOTO_STRIP"
+  },
+  "type": "cards",
+  "title": "Infrastructure operations",
+  "lead": "Operational stability, resilience and governance across the cloud foundation.",
+  "items": [
+   {
+    "title": "Cloud infrastructure management",
+    "text": "Provision, manage and optimise compute, storage, containers and cloud resources.",
+    "icon": "server"
+   },
+   {
+    "title": "Network and connectivity",
+    "text": "Manage VPCs, DNS, interconnects, VPNs, routing and firewall policies.",
+    "icon": "network"
+   },
+   {
+    "title": "Patch, security and compliance",
+    "text": "Support IAM, encryption, policy controls and vulnerability remediation.",
+    "icon": "shield"
+   },
+   {
+    "title": "Reliability and resilience",
+    "text": "24/7 monitoring, backup oversight and disaster recovery readiness.",
+    "icon": "monitor"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_THREE_CARD_COLUMNS"
+  },
+  "type": "cards",
+  "title": "What is new for Always On in SQL Server 2025",
+  "items": [
+   {
+    "title": "Architecture unlocks",
+    "points": [
+     "Distributed contained AGs now GA",
+     "AUTOSEEDING_SYSTEM_DATABASES clause",
+     "Async DAG bandwidth optimisation"
+    ]
+   },
+   {
+    "title": "Performance tuning",
+    "points": [
+     "Configurable AG commit time (ms)",
+     "Async page request dispatch on failover",
+     "Fast failover: RestartThreshold = 0"
+    ]
+   },
+   {
+    "title": "Operations and security",
+    "points": [
+     "Full and differential backups on secondary",
+     "TDS 8.0 / TLS 1.3 cluster encryption",
+     "In-session DB create and restore via listener"
+    ]
+   }
+  ],
+  "takeaway": "Top three to act on: distributed contained AGs, AG commit time, backup on secondary"
+ },
+ {
+  "reference": {
+   "tag": "S66_ICON_CARD_GRID"
+  },
+  "type": "cards",
+  "title": "GCP-native architecture decisions",
+  "items": [
+   {
+    "title": "Internal passthrough NLBs",
+    "text": "ILB VIPs front the AG listeners; TCP/59998 health checks follow WSFC ownership.",
+    "icon": "network"
+   },
+   {
+    "title": "Cloud IAP admin access",
+    "text": "Zero public IPs on all VMs; RDP administration through IAP tunnels only.",
+    "icon": "lock"
+   },
+   {
+    "title": "Cloud NAT for SQL media",
+    "text": "SQL nodes have no outbound internet; Cloud NAT provides egress for the installer.",
+    "icon": "cloud"
+   },
+   {
+    "title": "Terraform IaC (full stack)",
+    "text": "VPC, subnets, ILBs, reserved IPs, firewall rules and VMs as code.",
+    "icon": "code"
+   },
+   {
+    "title": "gMSA service identity",
+    "text": "SQL Server and AG services run under a group managed service account.",
+    "icon": "key"
+   },
+   {
+    "title": "Multi-zone VM placement",
+    "text": "Nodes in two zones give zone failure resilience without stretched storage.",
+    "icon": "layers"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_QUAD_RULE_CARDS"
+  },
+  "type": "cards",
+  "title": "Four areas to align on today",
+  "lead": "Each is specific, owned and executable.",
+  "items": [
+   {
+    "title": "GE deployment",
+    "text": "Maintain engineering engagement through the pilot phase.",
+    "tag": "Engineering / product"
+   },
+   {
+    "title": "Roadmap",
+    "text": "Regular delivery updates, with a committed cadence.",
+    "tag": "Product"
+   },
+   {
+    "title": "Commercial GTM",
+    "text": "Fix voucher delays, simplify pilot funding, unblock renewals.",
+    "tag": "Sales / GTM"
+   },
+   {
+    "title": "At-risk accounts",
+    "text": "A joint retention plan where competitive pressure is active.",
+    "tag": "Sales leadership"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_NUMBERED_CARD_GRID"
+  },
+  "type": "cards",
+  "title": "MLOps level 1: ML pipeline automation",
+  "items": [
+   {
+    "title": "Rapid experiment",
+    "text": "Transitions are automated, leading to rapid iterations of experiments."
+   },
+   {
+    "title": "Continuous training",
+    "text": "Live triggers retrain models in production with new data."
+   },
+   {
+    "title": "Operation symmetry",
+    "text": "The same pipeline runs in experiment, pre-production and production."
+   },
+   {
+    "title": "Modular code",
+    "text": "Components and pipelines are modular for reuse and reproducibility."
+   },
+   {
+    "title": "Continuous delivery",
+    "text": "An ML pipeline continuously delivers prediction services."
+   },
+   {
+    "title": "Feature store",
+    "text": "Features are stored and served in training and inference alike."
+   }
+  ],
+  "takeaway": "New: automated pipelines, feature store, performance monitoring, pipeline triggers"
+ },
+ {
+  "reference": {
+   "tag": "S66_TINT_PANELS"
+  },
+  "type": "cards",
+  "title": "Partnership commitment",
+  "context": "We will show today how to find actionable insights at scale that can bring significant supply chain savings.",
+  "items": [
+   {
+    "title": "Agile reallocation",
+    "text": "Agreed to pause the ROA pipeline and the eight category logics to focus on immediate strategic needs."
+   },
+   {
+    "title": "Core application updates",
+    "text": "Development hours moved into the foundational CataList data logic, for long-term platform viability."
+   }
+  ],
+  "footer": {
+   "title": "Reality",
+   "text": "So far we have identified and quantified the problems. This is the foundation for end-to-end solutions to the issues in your supply chain."
+  }
+ },
+ {
+  "reference": {
+   "tag": "S66_OFFER_TIERS"
+  },
+  "type": "cards",
+  "title": "Five packaged offerings along the activation journey",
+  "items": [
+   {
+    "title": "Agentic labs",
+    "timing": "Day 0",
+    "text": "On-site workshops to break down operations into automated agentic workflows.",
+    "price": "$45K",
+    "funding": "Funded via Propel"
+   },
+   {
+    "title": "Gemini Enterprise pilot",
+    "timing": "Day 0.5",
+    "text": "End-to-end pilot with first-party connectors for up to 50 active users.",
+    "price": "$25K",
+    "funding": "Funded via GET"
+   },
+   {
+    "title": "Accelerator",
+    "timing": "Day 1",
+    "text": "12-week implementation with tailored training and AI fluency.",
+    "price": "$200K+",
+    "funding": "Funded via GET"
+   },
+   {
+    "title": "Agent development framework",
+    "timing": "Day 30+",
+    "text": "12-week build of multi-agent systems on Gemini Enterprise and Vertex AI.",
+    "price": "$250K+",
+    "funding": "Funded via GET"
+   },
+   {
+    "title": "Enablement at scale",
+    "timing": "Day 30-90+",
+    "text": "Embedded engineers for ongoing agent development.",
+    "price": "Custom",
+    "funding": "Funded via GET"
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_CROSS_CHECK"
+  },
+  "type": "comparison",
+  "title": "Contained AGs: how metadata works",
+  "left": {
+   "label": "Traditional AG",
+   "points": [
+    "Logins live in instance master only",
+    "SQL Agent jobs live in instance msdb",
+    "Post-failover: manual sync required",
+    "Permissions scripted and reapplied"
+   ]
+  },
+  "right": {
+   "label": "Contained AG (SQL 2022 / 2025)",
+   "points": [
+    "Contained master and msdb replicate in the AG",
+    "Logins, jobs and audits travel on failover",
+    "AUTOSEEDING_SYSTEM_DATABASES (new in 2025)",
+    "In-session DB create and restore via listener"
+   ]
+  }
+ },
+ {
+  "reference": {
+   "tag": "S66_TEXT_SECTIONS"
+  },
+  "type": "bullets",
+  "title": "Where we are in the journey",
+  "items": [
+   {
+    "title": "Proof of concept",
+    "points": [
+     "Customer need tested at Google with design partners",
+     "A pipeline of 32 active modernization accounts"
+    ]
+   },
+   {
+    "title": "Paradigm v1",
+    "points": [
+     "Onboarding, assessment, plan and code generation for mainframe PoCs"
+    ]
+   },
+   {
+    "title": "Paradigm v2",
+    "points": [
+     "Rebuilt for VMware and data workloads",
+     "Design phase added without redoing the assessment",
+     "Repository structure replaces v1 storage"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_BULLETS_PHOTO_HALF"
+  },
+  "type": "bullets",
+  "title": "Solving for resiliency: why?",
+  "points": [
+   "Proactive monitoring (Surveil) is the hallmark of a resilient system",
+   "Security, threat monitoring, scalability and DR design keep resilience across all parameters",
+   "Resilience is maintained and monitored (Surveil) and improved (Unfold)",
+   "Automated guardrails keep compliance with regulations every day"
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_OFFER_DETAIL"
+  },
+  "type": "bullets",
+  "title": "Essential support (monthly managed service)",
+  "what": "A run-focused, priority-based support service that stabilises and operates existing Apigee estates with clear first-response targets.",
+  "bestFor": "Teams that need reliable day-to-day operations without large new builds; APIs already in production.",
+  "outcome": "Faster incident response, safer deployments and predictable operations with visibility into health and latency.",
+  "points": [
+   "L2/L3 incident management (P1-P4) and break-fix",
+   "Platform monitoring and alert triage",
+   "Environment maintenance and health checks",
+   "Developer portal operations",
+   "How-to guidance and configuration Q&A",
+   "Proxy development up to 100 hours a month"
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_WHY_WHAT_HOW"
+  },
+  "type": "process",
+  "title": "Managed services: why, what and how",
+  "items": [
+   {
+    "title": "Why",
+    "subtitle": "Why organizations need managed services",
+    "points": [
+     "Cloud, AI and ML systems need continuous monitoring",
+     "Without it, models degrade and pipelines fail",
+     "Managed services keep AI systems reliable"
+    ]
+   },
+   {
+    "title": "What",
+    "subtitle": "What we deliver",
+    "points": [
+     "Infrastructure monitoring and platform reliability",
+     "Generative and agentic AI operations",
+     "MLOps and AI pipeline automation"
+    ]
+   },
+   {
+    "title": "How",
+    "subtitle": "How 66degrees delivers",
+    "points": [
+     "A structured operational model",
+     "Proactive monitoring of infrastructure and models",
+     "Continuous optimisation for reliability and value"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_STEP_LOOP_FLOW"
+  },
+  "type": "process",
+  "title": "Solving for operational efficiency: how?",
+  "items": [
+   {
+    "title": "Advisory",
+    "label": "The blueprint for efficiency",
+    "points": [
+     "Strategic plan and roadmap",
+     "Google CAF review",
+     "Identify operational waste"
+    ],
+    "next": "Strategic advice"
+   },
+   {
+    "title": "Surveil",
+    "label": "The foundation of stability",
+    "points": [
+     "24/7 monitoring and incident management",
+     "SRE-led, automation-first"
+    ],
+    "next": "Proactive operations"
+   },
+   {
+    "title": "Unfold",
+    "label": "The engine of automation",
+    "points": [
+     "Execute the strategic roadmap",
+     "Build DevOps pipelines",
+     "Targeted automation"
+    ]
+   }
+  ],
+  "loop": [
+   "Implementation feedback",
+   "Strategic feedback"
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_STEP_COLUMNS"
+  },
+  "type": "process",
+  "title": "Manual DR failover process (TC-DR-009)",
+  "items": [
+   {
+    "title": "Preflight check",
+    "tag": "sqlnode01",
+    "text": "Verify dAG1 and dAG2 are healthy; measure async lag."
+   },
+   {
+    "title": "Demote primary",
+    "tag": "sqlnode01",
+    "text": "Set the role to secondary within the distributed AG."
+   },
+   {
+    "title": "Promote DR",
+    "tag": "sqlnode03",
+    "text": "Force failover; fcAG1 becomes the global primary."
+   },
+   {
+    "title": "Validate DR reads",
+    "tag": "sqlnode03",
+    "text": "Run the read checks against the DR listener."
+   },
+   {
+    "title": "Failback",
+    "tag": "node03 → node01",
+    "text": "Set secondary and force failover back to node01."
+   },
+   {
+    "title": "Verify restored",
+    "tag": "sqlnode01",
+    "text": "Clients return to the primary listener; DR to standby."
+   }
+  ],
+  "takeaway": "Validated June 26, 2026 · forward failover and failback complete"
+ },
+ {
+  "reference": {
+   "tag": "S66_LABEL_ROWS"
+  },
+  "type": "process",
+  "title": "Deployment automation model",
+  "items": [
+   {
+    "label": "Layer 1",
+    "title": "Terraform",
+    "timing": "5–10 min",
+    "points": [
+     "VPC and 4 subnets",
+     "Compute VMs (AD, witness, SQL)",
+     "Internal load balancers",
+     "Reserved IPs, firewall, Cloud NAT"
+    ]
+   },
+   {
+    "label": "Layer 2",
+    "title": "GCE startup scripts",
+    "timing": "20–40 min",
+    "points": [
+     "Domain join and AD promotion",
+     "SQL Server 2025 silent install",
+     "HADR endpoint and Always On",
+     "Data disk initialisation"
+    ]
+   },
+   {
+    "label": "Layer 3",
+    "title": "Ansible playbooks",
+    "timing": "10–30 min",
+    "points": [
+     "WSFC cluster formation",
+     "gMSA install and grant",
+     "Contained AG creation",
+     "Forwarder AGs and distributed links"
+    ]
+   },
+   {
+    "label": "Layer 4",
+    "title": "Test runners",
+    "timing": "~20 min",
+    "points": [
+     "Run the 99 contained AG tests",
+     "TC-DR-009 failover drill"
+    ]
+   }
+  ],
+  "takeaway": "Total time to a fully operational two-region stack: about 90 minutes"
+ },
+ {
+  "reference": {
+   "tag": "S66_PHASE_TIMELINE_BARS"
+  },
+  "type": "process",
+  "title": "Gemini Enterprise end-to-end services",
+  "items": [
+   {
+    "title": "Workshop",
+    "points": [
+     "Onsite or virtual",
+     "ROI and TCO"
+    ],
+    "timing": "1–2 weeks",
+    "funding": "Propel funding"
+   },
+   {
+    "title": "Pilot",
+    "points": [
+     "Pilot / POC",
+     "AI hackathon"
+    ],
+    "timing": "4–6 weeks",
+    "funding": "DAF"
+   },
+   {
+    "title": "Implementation",
+    "points": [
+     "JumpStart",
+     "Accelerator"
+    ],
+    "timing": "4–20 weeks",
+    "funding": "Deployment vouchers"
+   },
+   {
+    "title": "Change management",
+    "points": [
+     "Integrated throughout"
+    ],
+    "timing": "8–20 weeks",
+    "funding": "PSF / customer funded"
+   },
+   {
+    "title": "Managed services",
+    "points": [
+     "Customer success",
+     "Technical support"
+    ],
+    "timing": "Ongoing",
+    "funding": "Customer funded"
+   }
+  ],
+  "timelineLabel": "Timeline and funding"
+ },
+ {
+  "reference": {
+   "tag": "S66_VALUE_CURVE"
+  },
+  "type": "process",
+  "title": "Strategic acceleration strategy",
+  "items": [
+   {
+    "label": "Day 1",
+    "title": "Immediate value",
+    "points": [
+     "Chat-based experience",
+     "Insights from documents",
+     "Rich media from prompts"
+    ]
+   },
+   {
+    "label": "Early weeks",
+    "title": "Custom agents",
+    "points": [
+     "Securely build and govern agents",
+     "Find answers across enterprise data",
+     "Departmental agentic teams"
+    ]
+   },
+   {
+    "label": "Ongoing",
+    "title": "Advanced agents at scale",
+    "points": [
+     "Agents in daily tools",
+     "Multi-agent orchestration",
+     "New revenue with AI"
+    ]
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_BANNER_NUMBERED_ROWS"
+  },
+  "type": "process",
+  "title": "Three reasons SQL Server 2025 changes the GCE design",
+  "items": [
+   {
+    "title": "Distributed contained AGs are now GA",
+    "text": "The metadata drift problem is solved across regions: one pattern gives multi-zone HA and cross-region DR without manual sync runbooks."
+   },
+   {
+    "title": "Configurable AG commit time",
+    "text": "A per-replica latency lever for OLTP architects: set 1-5 ms for a p99 improvement on sub-millisecond inter-zone links."
+   },
+   {
+    "title": "Standard Edition raised to 32 cores / 256 GB",
+    "text": "Basic AG becomes economic for more workloads and reshapes the Enterprise vs Standard decision for smaller OLTP systems."
+   }
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_COMPARE_STATUS_TABLE"
+  },
+  "type": "table",
+  "title": "AG type comparison matrix",
+  "columns": [
+   "Criterion",
+   "Traditional AG",
+   "Contained AG",
+   "Distributed AG",
+   "Dist. contained AG ★"
+  ],
+  "rows": [
+   [
+    "Metadata sync",
+    "Manual (drift risk)",
+    "Automatic",
+    "Manual",
+    "Auto end-to-end"
+   ],
+   [
+    "Cross-region DR",
+    "No",
+    "No",
+    "Yes (manual FO)",
+    "Yes (manual FO)"
+   ],
+   [
+    "Auto failover",
+    "Yes",
+    "Yes",
+    "Inner AG only",
+    "Inner AG only"
+   ],
+   [
+    "Replication support",
+    "Full",
+    "Unsupported",
+    "Full",
+    "Unsupported"
+   ],
+   [
+    "DNN listener",
+    "Yes",
+    "Yes",
+    "Not supported",
+    "Not supported"
+   ],
+   [
+    "Operational risk",
+    "High",
+    "Low",
+    "Medium",
+    "Lowest"
+   ]
+  ],
+  "takeaway": "★ Recommended: OLTP, multi-zone HA and cross-region DR on GCE with Enterprise Edition"
+ },
+ {
+  "reference": {
+   "tag": "S66_PLAIN_TABLE"
+  },
+  "type": "table",
+  "title": "Gemini Enterprise services offerings",
+  "columns": [
+   "Service offering",
+   "Timeline / cost",
+   "Description",
+   "Target customer"
+  ],
+  "rows": [
+   [
+    "Workshop",
+    "1 week / ~$10K",
+    "Use case identification and a product demo with 1-2 agent demonstrations",
+    "New licence purchase"
+   ],
+   [
+    "Pilot",
+    "5 weeks / $25-45K",
+    "End-to-end pilot for up to 50 active test users",
+    "New licence purchase"
+   ],
+   [
+    "Launch",
+    "2 weeks / $3-10K",
+    "Activation of the licence with full Workspace connector",
+    "New licence purchase"
+   ],
+   [
+    "Accelerator",
+    "12 weeks / ~$150K+",
+    "Accelerated implementation and tailored training",
+    "Low adoption / new licence"
+   ]
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_SCORECARD"
+  },
+  "type": "stats",
+  "title": "Sandbox test scorecard",
+  "items": [
+   {
+    "value": "99",
+    "label": "Primary tests TC-001 to TC-099"
+   },
+   {
+    "value": "12",
+    "label": "DR tests passed"
+   },
+   {
+    "value": "2",
+    "label": "Warnings (non-blocking)"
+   },
+   {
+    "value": "0",
+    "label": "Failures across all suites"
+   }
+  ],
+  "columns": [
+   "Test suite",
+   "Scope",
+   "Result",
+   "Evidence"
+  ],
+  "rows": [
+   [
+    "TC-001–008",
+    "WSFC and listeners",
+    "Pass",
+    "ILB VIPs online; gMSA granted"
+   ],
+   [
+    "TC-010–019",
+    "DB seeding",
+    "Pass",
+    "RetailOps and AnalyticsHub in sync"
+   ],
+   [
+    "TC-046–055",
+    "Planned failover",
+    "Pass",
+    "Data intact"
+   ],
+   [
+    "TC-090–099",
+    "Metadata failover",
+    "Pass",
+    "Jobs and logins survive failover"
+   ],
+   [
+    "TC-DR-009",
+    "Full DR drill",
+    "Pass",
+    "Failover and failback done"
+   ]
+  ]
+ },
+ {
+  "reference": {
+   "tag": "S66_TIER_VALUE"
+  },
+  "type": "stats",
+  "title": "Substitution: a system-wide efficiency opportunity",
+  "context": "Scaling strategy: start with low-risk substitutions, then move to other clinically approved substitutes.",
+  "items": [
+   {
+    "label": "Tier 1 · Quick win",
+    "value": "$3.1M",
+    "title": "SpO2 sensors",
+    "text": "An immediate, low-friction pilot from simultaneous use of approved substitutions."
+   },
+   {
+    "label": "Tier 2 · Targeted savings",
+    "value": "$4.3M",
+    "title": "Direct substitutes",
+    "text": "Replacing high-variance items with GPO direct, clinically approved substitutes."
+   },
+   {
+    "label": "Tier 3 · Strategic upside",
+    "value": "$110M+",
+    "title": "System-wide scaling",
+    "text": "The total potential impact by expanding protocols to similar approved substitutes."
+   }
+  ],
+  "takeaway": "Recommended next step: approve the pilot of automated deactivation logic for low-risk categories."
+ },
+ {
+  "reference": {
+   "tag": "S66_PILLAR_IMAGE_STATS"
+  },
+  "type": "stats",
+  "title": "How we are bridging the strategic gap (1/3)",
+  "label": "Pillar 01",
+  "bar": "Estate modernization",
+  "text": "80% of enterprise spend still sits on legacy infrastructure, and AI readiness forces migration decisions now. FinOps-driven estate rationalisation reduces tech debt and funds the roadmap without new budget requests.",
+  "items": [
+   {
+    "value": "80/20",
+    "label": "Legacy vs innovation spend today"
+   },
+   {
+    "value": "70/30",
+    "label": "Target ratio by 2027 (benchmark)"
+   }
+  ],
+  "takeaway": "Position FinOps audits as the entry point on every estate deal, compressing the sales cycle."
+ },
+ {
+  "reference": {
+   "tag": "P66_SECTION_DARK"
+  },
+  "type": "section",
+  "title": "What is new in SQL Server 2025",
+  "number": "01"
+ },
+ {
+  "reference": {
+   "tag": "P66_SECTION_LIGHT"
+  },
+  "type": "section",
+  "title": "Detailed information"
+ }
+]
