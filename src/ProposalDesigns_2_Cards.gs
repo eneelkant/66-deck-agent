@@ -655,13 +655,19 @@
     var barH = bar ? 30 : 0, conn = bar ? 22 : 0;
     var need = hh + 4 + 10 + pB + 12, avail = BOTTOM - top - barH - conn;
     if (need > avail) return null;
-    var ch = Math.min(avail, Math.max(need, avail * 0.88));          // V.1_48: the columns reach the bottom (deck 21 slides 21, 29)
+    // V.1_48: full columns reach the bottom (deck 21 slides 21, 29); V.1_51 (deck 23 slide 23): columns with one short text
+    // each are sized to their text and the block sits in the middle of the slide (tall empty boxes before)
+    var single = items.every(function (it) { return it.points.length === 1; });
+    var sparse = single || need < avail * 0.5;
+    var ch = sparse ? Math.min(avail, need + 6) : Math.min(avail, Math.max(need, avail * 0.88));
+    if (sparse) top += Math.max(0, (avail - ch) * 0.45);
     items.forEach(function (it, i) {
       var x = CX + i * (cw + gap);
       K.roundrect(els, x, top, cw, hh, T.blue);
       K.text(els, x + 4, top, cw - 8, hh, it.title, { weight: 500, max: TSZ.heading, min: 9.5, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
       K.roundrect(els, x, top + hh + 4, cw, ch - hh - 4, T.white, { color: LINE, width: 0.75 });
-      bullets(els, x + pad, top + hh + 14, iw, ch - hh - 26, it.points, 5);
+      if (single) K.text(els, x + pad, top + hh + 10, iw, ch - hh - 16, it.points[0], { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', valign: 'middle', color: T.body });
+      else bullets(els, x + pad, top + hh + 14, iw, ch - hh - 26, it.points, 5);
       if (bar) K.dashedLine(els, x + cw / 2, top + ch + 3, x + cw / 2, top + ch + conn + 3, BLUE_3, 1, 2, 2.5);
     });
     if (bar) {

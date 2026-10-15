@@ -614,7 +614,9 @@
     words: '3-12' }, function (s) {
     var teams = K.arr(s.teams, 2).map(function (t) {
       // roles[] (proposal shape) or stakeholders[] + specialists[] (General team shape): the role is shown, never an invented name
-      var list = K.arr(t.roles || t.points || t.members, 8);
+      // V.1_51: the first list with entries (roles: [] next to members fell back to plain cards in deck 23)
+      var list = [];
+      [t.roles, t.members, t.people, t.points].some(function (l) { list = K.arr(l, 8); return list.length > 0; });
       if (!list.length) list = K.arr(t.stakeholders, 8).concat(K.arr(t.specialists, 8)).slice(0, 8);
       return { name: K.str(t.name || t.title || t.label), roles: list.map(function (r) { return typeof r === 'string' ? { title: r, text: '' } : { title: r.title || r.role || r.name || '', text: r.text || r.responsibility || '' }; }).filter(function (r) { return r.title; }) };
     });

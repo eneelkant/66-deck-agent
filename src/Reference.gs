@@ -345,7 +345,7 @@ function referenceForTag_(lib, tag) {
 
 // Designs whose look carries a meaning: only used when the slide is about that (e.g. the "!" warning badges = risks)
 // designs that never show some content, even when Gemini picks them (risks on a pyramid or a stack of layers)
-const HARD_TOPIC_GATES_ = { P66_PYRAMID: true, P66_ISO_CALLOUTS: true, P66_PHASE_COLUMNS: true };   // V.1_47: phase columns only for a plan
+const HARD_TOPIC_GATES_ = { P66_PYRAMID: true, P66_ISO_CALLOUTS: true, P66_PHASE_COLUMNS: true, P66_CURVE: true };   // V.1_51: the rising curve only for a journey   // V.1_47: phase columns only for a plan
 const DESIGN_TOPICS_ = {
   '66D_LAYOUT_CARDS_024': /\b(risks?|challenges?|issues?|barriers?|pitfalls?|concerns?|threats?|problems?|obstacles?|gaps?|blockers?|hurdles?|warnings?)\b/i,
   // V.1_42 Proposal Deck designs whose look says what the slide is about
@@ -368,11 +368,13 @@ const DESIGN_TOPICS_ = {
   P66_KEY_INPUTS: /inputs?|requirements?|questions?|assumptions?|needs|what we heard/i,
   P66_PHASE_DETAIL: /phase|stage|wave|workstream|sprint/i,
   // V.1_47/48: phases only for a plan ("deploying" in a lead about a product is not a plan)
-  P66_PHASE_COLUMNS: /\b(phases?|phased|stages?|waves?|roadmap|rollout|roll-out|deployment (plan|phases|roadmap)|implementation (plan|phases|roadmap)|delivery plan|methodology|go-?live|pilot)\b/i,
+  P66_PHASE_COLUMNS: /\b(phases?|phased|stages?|waves?|roadmap|rollout|roll-out|deployment (plan|phases|roadmap)|implementation (plan|phases|roadmap)|delivery plan|methodology|go-?live|pilot (plan|phases?|and scale|to scale|rollout))\b/i,   // V.1_51: "success criteria for the pilot" is not a plan
   P66_GANTT: /roadmap|timeline|plan|schedule|phases?|milestones?|weeks?|months?|quarters?/i,
   // levels of a hierarchy only (V.1_47: never data sources, systems or a list of risks)
-  P66_PYRAMID: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|data sources?|sources|kpis?|metrics?|key performance|indicators?|measur\w*|targets?|loop|cycle|lifecycle|workflow)\b)[\s\S]*\b(hierarch\w*|levels?|maturity|tiers?|priorit\w*|pyramid|ladder|stages? of|building blocks|layers? of|value chain of needs)\b/i,
+  P66_PYRAMID: /^(?![\s\S]*\b(architecture|risks?|mitigat\w*|threats?|issues?|data sources?|sources|kpis?|metrics?|key performance|indicators?|measur\w*|targets?|loop|cycle|lifecycle|workflow)\b)[\s\S]*\b(hierarch\w*|(?<!high-|low-|top-)levels?|maturity|tiers?|priorit\w*|pyramid|ladder|stages? of|building blocks|layers? of|value chain of needs)\b/i,
   P66_ISO_CALLOUTS: /^(?![\s\S]*\b(risks?|mitigat\w*|threats?|issues?|kpis?|metrics?|key performance|indicators?|measur\w* success|targets?|loop|cycle|lifecycle|workflow|continuous)\b)/i,   // stacked layers, never risks, KPIs or a loop (V.1_48/50)
+  // V.1_51 (deck 23 slide 18: seven data sources on a rising curve): the curve only for an adoption / maturity journey
+  P66_CURVE: /^(?![\s\S]*\b(data sources?|sources|systems|components|integrations?|inputs?|risks?|kpis?|metrics?|team|roles?|products?|tools?)\b)[\s\S]*\b(adoption|maturity|journey|curve|progression|evolution|ramp(-| )?up|scal(e|ing) (up|out)|change (curve|journey)|path to|crawl|walk,? run|stages of)\b/i,
   P66_CATEGORY_LEGEND: /framework|categor|criteria|validation|readiness|classification/i
 };
 

@@ -20,9 +20,18 @@ function loadAll(gemini, seed) {
   const M = Object.create(Math); M.random = () => { sd = (sd * 16807) % 2147483647; return (sd - 1) / 2147483646; };
   const slides = [], drawn = [], props = {}, uprops = {}, files = {};
   const mkSlide = () => ({ getObjectId: () => "s" + slides.length, remove() {}, getPageElements: () => [], getBackground: () => ({ setSolidFill() {} }) });
-  const pres = { getSlides: () => slides, appendSlide() { const s = mkSlide(); slides.push(s); return s; }, getPageWidth: () => 720, getPageHeight: () => 405, getSelection: () => null, getId: () => "P", getUrl: () => "u", getName: () => "n" };
+  const pres = { getSlides: () => slides, appendSlide() { const s = mkSlide(); slides.push(s); return s; }, getPageWidth: () => 720, getPageHeight: () => 405, getSelection: () => null, getId: () => "P", getUrl: () => "u", getName: () => "n",
+    insertSlide(i, s) { const c = mkSlide(); slides.splice(i, 0, c); return c; }, getSlideById: (x) => slides.find((q) => q.getObjectId() === x) || null };
+  // V.1_51: long proposal decks are drawn in a hidden working copy and inserted into the presentation at the end
+  const works = {};
+  const mkWork = (name) => { const ws = []; const id = "W" + Object.keys(works).length; let k = 0;
+    const mk = () => { const s = { getObjectId: () => s._id, remove() { const j = ws.indexOf(s); if (j >= 0) ws.splice(j, 1); }, getPageElements: () => [], getBackground: () => ({ setSolidFill() {} }) }; s._id = id + "_" + (k++); return s; };
+    const w = { name, getSlides: () => ws, getId: () => id, getPageWidth: () => 720, getPageHeight: () => 405, saveAndClose() {},
+      appendSlide() { const s = mk(); ws.push(s); return s; }, getSlideById: (x) => ws.find((q) => q.getObjectId() === x) || null };
+    ws.push(mk()); works[id] = w; return w; };
   const sb = { console, Math: M, JSON, Date, Logger: { log() {} },
-    SlidesApp: { getActivePresentation: () => pres, PredefinedLayout: { BLANK: "BLANK" } },
+    SlidesApp: { getActivePresentation: () => pres, PredefinedLayout: { BLANK: "BLANK" }, create: (n) => mkWork(n),
+      openById: (id) => { if (works[id]) return works[id]; throw new Error("no deck " + id); } },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty(k, v) { props[k] = v; } }),
       getUserProperties: () => ({ getProperty: (k) => uprops[k] || null, setProperty(k, v) { uprops[k] = v; }, deleteProperty(k) { delete uprops[k]; } }) },
     CacheService: { getUserCache: () => ({ get: () => null, put() {}, remove() {} }), getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
