@@ -77,7 +77,7 @@
     return t;
   }
   function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.7)); }
-  var GENERIC_CHIP_RE_ = /^(current state|future state|today|impact|limitation|constraint|inefficiency|financial burden|resource gap|benefits?|challenges?|risks?|process|issues?|problems?|solutions?|outcomes?|gaps?|opportunity|value|cost|efficiency|key point|note)$/i;
+  var GENERIC_CHIP_RE_ = /^(current state|future state|today|impact|limitation|constraint|inefficiency|financial burden|resource gap|benefits?|challenges?|risks?|process|issues?|problems?|solutions?|outcomes?|gaps?|opportunity|value|cost|efficiency|key point|note|compliance|security|data ownership|data at rest|data in transit|governance|privacy|scalability|reliability|availability|performance|integration|monitoring|support|overview|summary|details?|features?|capabilit(?:y|ies)|components?|requirements?)$/i;   // V.1_55: deck 26 chips
 
   // V.1_53: dark slides (black with the content in white), like the dark card slides of the solution decks
   var DARK_BG = '#050B1F', DARK_CARD = '#111A33', DARK_LINE = '#26324F', DARK_HEAD = '#7FA4FF', DARK_BODY = '#D8DEEA', DARK_MUTED = '#9AA6BF';

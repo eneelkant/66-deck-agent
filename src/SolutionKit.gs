@@ -182,7 +182,8 @@ function solutionOutlineRules_(ctx) {
     '- No 66degrees credentials or "why 66degrees" slide unless the request asks for it; a client result only from the request or the sources.',
     '- Only topics the request asks for or that explain how the solution works: no market size, industry trends or adjacent opportunities (e.g. predictive maintenance in a monitoring deck) unless the request asks.',
     '- Sections of similar size; a slide sits in the section whose subject it is (the model training slide sits with the prediction, not with the problem).',
-    '- No filler: no "future of", "in summary", "key takeaways" slides.'
+    '- No filler: no "future of", "in summary", "key takeaways" slides.',
+    '- V.1_55: no KPI or target slide, cost or pricing slide, or roadmap slide unless the request or the tone story asks for it; targets, prices and times are never invented.'
   ].join('\n');
 }
 
@@ -290,6 +291,7 @@ function solutionContentPrompt_(a) {
     '- Item headings 2-5 words, never starting with a number; item texts in the voice above (labelled phrases), similar length on one slide.',
     '- Numbers only from the research sources, the approved facts or the request. A number you need but do not have is a target ("Target: ...").',
     '- Prices, SLAs, funding and test results only when the request or the sources give them; otherwise leave the field out.',
+    '- A body slide is never typed "agenda", "cover", "closing" or "section" (the code draws those); a source goes in the notes, never in a table column.',
     '- Only real Google Cloud product names; never invent products, clients, awards or claims about ' + ctx.brand.name + '.',
     '- Cards and steps carry an "icon": one concrete concept for that item (e.g. "shield", "database", "wrench"), each different on a slide.',
     '- Plain text only: no markdown, no asterisks, no emoji, no line breaks inside a text, no reference markers like [1] in slide text.',
@@ -378,8 +380,12 @@ function solutionTerms_(t) {
   if (typeof keepNames_ === 'function') s = keepNames_(s);
   return s;
 }
+// V.1_55: "1 · data ingestion", "01 Data validation", "2. Dataflow" -> the design numbers its items itself
+function solutionNoNumber_(t) { return String(t || '').replace(/^\s*(\d{1,2}|[ivx]{1,4})\s*[·.):\-–]\s+(?=\S)/i, ''); }
+// V.1_55: "Condition-Based" -> "Condition-based", "End-To-End" -> "End-to-end" (acronyms and names keep their capitals)
+function solutionHyphenCase_(t) { return String(t || '').replace(/([A-Za-z0-9])-([A-Z])([a-z]+)/g, function (m, a, b, c) { return a + '-' + b.toLowerCase() + c; }); }
 function solutionLabelCase_(t) {
-  const s = solutionCapFirst_(solutionTerms_(t));
+  const s = solutionCapFirst_(solutionTerms_(solutionHyphenCase_(solutionNoNumber_(t))));
   return typeof headingCase_ === 'function' && s.split(/\s+/).length <= 8 ? solutionTerms_(headingCase_(s)) : s;
 }
 // "source: in-truck devices" -> "Source: in-truck devices"; "Model Type · Trained on..." -> "Model type · Trained on..."
@@ -395,7 +401,7 @@ function solutionDisplayCase_(sp) {
   const walk = function (o, key, inPoints) {
     if (Array.isArray(o)) {
       o.forEach(function (v, i) {
-        if (typeof v === 'string') o[i] = key === 'columns' || key === 'headers' ? solutionLabelCase_(v) : solutionPointCase_(v, inPoints);
+        if (typeof v === 'string') o[i] = key === 'columns' || key === 'headers' ? solutionLabelCase_(v) : solutionPointCase_(/^(callouts|steps|notes_list)$/.test(key) ? solutionNoNumber_(v) : v, inPoints);
         else if (Array.isArray(v) && key === 'rows') {
           v.forEach(function (c, j) { if (typeof c === 'string') v[j] = j === 0 && c.split(/\s+/).length <= 6 ? solutionLabelCase_(c) : solutionPointCase_(c, false); });
         } else if (v && typeof v === 'object') walk(v, key, false);
@@ -407,7 +413,7 @@ function solutionDisplayCase_(sp) {
       const v = o[k];
       if (typeof v === 'string') {
         if (k === 'title' && o === sp) o[k] = solutionCapFirst_(solutionTerms_(v));            // the slide title is cased by the planner already
-        else o[k] = SOLUTION_HEAD_KEYS_[k] && v.split(/\s+/).length <= 8 ? solutionLabelCase_(v) : solutionPointCase_(v, false);
+        else o[k] = SOLUTION_HEAD_KEYS_[k] && v.split(/\s+/).length <= 8 ? solutionLabelCase_(v) : solutionPointCase_(SOLUTION_HEAD_KEYS_[k] ? solutionNoNumber_(v) : v, false);
       } else if (v && typeof v === 'object') walk(v, k, k === 'points' || k === 'bullets');
     });
   };
@@ -508,6 +514,12 @@ function solutionRescue_(sp) {
 /* ---------- 10. V.1_53: the outline of a Solution Deck (deck 24) ----------
    Near-duplicate slides (the same comparison twice), topics nobody asked for (market size, adjacent opportunities) and
    lopsided sections (8 / 4 / 5 / 7 slides) are fixed in the outline, before any slide is written. */
+var SOLUTION_UNASKED_ = [
+  { title: /\b(kpis?|key performance|success (metrics|measures|criteria)|measur\w* success|how we measure|targets)\b/i, asked: /\b(kpis?|metrics?|measur\w*|targets?|success criteria)\b/i, keep: ['executive', 'internal'] },
+  { title: /\b(market (size|growth|landscape|trends?|opportunity|overview)|industry (benchmarks?|trends?|landscape)|benchmarks?|cagr)\b/i, asked: /\b(market|industry|benchmark|trend)\w*/i, keep: ['executive'] },
+  { title: /\b(costs?|pricing|savings|roi|business case|tco|finops)\b/i, asked: /\b(cost|pricing|price|saving|roi|tco|budget|business case|finops)\w*/i, keep: ['executive', 'offering', 'internal'] },
+  { title: /\b(roadmap|phased|phases|timeline|implementation plan|rollout plan)\b/i, asked: /\b(roadmap|phase|timeline|plan|rollout|implementation|wave)\w*/i, keep: ['enablement', 'offering', 'executive'] },
+];
 var SOLUTION_OFFTOPIC_RE_ = /\b(market|industry|trends?|landscape|imperative|opportunit(?:y|ies)|future of)\b/i;
 function solutionStems_(o) {
   const t = [o && o.title, o && o.message, (o && o.points || []).join(' ')].join(' ');
@@ -535,7 +547,13 @@ function solutionOutlineChecks_(slides, prompt, tone, before) {
     }) || (o.type === 'comparison' && cmpSeen.some(function (prev) { return st.some(function (w) { return prev.indexOf(w) !== -1; }); }));   // the same comparison twice
     if (o.type === 'comparison') cmpSeen.push(st);
     const words = (String(o.title || '').match(SOLUTION_OFFTOPIC_RE_) || [])[0];
-    const off = tone !== 'executive' && words && !new RegExp('\\b' + words.slice(0, 5), 'i').test(req);
+    let off = tone !== 'executive' && words && !new RegExp('\\b' + words.slice(0, 5), 'i').test(req);
+    // V.1_55 (deck 26: KPIs with invented targets, market size, cost tips, a roadmap nobody asked for): slides of a kind the
+    // request does not ask for and the tone's story does not need are replaced
+    SOLUTION_UNASKED_.forEach(function (u) {
+      if (off || u.keep.indexOf(tone) !== -1) return;
+      if (u.title.test(String(o.title || '')) && !u.asked.test(req)) off = true;
+    });
     if (dup || off) out.push(i);
     seen.push(st);
   });
@@ -629,7 +647,8 @@ var SOLUTION_BACKLOG_ = {
 };
 function solutionBacklog_(tone, prompt) {
   const list = (SOLUTION_BACKLOG_[tone] || SOLUTION_BACKLOG_.executive).concat(tone === 'technical' ? [] : SOLUTION_BACKLOG_.technical.slice(0, 2));
-  return list.map(function (b) { return Object.assign({}, b); });
+  const asksArch = /architecture|end to end|end-to-end/i.test(String(prompt || ''));   // V.1_55: the architecture slide the request names covers it
+  return list.filter(function (b) { return !(asksArch && /end to end|how the solution works/i.test(b.title)); }).map(function (b) { return Object.assign({}, b); });
 }
 // a requested topic Gemini left out becomes its own slide, of the type its words call for
 function solutionTopicEntry_(topic) {
@@ -717,4 +736,82 @@ function solutionTopicCovered_(slides, topic) {
     const ss = topicStems_([o.title, o.message].filter(Boolean).join(' ').toLowerCase(), false);   // (lower case: a first word is not a name)
     return ts.filter(function (w) { return ss[w]; }).length / ts.length >= 0.5;
   });
+}
+
+/* ---------- 15. V.1_55: the deck 26 fixes on written slides ---------- */
+// a body slide Gemini types as a frame (agenda, cover, closing, section) is a content slide: frames are the code's own
+function solutionBodyTypes_(slides, longPart) {
+  const n = (slides || []).length;
+  let changed = 0;
+  (slides || []).forEach(function (sp, i) {
+    const t = String((sp && sp.type) || '').toLowerCase();
+    if (['agenda', 'cover', 'closing', 'section', 'divider', 'title'].indexOf(t) === -1) return;
+    if (!longPart && ((t === 'cover' && i === 0) || (t === 'agenda' && i <= 1) || (t === 'closing' && i === n - 1))) return;
+    sp.type = Array.isArray(sp.items) && sp.items.length ? 'cards' : 'bullets';
+    if (sp.lockTag) delete sp.lockTag;
+    if (sp.reference) sp.reference = null;
+    changed++;
+  });
+  return changed;
+}
+// sources belong in the notes, not in a "Source" column; market sizes stay out of a deck that does not ask for them
+var SOLUTION_MARKET_RE_ = /\b(market size|market value|market (is|will|to) (reach|grow)|projected market|cagr|tam\b|sam\b)/i;
+function solutionCleanFigures_(sp, prompt) {
+  if (!sp || typeof sp !== 'object') return 0;
+  let n = 0;
+  if (Array.isArray(sp.columns) && Array.isArray(sp.rows)) {
+    const drop = sp.columns.map(function (c, j) { return /^\s*(sources?|references?|refs?|citation)\s*$/i.test(String(c && typeof c === 'object' ? (c.title || c.label || '') : c)) ? j : -1; }).filter(function (j) { return j >= 0; });
+    if (drop.length && sp.columns.length - drop.length >= 2) {
+      const src = [];
+      sp.rows.forEach(function (r) { if (Array.isArray(r)) drop.forEach(function (j) { if (r[j]) src.push(String(r[j])); }); });
+      sp.columns = sp.columns.filter(function (c, j) { return drop.indexOf(j) === -1; });
+      sp.rows = sp.rows.map(function (r) { return Array.isArray(r) ? r.filter(function (c, j) { return drop.indexOf(j) === -1; }) : r; });
+      const uniq = src.filter(function (x, k) { return src.indexOf(x) === k; });
+      if (uniq.length) sp.notes = String(sp.notes || '') + '\nSources: ' + uniq.join(', ') + '.';
+      n++;
+    }
+  }
+  if (!SOLUTION_MARKET_RE_.test(String(prompt || '')) && !/\bmarket\b/i.test(String(prompt || ''))) {
+    const bad = function (x) { return SOLUTION_MARKET_RE_.test(typeof x === 'string' ? x : JSON.stringify(x || '')); };
+    if (Array.isArray(sp.rows)) { const before = sp.rows.length; sp.rows = sp.rows.filter(function (r) { return !bad(r); }); if (sp.rows.length !== before) n++; }
+    if (Array.isArray(sp.items)) { const before = sp.items.length; sp.items = sp.items.filter(function (it) { return !bad(it); }); if (sp.items.length !== before) n++; }
+    if (Array.isArray(sp.points)) sp.points = sp.points.filter(function (p) { return !bad(p); });
+  }
+  return n;
+}
+// response, resolution, RTO and RPO times the request did not give are proposals: the presenter confirms them
+function solutionGivenTimes_(slides, prompt, sources) {
+  const own = String(prompt || '') + ' ' + String((sources && sources.text) || '');
+  let n = 0;
+  (slides || []).forEach(function (sp) {
+    if (!sp || !/\b(priorit\w*|slas?|slos?|support|rto|rpo|recovery|response|resolution)\b/i.test(String(sp.title || ''))) return;
+    const times = (JSON.stringify([sp.items, sp.rows, sp.points]).match(/\b\d+(?:[.,]\d+)?\s*(?:min(?:ute)?s?|hours?|hrs?|h|days?|business days?|seconds?|s)\b/gi) || []);
+    const missing = times.filter(function (x) { const d = (x.match(/\d+(?:[.,]\d+)?/) || [''])[0]; return d && !new RegExp('(^|[^0-9.])' + d.replace('.', '[.,]') + '(?![0-9])').test(own); });
+    if (missing.length && !/confirm them before sharing/.test(String(sp.notes || ''))) {
+      sp.notes = String(sp.notes || '') + '\nThe times on this slide (' + missing.slice(0, 4).join(', ') + ') are proposals, not given in the request: confirm them before sharing.';
+      n++;
+    }
+  });
+  return n;
+}
+// the lead never repeats the plan's brief (deck 26 slide 8 showed "The components and how data flows between them.")
+function solutionLeadNotBrief_(slides, plan) {
+  const norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+  const briefs = {};
+  Object.keys(SOLUTION_BACKLOG_).forEach(function (k) { SOLUTION_BACKLOG_[k].forEach(function (b) { briefs[norm(b.brief)] = 1; }); });
+  ((plan && plan.slides) || []).forEach(function (o) { if (o && o.brief) briefs[norm(o.brief)] = 1; if (o && o.lead) briefs[norm(o.lead)] = 1; if (o && o.message) briefs[norm(o.message)] = 1; });
+  let n = 0;
+  (slides || []).forEach(function (sp) { if (sp && sp.lead && briefs[norm(sp.lead)]) { delete sp.lead; n++; } });
+  return n;
+}
+// bullets of three or four words each are labels without their text: they become items, and the thin-slide fill writes the text
+function solutionThinBullets_(sp) {
+  if (!sp || String(sp.type || '').toLowerCase() !== 'bullets' || !Array.isArray(sp.points)) return false;
+  const pts = sp.points.map(function (p) { return typeof p === 'string' ? p : String((p && (p.title || p.text)) || ''); }).filter(Boolean);
+  if (pts.length < 3 || pts.length > 6 || !pts.every(function (p) { return p.split(/\s+/).length <= 5; })) return false;
+  sp.type = 'cards';
+  sp.items = pts.map(function (p) { return { title: solutionLabelCase_(p.replace(/[.;:]+$/, '')), text: '' }; });
+  delete sp.points;
+  sp.reference = null;
+  return true;
 }

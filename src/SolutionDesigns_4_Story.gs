@@ -304,7 +304,7 @@
       var x = CX + i * (cw + gap);
       K.rect(els, x, top, cw, ch, P.dark ? P.card : '#F7F8FA');
       K.rect(els, x, top, cw, 3, T.blue);
-      K.text(els, x + pad, top + 12, iw, 12, K.pad2(i + 1) + (it.label ? ' · ' + it.label : ''), { font: 'mono', weight: 500, max: 8.5, min: 8, maxLines: 1, color: P.head });
+      K.text(els, x + pad, top + 12, iw, 12, K.pad2(i + 1) + (it.label && !/^\s*(step|stage|phase)?\s*0?\d{1,2}\s*[.·:)]?\s*$/i.test(it.label) ? ' · ' + String(it.label).replace(/^\s*0?\d{1,2}\s*[·.):\-–]\s+/, '') : ''), { font: 'mono', weight: 500, max: 8.5, min: 8, maxLines: 1, color: P.head });
       heading(els, x + pad, top + 28, iw, it.title, P.ink, 3);
       K.bulletList(els, x + pad, top + 28 + hB + 10, iw, pB + 4, linesOf(it), { max: 9, min: 9, gap: 4, color: P.body, bullet: P.head });
       if (it.footer) {
@@ -458,6 +458,11 @@
     var center = clean(s.center || s.hub || s.core);
     var items = itemsOf(s, 6), n = items.length;
     var gov = K.arr(s.governance || s.boxes, 5).map(function (g) { return clean(typeof g === 'object' ? (g && (g.title || g.text)) : g); }).filter(real);
+    // V.1_55 (deck 26: a prediction slide with "How the model" in the hub): a service or delivery model, and a hub that is a name
+    var hubTitle = String(s.title || '') + ' ' + String(s.lead || '');
+    if (!/\b(servic\w*|support\w*|operat\w*|govern\w*|deliver\w*|run\b|running|team\w*|managed|hub|centre|center of)\b/i.test(hubTitle)) return null;
+    if (center && /^(how|what|why|the|a|an|our|your|when|where)\b/i.test(center)) return null;
+    if (center && center.split(/\s+/).length >= 2 && String(s.title || '').toLowerCase().indexOf(center.toLowerCase()) === 0) return null;
     if (!center || center.split(/\s+/).length > 3 || n < 4 || n > 6 || gov.length > 4 || items.some(function (it) { return it.title.split(/\s+/).length > 5; })) return null;
     var els = [], P = pal({ dark: true });
     var top = hdr(els, s, P) + 6;

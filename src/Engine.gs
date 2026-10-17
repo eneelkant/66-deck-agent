@@ -3882,10 +3882,18 @@ var ENGINE = (function () {
     try { return layoutSlideGuarded_(s, type, lctx); } finally { LIB_MODE_ = wasMode; }
   }
   var SOLUTION_FALLBACK_TAGS_ = ['S66_TEXT_SECTIONS', 'S66_TWO_COL_BULLETS', 'S66_HEADER_COLUMNS', 'S66_NUMBERED_CARD_GRID', 'S66_ICON_CARD_GRID', 'S66_BOLD_LEAD_LIST', 'S66_BULLETS_PHOTO_HALF'];
+  function cutCount_(out) { return ((out && out.els) || []).filter(function (e) { return e.t === 'text' && /…$/.test(String(e.text || '')); }).length; }
   function solutionFallback_(s, type, tag, lctx) {
+    var loose = null;                                                    // a design that draws it with a text cut short: the last resort
     var tryTag = function (t, spec) {
       if (!t || t === tag || !V[t] || !inLib_(t, 'solution')) return null;
-      try { var o = V[t](spec, lctx); if (o && contentCount_(o) > 0) { o.drawnWith = t; return o; } return null; } catch (e) { return null; }
+      try {
+        var o = V[t](spec, lctx);
+        if (!o || contentCount_(o) === 0) return null;
+        o.drawnWith = t;
+        if (cutCount_(o)) { if (!loose || cutCount_(o) < cutCount_(loose)) loose = o; return null; }
+        return o;
+      } catch (e) { return null; }
     };
     var out = null;
     (VARIANTS[type] || []).forEach(function (v) { if (!out) out = tryTag(v.tag, s); });
@@ -3923,26 +3931,45 @@ var ENGINE = (function () {
     SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, tiny); });
     if (out) return out;
     s = tiny;
-    // the slide's text as headed sections (or one list): every Solution deck can show that
+    // the slide's text as headed sections (or one list): every Solution deck can show that. V.1_55: the text is gathered
+    // from every field (groups, columns, regions, layers, rows, left / right...), not only items and points
     var real = function (t) { return /[A-Za-z0-9]{2,}/.test(String(t || '')); };
-    var str = function (v) { return String(v == null ? '' : (typeof v === 'object' ? (v.text || v.title || v.label || '') : v)).trim(); };
-    var groups = arr(s.items, 8).map(function (it) {
-      if (typeof it === 'string') return { title: '', points: [it] };
-      var pts = arr(it && (it.points || it.bullets), 6).map(str);
-      if (it && (it.text || it.description)) pts.unshift(str(it.text || it.description));
-      return { title: str(it && (it.title || it.label || it.name)), points: pts.filter(real) };
-    });
-    var full = groups.filter(function (g) { return g.title && g.points.length; });
-    var spec = Object.assign({}, s);
-    if (full.length >= 2) spec.items = full.slice(0, 5);
-    else {
-      var flat = groups.map(function (g) { return g.points.length ? (g.title ? g.title + ': ' : '') + g.points.join(' ') : g.title; })
-        .concat(arr(s.points, 10).map(str)).filter(real);
-      if (!flat.length) return null;
-      spec.items = []; spec.points = flat.slice(0, 10);
+    var SKIP = { title: 1, lead: 1, subtitle: 1, notes: 1, reference: 1, type: 1, design: 1, deckLibrary: 1, dark: 1, cobrand: 1, clientLogo: 1, icon: 1, material: 1,
+      fact_tags: 1, lockTag: 1, section: 1, number: 1, sectionStyle: 1, code: 1, value: 1, status: 1, banner: 1, recommend: 1, name: 0 };
+    var HEAD = ['title', 'label', 'name', 'level', 'need', 'risk', 'issue', 'heading'];
+    var groups = [], looseTexts = [];
+    var textsIn = function (v, out) {
+      if (typeof v === 'string' || typeof v === 'number') { if (real(v)) out.push(String(v).trim()); return out; }
+      if (Array.isArray(v)) { v.forEach(function (x) { textsIn(x, out); }); return out; }
+      if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { if (!SKIP[k] && HEAD.indexOf(k) === -1) textsIn(v[k], out); });
+      return out;
+    };
+    var headOf = function (o) { for (var q = 0; q < HEAD.length; q++) if (typeof o[HEAD[q]] === 'string' && real(o[HEAD[q]])) return String(o[HEAD[q]]).trim(); return ''; };
+    var walk = function (v) {
+      if (Array.isArray(v)) {
+        v.forEach(function (x) {
+          if (Array.isArray(x)) { var cells = x.map(function (c) { return String(c == null ? '' : (typeof c === 'object' ? (c.text || c.title || '') : c)).trim(); }).filter(real); if (cells.length) groups.push({ title: cells[0], points: cells.length > 1 ? [cells.slice(1).join(' · ')] : [] }); }
+          else if (x && typeof x === 'object') { var h = headOf(x), pts = textsIn(x, []); if (h || pts.length) groups.push({ title: h, points: pts }); }
+          else if (real(x)) looseTexts.push(String(x).trim());
+        });
+      } else if (v && typeof v === 'object') { var h2 = headOf(v), p2 = textsIn(v, []); if (h2 || p2.length) groups.push({ title: h2, points: p2 }); }
+      else if (real(v)) looseTexts.push(String(v).trim());
+    };
+    Object.keys(s).forEach(function (k) { if (!SKIP[k] && k !== 'columns') walk(s[k]); });
+    if (Array.isArray(s.columns) && s.columns.some(function (c) { return c && typeof c === 'object'; })) walk(s.columns);
+    var cutW = function (t, n) { var w = String(t || '').split(/\s+/); return w.length > n ? w.slice(0, n).join(' ').replace(/[,;:]$/, '') + '.' : String(t || ''); };
+    var full = groups.filter(function (g) { return g.title && g.points.length; }).slice(0, 5).map(function (g) { return { title: cutW(g.title, 8), points: g.points.slice(0, 4).map(function (p) { return cutW(p, 18); }) }; });
+    var flat = groups.map(function (g) { return g.points.length ? (g.title ? g.title + ': ' : '') + g.points.join(' ') : g.title; }).concat(looseTexts).filter(real).map(function (p) { return cutW(p, 22); });
+    var spec = Object.assign({}, s, { reference: null });
+    if (full.length >= 2) { spec.items = full; spec.points = []; SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, spec); }); }
+    if (!out && flat.length) {
+      var sp2 = Object.assign({}, s, { reference: null, items: [], points: flat.slice(0, 8) });
+      SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, sp2); });
+      // one or two sentences: a statement slide
+      if (!out) out = tryTag('S66_DARK_STATEMENT', Object.assign({}, s, { statement: cutW(flat[0], 16), text: cutW(flat.slice(1, 3).join(' '), 30) }));
     }
-    SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, spec); });
-    return out;
+    if (!out && real(s.lead || s.statement)) out = tryTag('S66_DARK_STATEMENT', Object.assign({}, s, { statement: cutW(s.statement || s.lead, 16), text: '' }));
+    return out || loose;
   }
   function layoutSlideGuarded_(s, type, lctx) {
     var tag = s.reference && s.reference.tag;
@@ -3952,11 +3979,15 @@ var ENGINE = (function () {
     // V.1_52: a Solution Deck the same way, with its own library (and the shared divider designs)
     var lib = libOf_(s);
     if (lib !== 'general' ? ((FRAME_TYPES_[type] && !(type === 'section' && inLib_(tag, lib))) || !inLib_(tag, lib)) : !inLib_(tag, 'general')) tag = null;
-    var out = (tag && V[tag] && variantOf(type, tag)) ? V[tag](s, lctx) : null;
+    var out = null;
+    // V.1_55: a design that fails on unexpected content never stops the slide (deck 26: a blank slide); the next design draws it
+    if (tag && V[tag] && variantOf(type, tag)) { try { out = V[tag](s, lctx); } catch (e) { out = null; } }
     if (out && contentCount_(out) === 0) out = null;
     // V.1_53: a Solution slide is never drawn with a General layout (deck 24): another Solution design that can show the
     // content, or the content gathered as headed text sections / two bullet columns
     if (out) out.drawnWith = tag;
+    // V.1_55: in a Solution Deck a design that would cut a text short ("…") gives way to one that shows it all
+    if (out && lib === 'solution' && !FRAME_TYPES_[type] && cutCount_(out)) { var cut = out; out = solutionFallback_(s, type, tag, lctx) || cut; }
     if (!out && lib === 'solution' && !FRAME_TYPES_[type]) out = solutionFallback_(s, type, tag, lctx);
     out = out || L[type](s, lctx);
     if (!out.drawnWith) out.drawnWith = 'base:' + type;                   // V.1_53: which design drew the slide (checks and tests)

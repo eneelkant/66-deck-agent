@@ -294,11 +294,13 @@
     if (h < 34) return null;
     h = Math.min(h, 62);
     var y0 = top + (avail - (h * n + gap * (n - 1))) / 2;
+    // V.1_55 (deck 26 slide 23 was blank): every box is measured before anything is drawn
+    var fits = layers.every(function (l) { var m = l.items.length, iw0 = (bw - 16 - 6 * (m - 1)) / m; return l.items.every(function (t) { return th(t, iw0 - 8, 9, 400) <= h - 14; }); });
+    if (!fits) return null;
     layers.forEach(function (l, i) {
       var y = y0 + i * (h + gap), m = l.items.length, ig = 6;
       K.rect(els, CX, y, bw, h, i % 2 ? T.bgLight : '#E9EEF3', { color: LINE, width: 0.5 });
       var iw = (bw - 16 - ig * (m - 1)) / m;
-      if (l.items.some(function (t) { return th(t, iw - 8, 9, 400) > h - 14; })) { els = null; return; }
       l.items.forEach(function (t, j) {
         var x = CX + 8 + j * (iw + ig);
         K.rect(els, x, y + 7, iw, h - 14, T.white, { color: LINE, width: 0.5 });
@@ -307,7 +309,6 @@
       K.rect(els, CX + bw + 12, y, lw, h, T.blue);
       K.text(els, CX + bw + 20, y, lw - 16, h, l.label, { weight: 500, max: 10, min: 9, maxLines: 3, align: 'center', valign: 'middle', color: T.white });
     });
-    if (!els) return null;
     return { bg: T.white, els: els, noBalance: true };
   });
 
@@ -426,9 +427,12 @@
   /* ---------- 8. Issue rows: status mark, the issue, the fix on the right — SQL playbook p15 (day-2 runbooks) ---------- */
   add('S66_ISSUE_ROWS', 'cards', { min: 3, max: 7, needs: 'items[{title,fix,status}] (3-7)',
     desc: '3-7 rows, each a white bar: a round status mark (amber for a warning, grey for minor), the issue on the left and the fix or runbook on the right in blue (known issues and their fixes, day-2 runbooks, risks with their mitigation)', words: 'issue 4-10; fix 6-18' }, function (s) {
+    // V.1_55 (deck 26: roadmap phases drawn as issues): the rows are issues with fixes - an explicit fix field, or a slide about
+    // risks, issues or runbooks whose item text is the fix
+    var issueSlide = /\b(risks?|issues?|runbooks?|run book|troubleshoot\w*|problems?|fix\w*|incidents?|failures?|known)\b/i.test(String(s.title || '') + ' ' + String(s.lead || ''));
     var rows = K.items(s, 8).map(function (it) {
       it = it || {};
-      return { title: clean(it.title || it.issue || it.risk), fix: clean(it.fix || it.action || it.mitigation || it.text), status: clean(it.status || it.level).toLowerCase() };
+      return { title: clean(it.title || it.issue || it.risk), fix: clean(it.fix || it.action || it.mitigation || it.resolution || (issueSlide ? it.text : '')), status: clean(it.status || it.level).toLowerCase() };
     }).filter(function (r) { return r.title && real(r.fix); });
     var n = rows.length;
     if (n < 3 || n > 7) return null;

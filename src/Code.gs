@@ -1070,6 +1070,13 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
     });
     plan.slides.forEach(solutionDisplayCase_);                                     // V.1_53: labels, product names, no field-name lower case
     solutionResultsGuard_(plan.slides, userPrompt, sources, ctx);                  // V.1_53: results only from the request
+    if (typeof solutionBodyTypes_ === 'function') {                                // V.1_55 (deck 26)
+      if (!batch && solutionBodyTypes_(plan.slides, false)) ctx.log.push('A content slide typed as a frame was drawn with a Solution design.');
+      plan.slides.forEach(function (sp) { solutionCleanFigures_(sp, userPrompt); });   // sources to the notes, no market sizes
+      solutionGivenTimes_(plan.slides, userPrompt, sources);                     // proposed response times flagged in the notes
+      solutionLeadNotBrief_(plan.slides, batch);                                  // the lead is never the plan's brief
+      plan.slides.forEach(solutionThinBullets_);                                  // three-word bullets become items with their text
+    }
   }
   plan.slides = plan.slides.map(function (sp) { return realChartOrStats_(sp); }); // charts only with real multi-point data
   plan.slides.forEach(function (sp) { dropRepeatedHighlights_(sp); sentenceCaseHeadings_(sp); });
@@ -1098,6 +1105,10 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
       const sp = byTitle || got[k] || { type: o.type, title: o.title, items: [] };
       sp.title = o.title;
       if (!sp.type) sp.type = o.type;
+      if (solutionDeck && /^(agenda|cover|closing|section|divider|title|template)$/i.test(String(sp.type)) && String(o.type || '').toLowerCase() !== 'section') {
+        sp.type = /^(agenda|cover|closing|section|divider|title|template)$/i.test(String(o.type || '')) ? 'cards' : o.type;   // V.1_55 (deck 26 slide 27): a body slide is never a frame
+        delete sp.lockTag; sp.reference = null;
+      }
       keepOutlineType_(sp, o);                                                    // V.1_50
       return sp;
     });
@@ -2524,6 +2535,21 @@ function newWorkingPresentation_(name) {
 }
 
 // Draws every planned slide with the layout engine in the design chosen for it; progress slide by slide
+// V.1_55: a slide that failed to draw is drawn again as its title, its lead and its text as a plain list
+function safeSlideSpec_(sp) {
+  if (!sp || typeof sp !== 'object') return null;
+  const t = String(sp.type || '').toLowerCase();
+  if (['cover', 'agenda', 'closing', 'section', 'template'].indexOf(t) !== -1) return null;
+  const out = [];
+  (function walk(v, k) {
+    if (['title', 'lead', 'notes', 'reference', 'type', 'design', 'icon', 'material', 'deckLibrary', 'fact_tags', 'code', 'lockTag'].indexOf(k) !== -1) return;
+    if (typeof v === 'string') { if (/[A-Za-z]{3}/.test(v) && out.length < 8) out.push(v.replace(/\s+/g, ' ').trim().split(/\s+/).slice(0, 20).join(' ')); return; }
+    if (Array.isArray(v)) { v.forEach(function (x) { walk(x, ''); }); return; }
+    if (v && typeof v === 'object') Object.keys(v).forEach(function (kk) { walk(v[kk], kk); });
+  })(sp, '');
+  if (!out.length) return null;
+  return { type: 'bullets', title: sp.title || '', lead: sp.lead || '', points: out.slice(0, 6), notes: sp.notes || '', deckLibrary: sp.deckLibrary, section: sp.section };
+}
 function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
   if (typeof applyProposalFrame_ === 'function') applyProposalFrame_(specs, ctx);
   const stats = { slides: specs.length, fonts: 0, colors: 0, icons: 0, removed: 0, redrawn: 0, normalized: 0, failed: 0, libraryIcons: 0, issues: 0 };
@@ -2568,8 +2594,14 @@ function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
       renderEngineSlide(slide, specs[i], i + 1, ctx, pageW, pageH, dateLabel);
       stats.redrawn++;
     } catch (e) {
-      stats.failed++;
-      ctx.log.push('Slide ' + (i + 1) + ' could not be drawn: ' + e.message);
+      // V.1_55 (deck 26 slide 23 was left blank): the slide is drawn again as a plain list of its own text
+      let saved = false;
+      try {
+        const safe = safeSlideSpec_(specs[i]);
+        if (safe) { slide.getPageElements().forEach(function (el) { try { el.remove(); } catch (err) {} }); renderEngineSlide(slide, safe, i + 1, ctx, pageW, pageH, dateLabel); saved = true; stats.redrawn++; }
+      } catch (e2) {}
+      if (!saved) stats.failed++;
+      ctx.log.push('Slide ' + (i + 1) + (saved ? ' was redrawn as a simple list (' : ' could not be drawn (') + e.message + ').');
     }
     progressSlide_(ctx, i, 'done');
   });
@@ -4486,7 +4518,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_54';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_55';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
