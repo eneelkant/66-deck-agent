@@ -77,6 +77,7 @@
     return t;
   }
   function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.7)); }
+  var GENERIC_CHIP_RE_ = /^(current state|future state|today|impact|limitation|constraint|inefficiency|financial burden|resource gap|benefits?|challenges?|risks?|process|issues?|problems?|solutions?|outcomes?|gaps?|opportunity|value|cost|efficiency|key point|note)$/i;
 
   // V.1_53: dark slides (black with the content in white), like the dark card slides of the solution decks
   var DARK_BG = '#050B1F', DARK_CARD = '#111A33', DARK_LINE = '#26324F', DARK_HEAD = '#7FA4FF', DARK_BODY = '#D8DEEA', DARK_MUTED = '#9AA6BF';
@@ -229,7 +230,11 @@
     var els = [], P = pal(s);
     var top = hdr(els, s, P) + 2;
     var gap = 14, cw = (CW - gap) / 2, pad = 16, iw = cw - 2 * pad - 4;
-    var hasTag = items.some(function (it) { return it.tag; });
+    // V.1_54 (deck 25): a chip names a real owner or area: shown only when every box has its own, never a label such as
+    // "Current state" or "Impact"
+    var tags = items.map(function (it) { return it.tag.toLowerCase(); });
+    var hasTag = tags.every(function (t, i) { return t && t.split(/\s+/).length <= 3 && tags.indexOf(t) === i && !GENERIC_CHIP_RE_.test(t); });
+    if (!hasTag) items.forEach(function (it) { it.tag = ''; });
     var hB = K.linesBlock(items.map(function (it) { return it.title; }), iw, TSZ.heading, 500, 2);
     var pB = maxOf(items, function (it) { return ptsH(linesOf(it), iw, TSZ.body, 5); });
     var need = pad + hB + 8 + pB + (hasTag ? 26 : 0) + pad, avail = BOTTOM - top;

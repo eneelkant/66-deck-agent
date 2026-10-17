@@ -3891,6 +3891,38 @@ var ENGINE = (function () {
     (VARIANTS[type] || []).forEach(function (v) { if (!out) out = tryTag(v.tag, s); });
     SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, s); });
     if (out) return out;
+    // V.1_54: too much text for every design: the same content made shorter (first sentence of each text, at most 6
+    // items, 3 points each, 8 table rows) before it is gathered as text
+    var first = function (t) { var m = String(t || '').match(/^.+?[.!?](?=\s|$)/); return m ? m[0] : String(t || ''); };
+    var short = Object.assign({}, s);
+    if (Array.isArray(s.items)) short.items = s.items.slice(0, 6).map(function (it) {
+      if (!it || typeof it !== 'object') return it;
+      var c = Object.assign({}, it);
+      if (c.text) c.text = first(c.text);
+      if (Array.isArray(c.points)) c.points = c.points.slice(0, 3);
+      return c;
+    });
+    if (Array.isArray(s.rows)) short.rows = s.rows.slice(0, 8);
+    if (Array.isArray(s.points)) short.points = s.points.slice(0, 6).map(first);
+    (VARIANTS[type] || []).forEach(function (v) { if (!out) out = tryTag(v.tag, short); });
+    SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, short); });
+    if (out) return out;
+    // still too long: at most 4 items and 16 words per text (cut at a whole word)
+    var words = function (t) { var w = String(t || '').split(/\s+/); return w.length > 16 ? w.slice(0, 16).join(' ').replace(/[,;:]$/, '') + '.' : String(t || ''); };
+    var tiny = Object.assign({}, short);
+    if (Array.isArray(short.items)) tiny.items = short.items.slice(0, 4).map(function (it) {
+      if (!it || typeof it !== 'object') return typeof it === 'string' ? words(it) : it;
+      var c = Object.assign({}, it);
+      if (c.text) c.text = words(c.text);
+      if (Array.isArray(c.points)) c.points = c.points.slice(0, 3).map(words);
+      return c;
+    });
+    if (Array.isArray(short.points)) tiny.points = short.points.slice(0, 5).map(words);
+    if (Array.isArray(short.rows)) tiny.rows = short.rows.slice(0, 6);
+    (VARIANTS[type] || []).forEach(function (v) { if (!out) out = tryTag(v.tag, tiny); });
+    SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, tiny); });
+    if (out) return out;
+    s = tiny;
     // the slide's text as headed sections (or one list): every Solution deck can show that
     var real = function (t) { return /[A-Za-z0-9]{2,}/.test(String(t || '')); };
     var str = function (v) { return String(v == null ? '' : (typeof v === 'object' ? (v.text || v.title || v.label || '') : v)).trim(); };

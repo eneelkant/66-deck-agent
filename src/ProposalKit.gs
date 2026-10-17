@@ -399,15 +399,18 @@ function proposalKpiLabels_(sp) {
 }
 
 // The client's name keeps its own capitals everywhere ("a proposal for the home depot" -> "The Home Depot")
+const NAME_COMMON_WORDS_ = /^(water|global|united|first|national|general|american|british|european|international|smart|green|north|south|east|west|central|metro|health|energy|power|bank|capital|digital|cloud|home|food|retail|grand|great|royal|state|federal|pacific|atlantic|mountain|river|coast|island|valley|urban|modern|premier|prime|direct|alliance|summit|pioneer|frontier|liberty|heritage|harbor|harbour|bridge|union|trust|mutual|standard|universal|advanced|applied|integrated|precision|quality|secure|rapid|clear|bright|silver|golden|diamond|crystal|pinnacle|apex|vertex|delta|alpha|omega|summit|cold|fresh|total|super|ultra|mega|micro|meta|best|better|express|logistics|freight|systems|solutions|services|group|partners|holdings|industries|technologies|energy|foods|motors|airlines|health|medical|pharma|insurance|financial|media|labs)$/i;
 function restoreName_(o, name) {
   const words = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (!words.length) return;
   const re = new RegExp('\\b' + words.map(function (w) { return w.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&'); }).join('\\s+') + '\\b', 'gi');
+  // V.1_54 (deck 25: "existing harbourline systems"): the first word of a longer name keeps its capital on its own too
+  const first = words.length > 1 && words[0].length >= 5 && /^[A-Z][a-z]+$/.test(words[0]) && !NAME_COMMON_WORDS_.test(words[0]) ? new RegExp('\\b' + words[0] + '\\b', 'gi') : null;
   (function walk(v) {
     if (!v || typeof v !== 'object') return;
     Object.keys(v).forEach(function (k) {
       if (k === 'reference' || k === 'notes') return;
-      if (typeof v[k] === 'string') v[k] = v[k].replace(re, name);
+      if (typeof v[k] === 'string') { v[k] = v[k].replace(re, name); if (first) v[k] = v[k].replace(first, words[0]); }
       else if (typeof v[k] === 'object') walk(v[k]);
     });
   })(o);
@@ -824,6 +827,9 @@ const PROPOSAL_DESIGN_GUIDE_ = {
 };
 
 // The slide types whose designs suit a planned slide (its own type first)
+// V.1_54: the types a Solution slide may be drawn as (no timeline, team or workstream designs in that library)
+const SOLUTION_TYPE_OPTIONS_ = { timeline: ['process', 'cards'], team: ['diagram', 'cards'], workstream: ['process', 'cards'], comparison: ['comparison', 'table', 'cards'],
+  statement: ['statement', 'cards', 'bullets'], bullets: ['bullets', 'cards', 'statement'], quote: ['statement'], chart: ['chart', 'stats'], next_steps: ['statement', 'process'] };
 const PROPOSAL_TYPE_OPTIONS_ = {
   cards: ['cards', 'diagram', 'process'], process: ['process', 'diagram', 'cards'], diagram: ['diagram', 'cards', 'process'],
   comparison: ['comparison', 'table'], stats: ['stats'], table: ['table', 'comparison'], timeline: ['timeline'], team: ['team'],
@@ -841,7 +847,9 @@ function proposalShortlist_(o, used, lib) {
   const words = [o.title, o.message, o.brief].filter(Boolean).join(' ');
   const asked = /\b(credential|why 66degrees|why us|partner status|case stud|client result|success stor|next steps|pricing|price|rate card|package|screenshot)\b/i;
   const onlyIfAsked = { P66_LOGO_WALL: 1, P66_PACKAGES: 1, P66_STORIES: 1, P66_CASE_STUDY: 1, P66_NEXT_STEPS: 1, P66_BADGES: 1, P66_CREDENTIALS: 1, P66_PRICING: 1, P66_TEAM_PHOTOS: 1, P66_TEXT_SCREENSHOT: 1, S66_CLIENT_STORY: 1 };
-  const types = PROPOSAL_TYPE_OPTIONS_[String(o.type || 'cards').toLowerCase()] || ['cards', 'diagram', 'process'];
+  let types = PROPOSAL_TYPE_OPTIONS_[String(o.type || 'cards').toLowerCase()] || ['cards', 'diagram', 'process'];
+  // V.1_54: a Solution Deck has no timeline or team designs: a roadmap is shown as phases, a team as how it is run
+  if (lib === 'solution') types = (SOLUTION_TYPE_OPTIONS_[String(o.type || 'cards').toLowerCase()] || types);
   const out = [];
   types.forEach(function (type) {
     (ENGINE.VARIANTS[type] || []).forEach(function (v) {
@@ -852,11 +860,26 @@ function proposalShortlist_(o, used, lib) {
       out.push({ tag: v.tag, type: type, v: v });
     });
   });
+  // V.1_54: in a Solution Deck the designs the slide's words call for are offered first, even from a related type
+  // ("deployment layers" -> layer stack, "architecture" -> the architecture designs)
+  let wanted = [];
+  if (lib === 'solution' && typeof solutionKeywordDesigns_ === 'function') {
+    wanted = solutionKeywordDesigns_([o.title, o.message].filter(Boolean).join(' '));
+    wanted.forEach(function (tag) {
+      if (out.some(function (x) { return x.tag === tag; }) || (used && used[tag]) || !P[tag]) return;
+      Object.keys(ENGINE.VARIANTS).some(function (type) {
+        const v = (ENGINE.VARIANTS[type] || []).filter(function (x) { return x.tag === tag; })[0];
+        if (v) out.push({ tag: tag, type: type, v: v });
+        return !!v;
+      });
+    });
+  }
   // V.1_52: in a Solution Deck the designs that suit the tone of its content come first (technical: tables and flows...)
   if (lib === 'solution' && o.tone && typeof SOLUTION_TONE_BIAS_ !== 'undefined' && SOLUTION_TONE_BIAS_[o.tone]) {
     const bias = SOLUTION_TONE_BIAS_[o.tone];
     out.sort(function (a, b) { return (bias.indexOf(a.tag) === -1 ? 1 : 0) - (bias.indexOf(b.tag) === -1 ? 1 : 0); });
   }
+  if (wanted.length) out.sort(function (a, b) { return (wanted.indexOf(a.tag) === -1 ? 99 : wanted.indexOf(a.tag)) - (wanted.indexOf(b.tag) === -1 ? 99 : wanted.indexOf(b.tag)); });
   return out.slice(0, 8);
 }
 function proposalShortlistText_(list) {

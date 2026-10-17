@@ -436,6 +436,9 @@
     var top = K.header(els, s) + 2;
     var take = clean(s.takeaway), takeH = take ? 20 : 0;
     var gap = 7, lw = CW * 0.42, rw = CW - lw - 52, avail = BOTTOM - top - takeH;
+    // V.1_54 (deck 25): a fix is one or two short sentences; a long paragraph keeps its first sentence
+    rows.forEach(function (r) { if (th(r.fix, rw, 9, 400) > 3 * lh(9) + 1) r.fix = (r.fix.match(/^.+?[.;](?=\s|$)/) || [r.fix])[0].replace(/;$/, ''); });
+    if (rows.some(function (r) { return th(r.fix, rw, 9, 400) > 3 * lh(9) + 1; })) return null;
     var hs = rows.map(function (r) { return Math.max(30, Math.max(th(r.title, lw - 12, 9.5, 500), th(r.fix, rw, 9, 400)) + 14); });
     var total = hs.reduce(function (a, b) { return a + b; }, 0) + gap * (n - 1);
     if (total > avail) return null;

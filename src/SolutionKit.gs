@@ -173,6 +173,7 @@ function solutionOutlineRules_(ctx) {
     solutionToneCard_(tone),
     '- The sections tell ONE story: ' + arc + ' (with fewer sections, neighbouring parts share a section, in this order).',
     '- Each section has a "storyline": one sentence saying what the section proves.',
+    '- EVERY topic the request lists gets its OWN slide whose title names it (a section title never counts as covering a topic).',
     '- Each slide has a "message": the ONE thing it proves (max 110 characters), and "points": 2-4 short phrases (3-8 words) that ONLY this slide',
     '  covers. A point (a capability, a figure, a step, a product explanation) never appears on two slides.',
     '- The named parts of the solution (services, tiers, levels, layers, steps) keep the same names on every slide.',
@@ -282,6 +283,8 @@ function solutionContentPrompt_(a) {
     '- The slide shows what its title says (a "team and governance" title shows the team and how it is governed, not the rollout).',
     '- Labels and headings in sentence case ("Model type", never "Model Type"); a label is text, never a field name: "Source: in-truck devices", not "source: in-truck devices".',
     '- Never start a point with ✓ or ✗ (the design adds the marks); never write markdown such as `code` marks.',
+    '- A chip, tag or owner is a real team or role ("Dispatch", "Data team"); leave it out rather than write a label such as "Current state" or "Impact".',
+    '- No KPI, target, risk, scope or assumption slide unless the request asks for it; never invent a target figure.',
     '- Results (pilot, tests, savings) only as the request or the attached material gives them; a result nobody gave is a target ("Target: ...").',
     '- Sentence case everywhere (titles, headings, labels): only the first word, names and acronyms capitalised.',
     '- Item headings 2-5 words, never starting with a number; item texts in the voice above (labelled phrases), similar length on one slide.',
@@ -335,7 +338,7 @@ function solutionVoiceClean_(sp) {
   if (!sp || typeof sp !== 'object') return sp;
   (function walk(o) {
     Object.keys(o).forEach(function (k) {
-      if (k === 'reference' || k === 'design' || k === 'type' || k === 'icon' || k === 'material' || k === 'notes') return;
+      if (k === 'reference' || k === 'design' || k === 'type' || k === 'icon' || k === 'material' || k === 'notes' || k === 'code') return;   // (V.1_54: a code block is left exactly as written)
       const v = o[k];
       if (typeof v === 'string') o[k] = solutionVoiceText_(v);
       else if (v && typeof v === 'object') walk(v);
@@ -360,7 +363,7 @@ var SOLUTION_MARK_RE_ = /^\s*[✓✔✗✘×❌✅☑]️?\s*/;
 // keys whose text is a heading or label (sentence case); keys never touched
 var SOLUTION_HEAD_KEYS_ = { title: 1, label: 1, heading: 1, name: 1, timing: 1, funding: 1, tag: 1, owner: 1, chip: 1, role: 1, step: 1, stage: 1, level: 1, region: 1, zone: 1, group: 1, bar: 1, tier: 1 };
 var SOLUTION_SKIP_KEYS_ = { reference: 1, notes: 1, design: 1, type: 1, icon: 1, material: 1, fact_tags: 1, lockTag: 1, code: 1, value: 1, url: 1, href: 1, deckLibrary: 1, sectionStyle: 1, number: 1 };
-function solutionCodeLike_(w) { return /[_(){}<>=]|^\.|\.\w+\(|^(i[A-Z]|e[A-Z]|e\.g\.|vs\b|kubectl|gcloud|gsutil|bq\b|npm|pip|git\b|terraform\s+(plan|apply|init))/.test(w); }
+function solutionCodeLike_(w) { return /[_(){}<>=]|^\.|\.\w+\(|[a-z]-?\d|^[a-z]+[A-Z]|^(i[A-Z]|e[A-Z]|e\.g\.|vs\b|kubectl|gcloud|gsutil|bq\b|npm|pip|git\b|terraform\s+(plan|apply|init))/.test(w); }   // V.1_54: ids such as us-central1-a stay as written
 function solutionCapFirst_(t) {
   const s = String(t || '');
   const first = (s.match(/^\S+/) || [''])[0];
@@ -508,21 +511,27 @@ function solutionRescue_(sp) {
 var SOLUTION_OFFTOPIC_RE_ = /\b(market|industry|trends?|landscape|imperative|opportunit(?:y|ies)|future of)\b/i;
 function solutionStems_(o) {
   const t = [o && o.title, o && o.message, (o && o.points || []).join(' ')].join(' ');
-  return typeof topicStems_ === 'function' ? Object.keys(topicStems_(t, true)).filter(function (w) { return w.charAt(0) !== '#'; }) : String(t).toLowerCase().split(/\W+/).filter(function (w) { return w.length > 4; });
+  return typeof topicStems_ === 'function' ? Object.keys(topicStems_(t.toLowerCase(), false)).filter(function (w) { return w.charAt(0) !== '#'; }) : String(t).toLowerCase().split(/\W+/).filter(function (w) { return w.length > 4; });
 }
 // indexes of outline entries to replace: a near copy of an earlier slide, or an unrequested topic
 function solutionOutlineChecks_(slides, prompt, tone, before) {
   const out = [];
   const req = String(prompt || '');
-  const seen = (before || []).map(solutionStems_);
-  const cmpSeen = (before || []).filter(function (o) { return o && o.type === 'comparison'; }).map(solutionStems_);
+  // V.1_54: the words of the deck's subject (leak, meter, water...) are on most slides: they never make two slides repeats
+  const all = (before || []).concat(slides || []).filter(function (o) { return o && o.type !== 'section'; });
+  const df = {};
+  all.forEach(function (o) { const seenW = {}; solutionStems_(o).forEach(function (w) { if (!seenW[w]) { seenW[w] = 1; df[w] = (df[w] || 0) + 1; } }); });
+  const common = function (w) { return all.length >= 5 && df[w] > Math.max(2, all.length * 0.25); };
+  const stemsOf = function (o) { return solutionStems_(o).filter(function (w) { return !common(w); }); };
+  const seen = (before || []).map(stemsOf);
+  const cmpSeen = (before || []).filter(function (o) { return o && o.type === 'comparison'; }).map(stemsOf);
   (slides || []).forEach(function (o, i) {
     if (!o || o.type === 'section') { seen.push([]); return; }
-    const st = solutionStems_(o);
+    const st = stemsOf(o);
     const dup = st.length >= 2 && seen.some(function (prev) {
       if (prev.length < 2) return false;
       const shared = st.filter(function (w) { return prev.indexOf(w) !== -1; }).length;
-      return shared >= 3 || shared / Math.min(st.length, prev.length) >= 0.6;
+      return shared >= 4 || (shared >= 2 && shared / Math.min(st.length, prev.length) >= 0.7);
     }) || (o.type === 'comparison' && cmpSeen.some(function (prev) { return st.some(function (w) { return prev.indexOf(w) !== -1; }); }));   // the same comparison twice
     if (o.type === 'comparison') cmpSeen.push(st);
     const words = (String(o.title || '').match(SOLUTION_OFFTOPIC_RE_) || [])[0];
@@ -568,18 +577,144 @@ var SOLUTION_DARK_ONLY_ = { S66_DARK_STATEMENT: 1, S66_U_JOURNEY: 1, S66_SERVICE
 function solutionDarkRhythm_(specs, ctx) {
   if (!specs || !specs.length || !isSolutionDeck_(ctx)) return 0;
   const p = ctx.proposal || (ctx.proposal = { client: null, logoId: '', sectionStyle: 'dark' });
-  let since = typeof p.sinceDark === 'number' ? p.sinceDark : 2, n = 0;
+  let since = typeof p.sinceDark === 'number' ? p.sinceDark : 2, n = 0, blockNext = false;
   specs.forEach(function (sp) {
     if (!sp) return;
     const t = String(sp.type || '').toLowerCase();
     if (t === 'cover' || t === 'agenda' || t === 'closing') return;
     const tag = (sp.reference && sp.reference.tag) || sp.lockTag || '';
-    if (t === 'section') { if (tag !== 'P66_SECTION_LIGHT') since = 0; return; }
-    if (SOLUTION_DARK_ONLY_[tag]) { since = 0; return; }
-    if (SOLUTION_DARK_OK_[tag] && since >= 4) { sp.dark = true; since = 0; n++; return; }
+    // V.1_54 (deck 25): a dark divider only keeps the slide right after it light (it used to restart the count, so
+    // sections of 3-4 slides never had a dark slide)
+    if (t === 'section') { if (tag !== 'P66_SECTION_LIGHT') blockNext = true; return; }
+    if (SOLUTION_DARK_ONLY_[tag]) { since = 0; blockNext = true; return; }
+    if (SOLUTION_DARK_OK_[tag] && since >= 4 && !blockNext) { sp.dark = true; since = 0; n++; return; }
     delete sp.dark;
+    blockNext = false;
     since++;
   });
   p.sinceDark = since;
   return n;
+}
+
+/* ---------- 12. V.1_54: what fills a short Solution outline (deck 25) ----------
+   A Solution outline that comes back short was filled from the Proposal list (risks, KPIs, scope, assumptions, testing,
+   change management): deck 25 lost architecture, prediction and support priorities to them. A Solution Deck fills first
+   with the topics the request lists, then with solution topics of its tone. */
+var SOLUTION_BACKLOG_ = {
+  technical: [
+    { type: 'diagram', title: 'How the solution works end to end', brief: 'The components and how data flows between them' },
+    { type: 'process', title: 'Integration with existing systems', brief: 'How the solution connects to the systems the client runs today' },
+    { type: 'cards', title: 'Monitoring and observability', brief: 'What is monitored, the alerts and who receives them' },
+    { type: 'table', title: 'Configuration and sizing', brief: 'The main settings and sizes of the components' },
+    { type: 'process', title: 'How the solution is deployed', brief: 'The deployment steps from code to production' },
+    { type: 'cards', title: 'Operating the platform day to day', brief: 'Who runs it, routine tasks and runbooks' }],
+  executive: [
+    { type: 'cards', title: 'What changes for the business', brief: 'The difference the solution makes for each team' },
+    { type: 'process', title: 'How we get there', brief: 'The stages from start to value' },
+    { type: 'statement', title: 'The decision needed', brief: 'What the sponsors are asked to approve' },
+    { type: 'cards', title: 'How the solution works', brief: 'The solution in plain words' }],
+  offering: [
+    { type: 'cards', title: 'What is included', brief: 'The services and deliverables in the offer' },
+    { type: 'process', title: 'How we deliver it', brief: 'The delivery model from onboarding to run' },
+    { type: 'table', title: 'Service levels and support', brief: 'Support hours and response times (only as the request gives them)' },
+    { type: 'statement', title: 'How to get started', brief: 'The first step and what it involves' }],
+  enablement: [
+    { type: 'cards', title: 'Learning levels and formats', brief: 'The levels, who they are for and their formats' },
+    { type: 'process', title: 'The rollout plan', brief: 'Cohorts, champions and timing' },
+    { type: 'cards', title: 'How adoption is measured', brief: 'What is tracked to see the change land' }],
+  internal: [
+    { type: 'cards', title: 'What is working', brief: 'Results and wins so far' },
+    { type: 'cards', title: 'Gaps and what they cost', brief: 'Where we fall short and the impact' },
+    { type: 'cards', title: 'The asks and owners', brief: 'What we need and who owns it' }]
+};
+function solutionBacklog_(tone, prompt) {
+  const list = (SOLUTION_BACKLOG_[tone] || SOLUTION_BACKLOG_.executive).concat(tone === 'technical' ? [] : SOLUTION_BACKLOG_.technical.slice(0, 2));
+  return list.map(function (b) { return Object.assign({}, b); });
+}
+// a requested topic Gemini left out becomes its own slide, of the type its words call for
+function solutionTopicEntry_(topic) {
+  const t = String(topic || '').replace(/\s*\([^)]*\)/g, '').trim();
+  const words = String(topic || '');
+  const type = /architecture|data flow|topology|region|\bdr\b|layers?|stack/i.test(words) ? 'diagram'
+    : /\bvs\.?\b|versus|compared|today|before and after|manual .* automat/i.test(words) ? 'comparison'
+    : /priorit|sla|slo|matrix|table|sizing|thresholds?/i.test(words) ? 'table'
+    : /runbook|steps?|process|pipeline|stream|ingest|deploy|run book|cut-?over|onboard|prediction|model/i.test(words) ? 'process'
+    : /next step|decision|ask/i.test(words) ? 'statement'
+    : /results?|metrics?|kpis?|figures/i.test(words) ? 'stats' : 'cards';
+  let title = t.charAt(0).toUpperCase() + t.slice(1);
+  if (/^(the )?next steps?$/i.test(t)) title = 'The next step';
+  return { type: type, title: title.length > 58 ? title.slice(0, 58).replace(/\s+\S*$/, '') : title, brief: 'The requested topic: ' + t, message: 'Covers the requested topic: ' + t };
+}
+
+/* ---------- 13. V.1_54: the designs a slide's words call for come first in its list ----------
+   Deck 25: "deployment layers" got numbered cards, the architecture got no diagram. A word in the title puts the design
+   made for it at the top of the slide's shortlist (the tone order follows). */
+var SOLUTION_KEYWORD_DESIGNS_ = [
+  [/\barchitecture\b|\bend to end\b|how .* works|components/i, ['S66_ARCH_NUMBERED', 'S66_ARCH_ICON_GRAPH']],
+  [/data flow|pipeline|\bstream(s|ing|ed)?\b|\bingest\w*|request path/i, ['S66_ARCH_ICON_GRAPH', 'S66_LABEL_ROWS', 'S66_STEP_COLUMNS']],
+  [/\blayers?\b|\bstack\b|\btiers? of\b/i, ['S66_LAYER_STACK', 'S66_LABEL_ROWS']],
+  [/regions?|\bdr\b|disaster recovery|failover|high availability|topology/i, ['S66_REGION_TOPOLOGY']],
+  [/priorit|\bslas?\b|\bslos?\b|response time|support levels?/i, ['S66_PRIORITY_TABLE', 'S66_PLAIN_TABLE']],
+  [/runbook|run book|known issues|troubleshoot|day-?2/i, ['S66_ISSUE_ROWS', 'S66_STEP_COLUMNS']],
+  [/cut-?over|migration steps|onboarding steps|\bsteps\b/i, ['S66_STEP_COLUMNS', 'S66_LABEL_ROWS']],
+  [/\bvs\.?\b|versus|compared|today and|before and after|manual .* automat/i, ['S66_TWO_MODE_COMPARE', 'S66_CROSS_CHECK', 'S66_COMPARE_STATUS_TABLE']],
+  [/\brisks?\b|mitigat/i, ['S66_ISSUE_ROWS']],
+  [/needs?|requirements/i, ['S66_NEED_MAPPING']],
+  [/security|controls|protect/i, ['S66_LAYER_STACK', 'S66_THREE_CARD_COLUMNS', 'S66_QUAD_RULE_CARDS']],
+  [/next step|decision|get started|getting started/i, ['S66_EXPLAINER_SPLIT', 'S66_DARK_STATEMENT']],
+  [/levels?|pathway|learning/i, ['S66_LEVEL_CARDS', 'S66_RISING_STAGES']],
+  [/journey|transition|from kickoff|end-to-end/i, ['S66_U_JOURNEY', 'S66_PHASE_TIMELINE_BARS']],
+  [/phases?|roadmap|timeline|plan\b/i, ['S66_PHASE_TIMELINE_BARS', 'S66_LABEL_ROWS']],
+  [/tiers?|packages?|offers?|offerings?/i, ['S66_OFFER_TIERS', 'S66_LEVEL_CARDS']],
+  [/results?|tests?|scorecard|proved|validation/i, ['S66_SCORECARD', 'S66_CHART_INSIGHT', 'S66_NUMBERED_CARD_GRID']],
+  [/\bcode\b|script|configur|setting/i, ['S66_CODE_PROBLEM_SOLUTION', 'S66_TABLE_NOTES']],
+  [/governance|operating model|how we run|support model|team/i, ['S66_SERVICE_HUB_DARK', 'S66_LIFECYCLE_COLUMNS']]
+];
+function solutionKeywordDesigns_(words) {
+  const out = [];
+  SOLUTION_KEYWORD_DESIGNS_.forEach(function (row) { if (row[0].test(String(words || ''))) row[1].forEach(function (t) { if (out.indexOf(t) === -1) out.push(t); }); });
+  return out;
+}
+
+/* ---------- 14. V.1_54: a roadmap in a Solution Deck is phases with their timing (the Gantt is a Proposal design) ---------- */
+function solutionTimelineAsProcess_(sp) {
+  if (!sp || String(sp.type || '').toLowerCase() !== 'timeline') return false;
+  const per = Array.isArray(sp.periods) ? sp.periods.map(String) : [];
+  let items = Array.isArray(sp.items) ? sp.items.filter(Boolean) : [];
+  if (!items.length && Array.isArray(sp.lanes)) {
+    items = sp.lanes.filter(Boolean).map(function (l) {
+      const bars = Array.isArray(l.bars) ? l.bars : [];
+      const a = bars.length ? Math.min.apply(null, bars.map(function (b) { return +b.start || 1; })) : 0;
+      const b = bars.length ? Math.max.apply(null, bars.map(function (x) { return +x.end || +x.start || 1; })) : 0;
+      const timing = per.length && a ? (per[a - 1] || '') + (b && b !== a && per[b - 1] ? '–' + per[b - 1] : '') : '';
+      return { title: String(l.name || l.title || ''), timing: timing, points: bars.map(function (x) { return String(x.label || ''); }).filter(Boolean) };
+    });
+  }
+  if (!items.length && Array.isArray(sp.points)) items = sp.points.map(function (p) { return { title: String(p) }; });
+  items = items.map(function (it) {
+    if (typeof it === 'string') return { title: it };
+    return Object.assign({}, it, { title: it.title || it.label || it.name, timing: it.timing || it.date || it.period || it.when || '' });
+  });
+  ['lanes', 'periods', 'tasks', 'workstreams'].forEach(function (k) { delete sp[k]; });
+  sp.type = 'process';
+  sp.items = items;
+  if (sp.design && !/^S66_/.test(String(sp.design))) delete sp.design;
+  return true;
+}
+
+// V.1_54: a requested topic counts as covered by a slide whose title holds most of the topic's own words (deck 25 replay:
+// "Security controls (IAM / VPC Service Controls / CMEK)" and "Securing data with defense-in-depth" became two slides)
+function solutionTopicCovered_(slides, topic) {
+  if (typeof topicStems_ !== 'function') return false;
+  const ts = Object.keys(topicStems_(String(topic || '').replace(/\([^)]*\)/g, ' ').toLowerCase(), false));
+  if (!ts.length) return false;
+  // the next step is covered by any slide that proposes one (a workshop, a pilot, a decision to start)
+  if (/next steps?|getting started|how to start/i.test(topic) && (slides || []).some(function (o) {
+    return o && o.type !== 'section' && /next step|workshop|initiate|get(ting)? started|kick-?off|start with|first step|decision|approve/i.test(String(o.title || ''));
+  })) return true;
+  return (slides || []).some(function (o) {
+    if (!o || o.type === 'section') return false;
+    const ss = topicStems_([o.title, o.message].filter(Boolean).join(' ').toLowerCase(), false);   // (lower case: a first word is not a name)
+    return ts.filter(function (w) { return ss[w]; }).length / ts.length >= 0.5;
+  });
 }
