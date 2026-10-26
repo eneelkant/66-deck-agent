@@ -400,12 +400,22 @@
     K.roundrect(els, CX, y, CW, 22, T.blue);
     K.text(els, CX + 12, y, CW - 24, 22, banner, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
     y += 22 + 8;
+    // V.1_57 (deck 30: "Audit POS and shrink schemas, Map regional warehouse feeds, Define ..."): a group's points read
+    // as one sentence, joined with semicolons, later points starting in lower case (acronyms stay)
+    var asSentence = function (pts) {
+      var t = pts.map(function (p, k) {
+        p = String(p).trim().replace(/[.;,]+$/, '');
+        return k && /^[A-Z][a-z]/.test(p) ? p.charAt(0).toLowerCase() + p.slice(1) : p;
+      }).join('; ');
+      return t ? t + '.' : t;
+    };
+    groups.forEach(function (g) { g.sentence = asSentence(g.points); });
     var cols = m <= 4 && m !== 3 ? 2 : 3, rows = Math.ceil(m / cols), cg = 12, gw = (CW - cg * (cols - 1)) / cols, iw = gw - 30;
     var rowNeed = [];
     for (var r = 0; r < rows; r++) {
       var mx = 0;
       groups.slice(r * cols, r * cols + cols).forEach(function (g) {
-        mx = Math.max(mx, 10 + th(g.label, iw, TSZ.heading, 500) + 6 + th(g.points.join(', '), iw, TSZ.body) + 10);
+        mx = Math.max(mx, 10 + th(g.label, iw, TSZ.heading, 500) + 6 + th(g.sentence, iw, TSZ.body) + 10);
       });
       rowNeed.push(mx);
     }
@@ -419,7 +429,7 @@
       K.rect(els, x, gy, gw, gh, T.white, { color: LINE, width: 0.75 });
       K.rect(els, x, gy, 4, gh, SLATE);
       var ht = heading(els, x + 16, gy + 10, iw, g.label, T.ink, 2);
-      body(els, x + 16, gy + 10 + ht.height + 6, iw, gh - ht.height - 26, g.points.join(', '));
+      body(els, x + 16, gy + 10 + ht.height + 6, iw, gh - ht.height - 26, g.sentence);
     });
     return { bg: T.white, els: els, noBalance: true };
   });

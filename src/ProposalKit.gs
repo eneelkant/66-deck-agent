@@ -729,7 +729,7 @@ function proposalCoerce_(sp, ctx, used) {
   // that shows all the points is better
   const many = (Array.isArray(sp.items) ? sp.items.filter(Boolean).length : 0) >= 2 || (Array.isArray(sp.points) ? sp.points.length : 0) >= 2 ||
     ((sp.left && (sp.left.points || []).length) || 0) + ((sp.right && (sp.right.points || []).length) || 0) >= 2 || (Array.isArray(sp.rows) && sp.rows.length >= 2) ||   // V.1_50: two columns of points too
-    (sp.deckLibrary === 'solution' && typeof solutionTextCount_ === 'function' && solutionTextCount_(sp) >= 2);   // V.1_56: points in other fields too (deck 29 security slide)
+    (typeof solutionTextCount_ === 'function' && solutionTextCount_(sp) >= 2);   // V.1_56 / V.1_57: points in other fields too (deck 29 security slide, Sprouts team slide)
   for (let i = 0; i < alts.length; i++) {
     if (many && proposalTypeOf_(alts[i]) === 'statement') continue;
     if (!proposalDrawable_(alts[i], used).length) continue;
@@ -739,10 +739,11 @@ function proposalCoerce_(sp, ctx, used) {
     return true;
   }
   // V.1_53: a Solution slide no Solution design can show becomes text sections or a bullet list (never a General layout)
-  if (sp.deckLibrary === 'solution' && !proposalDrawable_(sp).length && typeof solutionRescue_ === 'function') {
+  // (V.1_57: a Proposal slide too - the Sprouts team slide kept only its title)
+  if (!proposalDrawable_(sp).length && typeof solutionRescue_ === 'function') {
     const before = sp.type;
     if (solutionRescue_(sp) && proposalDrawable_(sp).length) {
-      if (ctx && ctx.log) ctx.log.push('Solution design: "' + String(sp.title || '').slice(0, 50) + '" shown as text (no Solution design could show it as ' + before + ').');
+      if (ctx && ctx.log) ctx.log.push((sp.deckLibrary === 'solution' ? 'Solution' : 'Proposal') + ' design: "' + String(sp.title || '').slice(0, 50) + '" shown as text (no Solution design could show it as ' + before + ').');
       return true;
     }
   }
@@ -937,6 +938,12 @@ function proposalContentPrompt_(a) {
     '- No 66degrees credentials, case study, next steps or pricing unless the request asks for them.',
     '- Process / cards items carry an "icon": one concrete concept for that item (e.g. "shield", "database", "wrench"), each different on a slide.',
     '- Plain text only: no markdown, no asterisks, no line breaks inside a text, no reference markers like [1] in slide text.',
+    // V.1_57 (deck 30 review)
+    '- Current Google Cloud names: Pub/Sub, Dataflow, Dataproc, Cloud Run functions, Looker Studio (never "Cloud Pub/Sub", "Cloud Dataflow", IoT Core).',
+    '- A figure from industry research is labelled as an industry figure on the slide ("Industry benchmark: ...", "Across grocers, ..."), never shown as the client\'s number.',
+    '- A KPI value is a figure ("25%", "3x", "$2M"); a point in time ("Week 1", "Q3", "Day 30") is never a KPI. A roadmap shows every phase the plan names, Phase 1 first.',
+    '- Titles state what the slide shows; never promise a result the research does not support ("cuts waste in half" only with that figure on the slide).',
+    '- The notes match the slide (same products, numbers and design); a passive disaster recovery region runs no active services; two requested topics are never merged into one slide.',
     '- "notes": 2-3 sentences for the presenter, with research source numbers like [2] when used. "fact_tags": IDs of approved facts used, or [].',
     'APPROVED FACTS ABOUT ' + ctx.brand.name.toUpperCase() + ' (the only claims allowed about it):\n' + (a.approvedFacts || []).slice(0, 25).map(function (f) { return '- ' + f; }).join('\n'),
     (a.facts && a.facts.verify && a.facts.verify.length) ? 'Facts to use only if essential (add "Verify before sharing." to the notes): ' + a.facts.verify.slice(0, 6).join(' | ') : '',

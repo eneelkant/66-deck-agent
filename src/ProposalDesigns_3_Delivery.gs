@@ -190,10 +190,28 @@
       l.bars = l.bars.map(function (b) {
         var st = idx(b.start), en = b.end != null ? idx(b.end) : st;
         return { start: st, end: Math.max(st, en), label: b.label || '', group: b.group, milestone: !!b.milestone };
-      }).filter(function (b) { return isFinite(b.start) && b.start >= 1 && b.start <= periods.length; });
-      l.bars.forEach(function (b) { b.end = Math.min(b.end, periods.length); });
+      }).filter(function (b) { return isFinite(b.start) && b.start <= periods.length && b.end >= 1; });
+      // V.1_57: a bar that starts before the first period (start 0) is drawn from period 1, not dropped
+      l.bars.forEach(function (b) { b.start = Math.max(1, b.start); b.end = Math.min(Math.max(b.end, b.start), periods.length); });
     });
-    return lanes.filter(function (l) { return l.name && l.bars.length; });
+    lanes = lanes.filter(function (l) { return l.name && l.bars.length; });
+    // V.1_57: the roadmap names "Phase 2" and "Phase 3" but has no Phase 1 lane: the first phase gets its own lane
+    // in the free periods before Phase 2, so the plan never starts at Phase 2
+    var phaseNo = function (l) { var m = /\bphase\s*(\d)\b/i.exec(l.name); return m ? Number(m[1]) : 0; };
+    var nums = lanes.map(phaseNo).filter(Boolean);
+    if (nums.length && nums.indexOf(1) < 0 && nums.indexOf(2) >= 0) {
+      var p2 = lanes.filter(function (l) { return phaseNo(l) === 2; })[0];
+      var firstStart = Math.min.apply(null, p2.bars.map(function (b) { return b.start; }));
+      if (firstStart > 1) {
+        var said = String([s.text, s.subtitle, s.notes, s.lead].join(' '));
+        var m1 = /phase\s*1\s*[:(\-–—]\s*([a-z][a-z ,&-]{3,40})/i.exec(said);
+        var what = m1 ? m1[1].replace(/[\s,]+$/, '') : 'Discovery and data foundation';
+        what = what.charAt(0).toUpperCase() + what.slice(1);
+        lanes.unshift({ name: 'Phase 1: ' + what, bars: [{ start: 1, end: firstStart - 1, label: what, group: undefined, milestone: false }] });
+        if (typeof Logger !== 'undefined') Logger.log('V.1_57 Gantt: added the missing Phase 1 lane (periods 1-' + (firstStart - 1) + ').');
+      }
+    }
+    return lanes;
   }
   add('P66_GANTT', 'timeline', { min: 2, max: 8, needs: 'periods',
     desc: 'Gantt roadmap: blue period header, 3-6 workstream rows (never fewer than 3), bars spanning periods with short labels, legend (periods[] 4-12, lanes[{name, bars[{start, end, label, group}]}] or tasks[{name, lane, start, end, label, group}], start/end = period numbers from 1; legend[] names the groups; a bar with milestone:true is a diamond)', words: '30-60' }, function (s) {
@@ -233,7 +251,7 @@
       units += l.u;
     });
     var hasMs = lanes.some(function (l) { return l.bars.some(function (b) { return b.milestone && b.label; }); });
-    var rowsTop = top + headH + 4, unitH = Math.min(nl <= 3 ? 64 : nl <= 4 ? 52 : nl <= 5 ? 42 : (hasMs ? 36 : 32), (BOTTOM - legH - rowsTop) / units);   // V.1_47: few lanes fill the slide
+    var rowsTop = top + headH + 4, unitH = Math.min(nl <= 3 ? 64 : nl <= 4 ? 52 : nl <= 5 ? 42 : (hasMs ? 42 : 32), (BOTTOM - legH - rowsTop) / units);   // V.1_47: few lanes fill the slide
     if (unitH < 24) return null;
     var gridH = units * unitH;
     // header row
@@ -253,24 +271,81 @@
       var y = l.y, rowH = l.h;
       K.text(els, CX + 10, y, labelW - 16, rowH, l.name, { weight: 500, max: nSize, min: nSize, maxLines: 2, valign: 'middle', color: T.ink });
       var trackH = rowH / l.tracks;
+      // V.1_57: every label is measured with the wider brand font (Google Slides sets it about 12% wider than the
+      // metrics) and placed where it overlaps nothing: inside the bar, inside on two lines, beside the bar in free
+      // space, or (milestones) above / below the diamond. A label with no free place rejects the Gantt (another design).
+      var taken = [];                                    // label and bar boxes already in this row
+      var hits = function (bx) {
+        return taken.some(function (o) { return bx.x < o.x + o.w && o.x < bx.x + bx.w && bx.y < o.y + o.h && o.y < bx.y + bx.h; });
+      };
+      var lwOf = function (t) { return K.textWidth(t, 'sans', 500, 9) * 1.12 + 6; };
+      var trackH0 = rowH / l.tracks;
+      l.bars.forEach(function (b) {
+        if (b.milestone) return;
+        var bx0 = gx + (b.start - 1) * pw + 3, bw0 = (b.end - b.start + 1) * pw - 6;
+        b.box = { x: bx0, w: bw0 };
+        var bh0 = Math.min(18, (l.tracks > 1 ? trackH0 - 4 : trackH0 - 12));
+        var room = l.tracks > 1 ? (rowH - 8) / l.tracks - 2 : rowH - 8;
+        b.bh = bh0;
+        if (b.label && lwOf(b.label) > bw0 - 12 && room >= 28) {
+          // two lines inside a taller bar when each half fits
+          var words = String(b.label).split(/\s+/), best = null;
+          for (var k = 1; k < words.length; k++) {
+            var a = words.slice(0, k).join(' '), c = words.slice(k).join(' ');
+            var wmax = Math.max(lwOf(a), lwOf(c));
+            if (wmax <= bw0 - 12 && (!best || wmax < best)) best = wmax;
+          }
+          if (best) { b.two = true; b.bh = Math.min(room, 28); }
+        }
+        b.by = l.tracks > 1 ? y + 4 + b.track * (rowH - 8) / l.tracks + ((rowH - 8) / l.tracks - b.bh) / 2 : y + (rowH - b.bh) / 2;
+        taken.push({ x: bx0, y: b.by, w: bw0, h: b.bh });
+      });
+      l.bars.forEach(function (b) {
+        if (!b.milestone) return;
+        var mx = gx + (b.start - 0.5) * pw, d = 11;
+        b.mx = mx;
+        taken.push({ x: mx - d / 2, y: y + rowH / 2 - d / 2, w: d, h: d });
+      });
+      var failed = false;
       l.bars.forEach(function (b) {
         var fill = colorOf(b, i);
         if (b.milestone) {
-          var mx = gx + (b.start - 0.5) * pw, d = 11;
-          K.shape(els, 'DIAMOND', mx - d / 2, y + rowH / 2 - d / 2 + (b.label ? 5 : 0), d, d, T.blue);
-          if (b.label) K.text(els, mx - 60, y + rowH / 2 - 17, 120, 12, b.label, { weight: 500, max: 9, min: 9, maxLines: 1, align: 'center', color: T.blue });
+          var mx = b.mx, d = 11;
+          var dy = y + rowH / 2 - d / 2;
+          K.shape(els, 'DIAMOND', mx - d / 2, dy, d, d, T.blue);
+          if (!b.label) return;
+          var lw = lwOf(b.label);
+          var lx = Math.max(gx + 2, Math.min(gx + gw - lw - 2, mx - lw / 2));
+          var spots = [{ x: lx, y: dy - 14, w: lw, h: 12 }, { x: lx, y: dy + d + 2, w: lw, h: 12 }];
+          // beside the diamond when there is no room above or below
+          spots.push({ x: mx + d / 2 + 4, y: dy - 1, w: lw, h: 12 });
+          spots.push({ x: mx - d / 2 - 4 - lw, y: dy - 1, w: lw, h: 12 });
+          var spot = spots.filter(function (sp) {
+            return sp.y >= y + 1 && sp.y + sp.h <= y + rowH - 1 && sp.x >= gx && sp.x + sp.w <= gx + gw && !hits(sp);
+          })[0];
+          if (!spot) { failed = true; return; }
+          taken.push(spot);
+          K.text(els, spot.x, spot.y, spot.w, spot.h, b.label, { weight: 500, max: 9, min: 9, maxLines: 1, align: spot.x === lx ? 'center' : 'left', valign: 'middle', color: T.blue });
           return;
         }
-        var x = gx + (b.start - 1) * pw + 3, w = (b.end - b.start + 1) * pw - 6, bh = Math.min(18, (l.tracks > 1 ? trackH - 4 : trackH - 12));
-        var by = l.tracks > 1 ? y + 4 + b.track * (rowH - 8) / l.tracks + ((rowH - 8) / l.tracks - bh) / 2 : y + (rowH - bh) / 2;
+        var x = b.box.x, w = b.box.w, bh = b.bh, by = b.by;
         K.roundrect(els, x, by, w, bh, fill);
         if (!b.label) return;
-        var lw = K.textWidth(b.label, 'sans', 500, 9) * 1.06;
-        if (lw <= w - 12) K.text(els, x + 6, by, w - 10, bh, b.label, { weight: 500, max: 9, min: 9, maxLines: 1, valign: 'middle', color: K.onFill(fill) });
-        else if (gx + gw - (x + w) > lw + 10) K.text(els, x + w + 5, by, lw + 6, bh, b.label, { weight: 500, max: 9, min: 9, maxLines: 1, valign: 'middle', color: T.ink });
-        else K.text(els, x + 4, by, w - 6, bh, b.label, { weight: 500, max: 9, min: 9, maxLines: 1, valign: 'middle', color: K.onFill(fill) });
+        var lw2 = lwOf(b.label);
+        if (lw2 <= w - 12) { K.text(els, x + 6, by, w - 10, bh, b.label, { weight: 500, max: 9, min: 9, maxLines: 1, valign: 'middle', color: K.onFill(fill) }); return; }
+        if (b.two) { K.text(els, x + 6, by, w - 10, bh, b.label, { weight: 500, max: 9, min: 9, maxLines: 2, valign: 'middle', color: K.onFill(fill) }); return; }
+        var right = { x: x + w + 5, y: by, w: lw2, h: bh }, left = { x: x - 5 - lw2, y: by, w: lw2, h: bh };
+        var side = [right, left].filter(function (sp) { return sp.x >= gx && sp.x + sp.w <= gx + gw && !hits(sp); })[0];
+        if (!side) { failed = true; return; }
+        taken.push(side);
+        K.text(els, side.x, side.y, side.w, side.h, b.label, { weight: 500, max: 9, min: 9, maxLines: 1, valign: 'middle', align: side === left ? 'right' : 'left', color: T.ink });
       });
+      if (failed) l.failed = true;
     });
+    if (lanes.some(function (l) { return l.failed; })) {
+      if (typeof Logger !== 'undefined') Logger.log('V.1_57 Gantt: a label had no free place next to its bar; another design is used.');
+      return null;
+    }
     // legend
     if (legend.length) {
       var ly = rowsTop + gridH + 18, widths = legend.map(function (l) { return 16 + K.textWidth(l, 'sans', 400, 9) + 24; });

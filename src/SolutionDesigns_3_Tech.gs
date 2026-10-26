@@ -136,6 +136,23 @@
     if (n < 3 || n > 6 || groups.some(function (g) { return g.items.length > 4; })) return null;
     var notes = K.arr(s.callouts || s.steps, 8).map(function (x) { return clean(typeof x === 'object' ? (x && (x.text || x.title)) : x); }).filter(real);
     if (notes.length > 7) return null;
+    // V.1_57 (deck 30: the notes repeated "Tier 1:", "Tier 2:" next to the same numbered groups): the number is shown
+    // once, so a note starts with what it adds; a note that only names its group's products is left out
+    notes = notes.map(function (t, i) {
+      var g = groups[i];
+      t = t.replace(/^(tier|layer|group|zone|stage|step)\s*\d+\s*[:.\-–—]\s*/i, '');
+      if (g && g.label && t.toLowerCase().indexOf(g.label.toLowerCase().replace(/^(tier|layer|group)\s*\d+\s*[:.\-–—]\s*/i, '') + ':') === 0) t = t.slice(t.indexOf(':') + 1).trim();
+      return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+    });
+    var addsSomething = function (t, i) {
+      var g = groups[i];
+      if (!g) return true;
+      var words = t.toLowerCase().match(/[a-z0-9][a-z0-9\-\/]+/g) || [];
+      var known = (g.label + ' ' + g.items.map(function (it) { return it.title + ' ' + (it.text || ''); }).join(' ')).toLowerCase();
+      return words.filter(function (w) { return w.length > 3 && known.indexOf(w) === -1; }).length >= 2;
+    };
+    // the notes are numbered like the groups: when most of them only repeat their group, none are shown
+    if (notes.filter(addsSomething).length < Math.ceil(notes.length / 2)) notes = [];
     var els = [];
     var top = K.header(els, s) + 2;
     var nw = notes.length ? 186 : 0, gx = notes.length ? 14 : 0;
@@ -468,6 +485,13 @@
       .filter(function (r) { return r.label && r.left && r.right; });
     var n = rows.length;
     var cols = K.arr(s.columns || s.modes, 3).map(cellText).filter(Boolean);
+    // V.1_57 (deck 30: "Manual crane inspections vs predicted alerts" lost its two columns): the two ways come from
+    // the column names, else from the "A vs B" title, else today / proposed
+    if (cols.length === 3) cols = cols.slice(1);
+    if (cols.length !== 2) {
+      var vs = String(s.title || '').split(/\s+(?:vs\.?|versus)\s+/i);
+      cols = vs.length === 2 ? vs.map(function (x) { var t = x.trim(); return t.charAt(0).toUpperCase() + t.slice(1); }) : ['Today', 'Proposed'];
+    }
     if (n < 3 || n > 6 || cols.length !== 2) return null;
     var els = [];
     var top = K.header(els, s) + 2;
@@ -475,6 +499,8 @@
     var headH = 30, avail = BOTTOM - top - headH - 6;
     var bh = maxOf(rows, function (r) { return Math.max(th(r.left, bw - 16, 9.5, 400), th(r.right, bw - 16, 9.5, 400)) + 16; });
     var rg = 8;
+    // V.1_57: five rows with a lead line: tighter boxes and gaps before the design gives up
+    if (bh * n + rg * (n - 1) > avail) { bh -= 6; rg = 5; }
     if (bh * n + rg * (n - 1) > avail) return null;
     bh = Math.min(48, Math.max(bh, (avail - rg * (n - 1)) / n * 0.8));
     var bx1 = x0 + lw + gap, bx2 = bx1 + bw + gap;

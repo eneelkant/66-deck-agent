@@ -154,7 +154,11 @@ function solutionToneCard_(tone) {
     'IN THIS TONE:', t.voice.map(function (l) { return '- ' + l; }).join('\n'),
     'EXAMPLES OF THE VOICE (lines from 66degrees solution decks: copy the style, never the facts, figures or names):',
     t.examples.map(function (l) { return '- "' + l + '"'; }).join('\n'),
-    'NEVER: emoji, hashtags, exclamation marks, ALL CAPS labels, Title Case titles, hype words, invented products, clients, prices or results.'
+    'NEVER: emoji, hashtags, exclamation marks, ALL CAPS labels, Title Case titles, hype words, invented products, clients, prices or results.',
+    // V.1_57 (deck 30 review)
+    'ALSO: current Google Cloud names (Pub/Sub, Dataflow, Cloud Run functions; never "Cloud Pub/Sub", "Cloud Dataflow" or IoT Core); a figure from industry ' +
+    'research is labelled on the slide as an industry figure; no 66degrees results, credentials or proof boxes unless the request asks; the notes name the same ' +
+    'products and design as the slide; a passive disaster recovery region runs no active services; two topics the request lists (e.g. support and the next step) are two slides.'
   ].join('\n');
 }
 

@@ -1678,6 +1678,8 @@ var ENGINE = (function () {
     var top = header(els, s);
     var lw = 236, avail = BOTTOM - top;
     var story = s.takeaway || s.lead || '';
+    // V.1_57: without a statement the left half was empty with a lone blue rule: another design is used
+    if (!String(story).trim()) return null;
     // Left: the statement, centred vertically against the stats, with a blue rule
     var st = fit(String(story || ''), lw - 22, avail - 20, { weight: 500, max: 17, min: 13 });
     var sy = top + Math.max(0, (avail - st.height) / 2);
@@ -2199,6 +2201,29 @@ var ENGINE = (function () {
     var b = it.text ? text(els, x, y + h.height + 2, w, 60, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: maxLines || 3, align: align, color: T.body }) : { height: 0 };
     return h.height + 2 + b.height;
   }
+  // V.1_57: Google Slides sets the brand font wider than the metrics, so a caption is checked at 6% less width:
+  // a caption that would be cut (a title over 2 lines, a text over maxLines) rejects the design instead
+  function capFits(it, w, maxLines) {
+    var ww = w / 1.06;
+    return wrap(String(it.title || ''), ww, 'sans', 500, TSZ.heading).length <= 2 &&
+      (!it.text || wrap(String(it.text), ww, 'sans', 400, TSZ.body).length <= (maxLines || 3));
+  }
+  // V.1_57: does a text box touch a wedge or ring segment (angles clockwise from 3 o'clock, as arc() draws them)?
+  function boxHitsArcs(b, arcs) {
+    for (var gx = 0; gx <= 8; gx++) for (var gy = 0; gy <= 4; gy++) {
+      var px = b.x + b.w * gx / 8, py = b.y + b.h * gy / 4;
+      for (var k = 0; k < arcs.length; k++) {
+        var a = arcs[k], dx = px - a.cx, dy = py - a.cy, d = Math.sqrt(dx * dx + dy * dy);
+        if (d > a.r + 3 || d < (a.inner || 0) - 3) continue;
+        var ang = ((Math.atan2(dy, dx) * 180 / Math.PI) - a.start + 720) % 360;
+        if (ang <= a.sweep || d < 6) return true;
+      }
+    }
+    return false;
+  }
+  function boxesHit(a, b) { return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h; }
+  // V.1_57: a centre label that does not fit in two lines is left out (never cut to "Five decisions leadership…")
+  function centerFits(str, w) { return !!str && wrap(String(str), w / 1.06, 'sans', 500, 10).length <= 2; }
   function capH(it, w, maxLines) {
     return lineHeight('sans', TSZ.heading) * Math.min(2, wrap(String(it.title || ''), w, 'sans', 500, TSZ.heading).length) + 2 +
       (it.text ? Math.min(maxLines || 3, wrap(String(it.text), w, 'sans', 400, TSZ.body).length) * lineHeight('sans', TSZ.body) : 0);
@@ -2349,10 +2374,15 @@ var ENGINE = (function () {
     var cx = 300, cy = top + (BOTTOM - top) / 2, r = Math.min(118, (BOTTOM - top) / 2 - 6), fills = DIA_FILLS();
     if (intro) text(els, CX, cy - 60, 170, 130, intro, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body, valign: 'middle' });
     ellipse(els, cx - r * 0.64, cy - r * 0.64, r * 1.28, r * 1.28, T.bgLight);
-    text(els, cx - 40, cy - 14, 64, 28, s.center || '', { weight: 500, max: TSZ.heading, min: 10, maxLines: 2, align: 'center', color: T.ink });
+    // V.1_57: the centre label uses the free inner circle (it was a 64pt box, so a short phrase was cut)
+    var cw0 = r * 1.0;
+    if (centerFits(s.center, cw0)) text(els, cx - cw0 / 2, cy - 18, cw0, 36, s.center, { weight: 500, max: TSZ.heading, min: 10, maxLines: 2, align: 'center', valign: 'middle', color: T.ink });
     var capX = cx + r + 40, capW = CX + CW - capX, rowH = (BOTTOM - top) / n;
     // captions must not run into each other (V.1_37: 5 three-line captions overlapped): otherwise another design is used
     if (items.some(function (it) { return capH(it, capW, 3) + 16 > rowH; })) return null;
+    // V.1_57: a caption is never cut, and the intro on the left never reaches the half donut
+    if (items.some(function (it) { return !capFits(it, capW, 3); })) return null;
+    if (intro && wrap(String(intro), 170 / 1.06, 'sans', 400, TSZ.body).length * lineHeight('sans', TSZ.body) > 130 + 2) return null;
     items.forEach(function (it, i) {
       var start = -90 + i * sweep, mid = (start + sweep / 2) * Math.PI / 180;
       arc(els, 'ring', cx, cy, r, sweep, start, fills[i % 3]);
@@ -2373,18 +2403,40 @@ var ENGINE = (function () {
     var els = [];
     var top = header(els, s);
     var cx = W / 2, cy = BOTTOM - 28, fills = DIA_FILLS(), capW = 170;
-    items.forEach(function (it, i) {
-      var r = 92 + i * 12, start = 180 + i * sweep, mid = (start + sweep / 2) * Math.PI / 180;
-      arc(els, 'pie', cx, cy, r, sweep, start, fills[i % 3]);
-      icon(els, autoIcon(it), cx + r * 0.7 * Math.cos(mid) - 9, cy + r * 0.7 * Math.sin(mid) - 9, 18, fills[i % 3] !== T.slate, pad2(i + 1));
-      var lx = cx + (r + 26) * Math.cos(mid), ly = cy + (r + 26) * Math.sin(mid), ch = capH(it, capW, 3);
+    // V.1_57: captions sit outside the largest wedge (not beside their own, where the next, larger wedge ran under
+    // them); every caption box is checked against all wedges, the other captions and the slide edges, and a caption
+    // that would be cut or would touch anything rejects the fan (another design is used)
+    var arcs = items.map(function (it, i) { return { cx: cx, cy: cy, r: 92 + i * 12, start: 180 + i * sweep, sweep: sweep }; });
+    var rOut = 92 + (n - 1) * 12 + 18, boxes = [];
+    if (items.some(function (it) { return !capFits(it, capW, 3); })) return null;
+    var plan = items.map(function (it, i) {
+      var mid = (arcs[i].start + sweep / 2) * Math.PI / 180, ch = capH(it, capW, 3);
+      var lx = cx + rOut * Math.cos(mid), ly = cy + rOut * Math.sin(mid);
       var align = Math.cos(mid) < -0.3 ? 'right' : Math.cos(mid) > 0.3 ? 'left' : 'center';
       var tx = align === 'right' ? lx - capW : align === 'left' ? lx : lx - capW / 2;
-      caption(els, Math.max(CX, Math.min(tx, CX + CW - capW)), Math.max(top, ly - ch / 2 - (align === 'center' ? ch / 2 : 0)), capW, it, align, 3);
+      var ty = align === 'center' ? ly - ch : ly - ch / 2;
+      if (align !== 'center' && Math.sin(mid) < -0.3) ty = ly - ch * 0.8;          // upper side captions lean upwards
+      var b = { x: Math.max(CX, Math.min(tx, CX + CW - capW)), y: ty, w: capW, h: ch };
+      return { it: it, mid: mid, align: align, box: b };
+    });
+    var bad = plan.some(function (p) {
+      var b = p.box;
+      if (b.y < top + 2 || b.y + b.h > BOTTOM) return true;
+      if (boxHitsArcs(b, arcs)) return true;
+      if (boxes.some(function (o) { return boxesHit(b, o); })) return true;
+      boxes.push(b);
+      return false;
+    });
+    if (bad) return null;
+    items.forEach(function (it, i) {
+      var a = arcs[i], mid = plan[i].mid;
+      arc(els, 'pie', cx, cy, a.r, sweep, a.start, fills[i % 3]);
+      icon(els, autoIcon(it), cx + a.r * 0.7 * Math.cos(mid) - 9, cy + a.r * 0.7 * Math.sin(mid) - 9, 18, fills[i % 3] !== T.slate, pad2(i + 1));
+      caption(els, plan[i].box.x, plan[i].box.y, capW, it, plan[i].align, 3);
     });
     ellipse(els, cx - 46, cy - 46, 92, 92, T.white);
     rect(els, cx - 50, cy, 100, 30, T.white);
-    text(els, cx - 42, cy - 34, 84, 30, s.center || '', { weight: 500, max: TSZ.heading, min: 10, maxLines: 2, align: 'center', color: T.ink });
+    if (centerFits(s.center, 84)) text(els, cx - 42, cy - 34, 84, 30, s.center, { weight: 500, max: TSZ.heading, min: 10, maxLines: 2, align: 'center', color: T.ink });
     return { bg: T.white, els: els, noBalance: true };
   };
 
@@ -3891,12 +3943,26 @@ var ENGINE = (function () {
         var o = V[t](spec, lctx);
         if (!o || contentCount_(o) === 0) return null;
         o.drawnWith = t;
+        if (textOverlaps_(o).length) return null;                     // V.1_57: never texts on top of each other
         if (cutCount_(o)) { if (!loose || cutCount_(o) < cutCount_(loose)) loose = o; return null; }
         return o;
       } catch (e) { return null; }
     };
     var out = null;
     (VARIANTS[type] || []).forEach(function (v) { if (!out) out = tryTag(v.tag, s); });
+    // V.1_57: a row-by-row comparison keeps its rows and columns as a table before it becomes text sections
+    var cmpRows = Array.isArray(s.rows) ? s.rows.filter(function (r) { return r && typeof r === 'object' && !Array.isArray(r) && (r.label || r.aspect) && (r.left || r.before) && (r.right || r.after); }) : [];
+    if (!out && cmpRows.length >= 2) {
+      var cc = arr(s.columns, 3).map(function (c) { return typeof c === 'string' ? c : (c && (c.title || c.label)) || ''; }).filter(Boolean);
+      if (cc.length === 3) cc = cc.slice(1);
+      if (cc.length !== 2) {
+        var vs = String(s.title || '').split(/\s+(?:vs\.?|versus)\s+/i);
+        cc = vs.length === 2 ? vs.map(function (x) { x = x.trim(); return x.charAt(0).toUpperCase() + x.slice(1); }) : ['Today', 'Proposed'];
+      }
+      var tspec = Object.assign({}, s, { type: 'table', columns: ['Aspect'].concat(cc),
+        rows: cmpRows.map(function (r) { return [String(r.label || r.aspect), String(r.left || r.before), String(r.right || r.after)]; }) });
+      ['S66_PLAIN_TABLE', 'S66_COMPARE_STATUS_TABLE'].forEach(function (t) { if (!out) out = tryTag(t, tspec); });
+    }
     SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, s); });
     if (out) return out;
     // V.1_54: too much text for every design: the same content made shorter (first sentence of each text, at most 6
@@ -3971,6 +4037,30 @@ var ENGINE = (function () {
     if (!out && real(s.lead || s.statement)) out = tryTag('S66_DARK_STATEMENT', Object.assign({}, s, { statement: cutW(s.statement || s.lead, 16), text: '' }));
     return out || loose;
   }
+  // V.1_57: where a text box's words really sit (lines re-wrapped at the drawn size, aligned in the box)
+  function inkBox_(e) {
+    var w = e.w - INSET * 2, h = e.h - INSET * 2;
+    var lines = wrap(String(e.text || ''), w, e.font || 'sans', Math.min(e.weight || 400, 500), e.size);
+    var lw = 0;
+    lines.forEach(function (l) { lw = Math.max(lw, textWidth(l, e.font || 'sans', Math.min(e.weight || 400, 500), e.size) * 1.06); });
+    lw = Math.min(lw, w);
+    var th = lines.length * lineHeight(e.font || 'sans', e.size);
+    var x = e.x + INSET + (e.align === 'center' ? (w - lw) / 2 : e.align === 'right' ? w - lw : 0);
+    var y = e.y + INSET + (e.valign === 'middle' ? (h - th) / 2 : e.valign === 'bottom' ? h - th : 0);
+    return { x: x, y: y, w: lw, h: th };
+  }
+  // V.1_57: two texts of a design whose words run into each other (deck 30: Gantt labels, fan captions): the pairs
+  function textOverlaps_(out) {
+    var ts = ((out && out.els) || []).filter(function (e) { return e && e.t === 'text' && !e.rot && String(e.text || '').trim() && e.size; })
+      .map(function (e) { return { e: e, b: inkBox_(e) }; });
+    var hits = [];
+    for (var i = 0; i < ts.length; i++) for (var j = i + 1; j < ts.length; j++) {
+      var a = ts[i].b, b = ts[j].b;
+      var ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      if (ox > 2 && oy > 3) hits.push([ts[i].e.text, ts[j].e.text]);
+    }
+    return hits;
+  }
   function layoutSlideGuarded_(s, type, lctx) {
     var tag = s.reference && s.reference.tag;
     // Design libraries never mix: a Proposal Deck only uses proposal designs (frame slides have one strict design),
@@ -3983,6 +4073,12 @@ var ENGINE = (function () {
     // V.1_55: a design that fails on unexpected content never stops the slide (deck 26: a blank slide); the next design draws it
     if (tag && V[tag] && variantOf(type, tag)) { try { out = V[tag](s, lctx); } catch (e) { out = null; } }
     if (out && contentCount_(out) === 0) out = null;
+    // V.1_57: a design whose texts run into each other (deck 30: Gantt labels over the next bar, fan captions over the
+    // wedges) gives way to another design; the overlap check measures the words, not the text boxes
+    if (out && !FRAME_TYPES_[type] && textOverlaps_(out).length) {
+      if (typeof Logger !== 'undefined' && Logger.log) Logger.log('V.1_57 overlap: ' + tag + ' would put two texts on top of each other; another design is used.');
+      out = null;
+    }
     // V.1_53: a Solution slide is never drawn with a General layout (deck 24): another Solution design that can show the
     // content, or the content gathered as headed text sections / two bullet columns
     if (out) out.drawnWith = tag;
@@ -4192,6 +4288,7 @@ var ENGINE = (function () {
   return {
     addProposalDesign: addProposalDesign, addSolutionDesign: addSolutionDesign, shareDesign: shareDesign, kit: KIT,
     inLibrary: function (tag, lib) { return inLib_(tag, lib === 'proposal' || lib === 'solution' ? lib : 'general'); },
+    textOverlaps: textOverlaps_,
     titleFits: function (t) { return wrap(String(t), TITLE_W, 'sans', 500, 20).length <= 1; },
     titleMaxChars: function (t) { return maxCharsFor(t, TITLE_W, 20, 500); },
     agendaTextFits: function (t) { return wrap(String(t), AGENDA_DESC_W, 'sans', 400, 11).length <= 1; },
