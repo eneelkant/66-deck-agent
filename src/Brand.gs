@@ -381,6 +381,11 @@ function callGeminiJSON(parts, apiKey, temperature) {
       if (Date.now() - started > 150000) break;
 
       let result = null;
+      // V.1_56: newer models (Gemini 3.x, 4) take a reasoning level; Gemini 2.5 rejects it, so it is sent per model
+      if (typeof geminiThinkingConfig_ === 'function') {
+        const tc = geminiThinkingConfig_(models[m]);
+        if (tc) payload.generationConfig.thinkingConfig = tc; else delete payload.generationConfig.thinkingConfig;
+      }
       try {
         result = callVertexGemini_(payload, { model: models[m] }).result;
       } catch (e) {
@@ -406,12 +411,14 @@ function callGeminiJSON(parts, apiKey, temperature) {
         .replace(/```/g, '')
         .trim();
       try {
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        if (typeof noteGeminiModel_ === 'function') noteGeminiModel_(models[m], m > 0);   // V.1_56: which model answered
+        return parsed;
       } catch (e) {
         const start = raw.indexOf('{');
         const end = raw.lastIndexOf('}');
         if (start !== -1 && end > start) {
-          try { return JSON.parse(raw.slice(start, end + 1)); } catch (e2) {}
+          try { const p2 = JSON.parse(raw.slice(start, end + 1)); if (typeof noteGeminiModel_ === 'function') noteGeminiModel_(models[m], m > 0); return p2; } catch (e2) {}
         }
         lastError = 'Vertex AI returned invalid JSON.';
         if (attempt < waits.length) continue;

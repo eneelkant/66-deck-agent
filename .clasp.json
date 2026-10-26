@@ -42,6 +42,7 @@
     "Rebrand.gs",
     "Code.gs",
     "Generator.html",
-    "appsscript.json"
+    "appsscript.json",
+    "ModelTest.gs"
   ]
 }

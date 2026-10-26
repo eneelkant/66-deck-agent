@@ -30,9 +30,12 @@
 var CONFIG = {
   brandFolderId: '1LbKMz0b-VRnOvNnTCCZHRuq0iejaX30Y',   // "66° Deck Agent Assets > 01_Brand_Assets" (66degrees shared drive)
 
-  model: 'gemini-2.5-flash',     // pinned to the model with a free-tier quota; the 3.x models are paid-only on this key
+  // V.1_56: the models come from Script properties (see runModels_): Gemini 4 Argon writes, Gemini 3.8 Flash checks and
+  // researches, Nano Banana 2 draws icons; Gemini 2.5 Flash stays the fallback. withModel_ sets a model for one call.
+  get model() { return MODEL_OVERRIDE_ ? MODEL_OVERRIDE_ : runModels_().check; },
+  set model(v) { MODEL_OVERRIDE_ = v || null; },
   preferProModel: false,
-  imageModel: 'auto',
+  get imageModel() { return runModels_().image; },
   maxGeneratedIconsPerRun: 3,
 
   beautifulApiBase: 'https://www.beautiful.ai/api/v1',
@@ -82,7 +85,24 @@ function buildProductionMenu_() {
     .addItem('Refresh brand kit', 'refreshBrandKit')
     .addItem('Refresh brand assets', 'refreshBrandAssets')
     .addItem('Set up template (harvest)', 'harvestReferenceDeck')
+    .addSeparator()
+    .addItem('Show last result', 'showLastResult')
+    .addItem('Test AI models', 'testAiModels')
     .addToUi();
+}
+
+// V.1_56: the message of the last deck (the sidebar can lose it on a long run)
+function showLastResult() {
+  let last = null;
+  try { last = JSON.parse(PropertiesService.getUserProperties().getProperty('LAST_RESULT_V1') || 'null'); } catch (e) {}
+  const ui = SlidesApp.getUi();
+  if (!last || !last.message) { ui.alert('66° Deck Agent', 'No result yet: make a deck first.', ui.ButtonSet.OK); return; }
+  ui.alert('66° Deck Agent — last result (' + String(last.at || '').replace('T', ' ').slice(0, 16) + ' UTC)', last.message, ui.ButtonSet.OK);
+}
+// V.1_56: one tiny request to each model this add-on is set to use, from the menu
+function testAiModels() {
+  const ui = SlidesApp.getUi();
+  ui.alert('66° Deck Agent — AI models', typeof testConfiguredModels_ === 'function' ? testConfiguredModels_() : 'Model test not available.', ui.ButtonSet.OK);
 }
 
 function showGenerator() {
@@ -218,6 +238,8 @@ function describeAssets(assets) {
 ========================= */
 
 function generationResult_(message, presentation, slideCount) {
+  // V.1_56: the last result is kept, so "Show last result" in the menu can show it when the sidebar did not
+  try { PropertiesService.getUserProperties().setProperty('LAST_RESULT_V1', JSON.stringify({ at: new Date().toISOString(), message: String(message || '').slice(0, 8000) })); } catch (e) {}
   var pres = presentation;
   if (!pres) {
     try { pres = SlidesApp.getActivePresentation(); } catch (e) { pres = null; }
@@ -499,6 +521,8 @@ function generatePresentationRun_(data, run) {
   const secs = Math.round((Date.now() - started) / 1000);
   let msg = 'SUCCESS: ' + copied + ' branded slides added to this presentation (' + secs + 's). ' + summarizeStats(stats) +
     '\n' + AGENT_VERSION_ + ' · Presentation type: ' + (ctx.presentationType || 'General') + '.';
+  const usedShort = modelsUsedLine_(mergeModelsUsed_({}));                       // V.1_56
+  if (usedShort) msg += '\n' + usedShort;
   if (ctx.roundIssue) msg += '\nRounded boxes: not available (' + ctx.roundIssue + '); square boxes were used.';
   if (ctx.arcIssue) msg += '\nDiagram rings and pie segments: not drawn (' + ctx.arcIssue + ').';
   if (ctx.iconAttempts && !ctx.libraryIconsPlaced) {
@@ -1054,7 +1078,7 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
   sources.pdfs.forEach(function (b64) { parts.push({ inline_data: { mime_type: 'application/pdf', data: b64 } }); });
   (sources.images || []).forEach(function (im) { parts.push({ inline_data: { mime_type: im.mime, data: im.data } }); });
 
-  const plan = callGeminiJSON(parts, ctx.apiKey, usePlanner ? 0.4 : 0.7);          // V.1_51: steadier writing for proposals
+  const plan = withContentModel_(ctx, function () { return callGeminiJSON(parts, ctx.apiKey, usePlanner ? 0.4 : 0.7); });   // V.1_51 / V.1_56: written by the content model
   if (!plan || !Array.isArray(plan.slides) || !plan.slides.length) throw new Error('Gemini returned no slide content.');
   plan.slides = plan.slides.map(function (sp) { return ENGINE.cleanSpec(sp); });   // strip stray color codes
   plan.slides = normalizeSpecialSlides_(plan.slides, userPrompt, sources, ctx);    // real template slides, real people only
@@ -1076,6 +1100,7 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
       solutionGivenTimes_(plan.slides, userPrompt, sources);                     // proposed response times flagged in the notes
       solutionLeadNotBrief_(plan.slides, batch);                                  // the lead is never the plan's brief
       plan.slides.forEach(solutionThinBullets_);                                  // three-word bullets become items with their text
+      if (typeof solutionFactsClean_ === 'function') plan.slides.forEach(function (sp) { solutionFactsClean_(sp, userPrompt, approvedFacts); });   // V.1_56: retired products, claims, filler
     }
   }
   plan.slides = plan.slides.map(function (sp) { return realChartOrStats_(sp); }); // charts only with real multi-point data
@@ -1188,7 +1213,7 @@ function architectureAsDiagram_(slides, ctx) {
       'Return ONLY JSON: {"slides":[{"id":0,"columns":[...],"links":[...],"takeaway":""}]}',
       JSON.stringify(list)
     ].join('\n');
-    const out = callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.3);
+    const out = withContentModel_(ctx, function () { return callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.3); });   // V.1_56: client-facing text
     let n = 0;
     ((out && out.slides) || []).forEach(function (r) {
       const i = todo[r && r.id];
@@ -1306,7 +1331,7 @@ function riskSlidesWithMitigations_(slides, ctx) {
       'Return ONLY JSON: {"slides":[{"id":0,"risks":[...]}]}',
       JSON.stringify(list)
     ].join('\n');
-    const out = callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.3);
+    const out = withContentModel_(ctx, function () { return callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.3); });   // V.1_56: client-facing text
     let n = 0;
     ((out && out.slides) || []).forEach(function (r) {
       const i = todo[r && r.id];
@@ -2440,12 +2465,14 @@ function callGeminiText_(parts, apiKey, opts) {
   if (opts.tools) body.tools = opts.tools;
   let lastError = 'no response';
   for (let m = 0; m < models.length; m++) {
+    const tc = geminiThinkingConfig_(models[m]);                                       // V.1_56
+    if (tc) body.generationConfig.thinkingConfig = tc; else delete body.generationConfig.thinkingConfig;
     for (let attempt = 0; attempt < (opts.attempts || 2); attempt++) {
       try {
         const json = callVertexGemini_(body, { model: models[m] }).result;
         const cand = json.candidates && json.candidates[0];
         const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
-        if (text) return { text: text, grounding: (cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [] };
+        if (text) { noteGeminiModel_(models[m], m > 0); return { text: text, grounding: (cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [] }; }
         lastError = 'empty response';
       } catch (e) {
         lastError = e.message;
@@ -2506,8 +2533,13 @@ function finalizeNotes_(plan, sources) {
     const list = Object.keys(used).map(Number).sort(function (a, b) { return a - b; }).map(function (k) {
       const src = research.filter(function (r) { return r.n === k; })[0];
       if (!src) return '';
-      return '[' + k + '] ' + src.title + (src.journal ? ' (' + src.journal + (src.year ? ', ' + src.year : '') + ')' : (src.year ? ' (' + src.year + ')' : '')) + (src.url ? ' ' + src.url : (src.doi ? ' doi:' + src.doi : ''));
+      // V.1_56: Google Search redirect links expire and say nothing: the title and publisher are kept, not the link
+      const url = src.url && !/grounding-api-redirect|vertexaisearch\.cloud\.google\.com/i.test(src.url) ? ' ' + src.url : '';
+      return '[' + k + '] ' + src.title + (src.journal ? ' (' + src.journal + (src.year ? ', ' + src.year : '') + ')' : (src.year ? ' (' + src.year + ')' : '')) + (url || (src.doi ? ' doi:' + src.doi : ''));
     }).filter(Boolean);
+    // (V.1_56: a "Source: x.com" line Gemini wrote is left out when the Sources list follows)
+    if (list.length) notes = notes.replace(/\s*\bSources?:\s*[^\n]*$/gim, '').trim();
+    notes = notes.replace(/\s*https?:\/\/vertexaisearch\.cloud\.google\.com\/grounding-api-redirect\/\S+/g, '');
     // V.1_39: every content slide has presenter notes (deck 15: six slides had none)
     if (!notes.replace(/Illustrative figure[^.]*\.|Verify before sharing\.|Check before sharing:[^.]*\./gi, '').trim()) notes = (presenterNotes_(sp) + (notes ? ' ' + notes : '')).trim();
     if (list.length) notes += (notes ? '\n\n' : '') + 'Sources:\n' + list.join('\n');
@@ -3629,9 +3661,24 @@ function requestedTopics_(prompt) {
     tail = i !== -1 ? p.slice(i + 1) : (p.match(/\b(?:cover|covering|include|including|about)\b(.+)$/i) || [])[1] || '';
   }
   tail = tail.replace(/^[\s.,;:]+/, '').split(/\.\s+(?=[A-Z])|\n/)[0];   // the list ends with its sentence
+  // V.1_56 (deck 29): "Condition-based maintenance for 1,200 rail switches on Google Cloud: sensor readings, ..." - the
+  // subject before a colon is not a topic, and a thousands separator ("1,200") never splits a topic
+  const inner = tail.match(/^[^:]{8,140}:\s*(.+)$/);
+  if (inner && (inner[1].match(/,/g) || []).length >= 2) tail = inner[1];
+  tail = tail.replace(/(\d),(\d{3})\b/g, '$1$2');
   // commas inside brackets belong to one topic: "a phased plan (discovery, pilot in one region, scale)"
   tail = tail.replace(/\(([^)]*)\)/g, function (m, inner) { return '(' + inner.replace(/,\s*/g, ' / ').replace(/\band\b/g, '&') + ')'; });
-  return tail.split(/,|;|\band\b|\n/i).map(function (x) { return x.replace(/^\s*(a|an|the)\s+/i, '').replace(/[.]+$/, '').trim(); })
+  // V.1_56: "a primary and DR region design" is one topic: a lone modifier before "and" joins the next part
+  const MOD_ = /^(?:a |an |the )?(primary|secondary|public|private|internal|external|current|future|manual|automated|batch|streaming|real-time|on-premises|cloud|hot|warm|cold)$/i;
+  const raw = tail.split(/,|;|\n/).reduce(function (acc, chunk) {
+    const bits = chunk.split(/\band\b/i);
+    for (let b = 0; b < bits.length; b++) {
+      if (b + 1 < bits.length && MOD_.test(bits[b].trim())) { bits[b + 1] = bits[b].trim() + ' and' + bits[b + 1]; continue; }
+      acc.push(bits[b]);
+    }
+    return acc;
+  }, []);
+  return raw.map(function (x) { return x.replace(/^\s*(a|an|the)\s+/i, '').replace(/[.]+$/, '').trim(); })
     .filter(function (x) { return x && x.replace(/\([^)]*\)/g, '').trim().split(/\s+/).length <= 8 && x.length >= 3; }).slice(0, 14);
 }
 // V.1_39: the parts a requested topic lists in brackets ("phased plan (discovery / pilot in one region / scale)")
@@ -3947,7 +3994,7 @@ function fillThinSlides_(plan, ctx) {
       'Return ONLY JSON: {"fixes":[{"id":0,"add":[...]}]}',
       JSON.stringify(list)
     ].join('\n');
-    const out = callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.4);
+    const out = withContentModel_(ctx, function () { return callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.4); });   // V.1_56: client-facing text
     let n = 0;
     ((out && out.fixes) || []).forEach(function (f) {
       const x = thin[f.id];
@@ -4304,7 +4351,7 @@ function replaceDuplicateSlides_(plan, ctx) {
       'Never write "X is no longer Y; it is Z" or "not just X, but Y": state the point directly. No outcome or target slide when the deck already has one.',
       'Return ONLY JSON: {"slides":[...]}'
     ].filter(Boolean).join('\n');
-    const out = callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.6);
+    const out = withContentModel_(ctx, function () { return callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.6); });   // V.1_56: client-facing text
     fresh = ((out && out.slides) || []).map(function (sp) { return ENGINE.cleanSpec(sp); });
   } catch (e) {
     ctx.log.push('Duplicate slide check: could not write a replacement (' + e.message + ').');
@@ -4518,7 +4565,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_55';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_56';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -4553,6 +4600,7 @@ function continueDeckGeneration(runId) {
 // deleted when the run ends
 function saveRunState_(runId, st) {
   try { if (CacheService.getUserCache().get('cancel_' + runId)) { deleteRunState_(runId); return; } } catch (e) {}
+  if (st && typeof st === 'object') st.models = mergeModelsUsed_(st.models);   // V.1_56: models used, kept across the parts
   const json = JSON.stringify(st);
   const props = PropertiesService.getUserProperties();
   const key = 'RUNSTATE_' + runId;
@@ -4766,7 +4814,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
         'Each slide also has "message" (what it proves, max 110 characters) and "points" (2-4 short phrases only it covers).',
         'Return ONLY JSON: {"slides":[{"type":"","title":"","message":"","points":[""],"brief":"","section":1}]}'
       ].join('\n');
-      const extra = callGeminiJSON([{ text: topPrompt }], ctx.apiKey, 0.6);
+      const extra = withContentModel_(ctx, function () { return callGeminiJSON([{ text: topPrompt }], ctx.apiKey, 0.6); });   // V.1_56
       const before = flat();
       fresh = ((extra && extra.slides) || []).filter(function (o) {
         if (!o || !o.title) return false;
@@ -4820,6 +4868,22 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
   if (flat().length > body) {                           // never more than asked: the largest section gives back
     while (flat().length > body) { const big = secs.slice().sort(function (a, b) { return b.list.length - a.list.length; })[0]; big.list.pop(); }
   }
+  // V.1_56 (decks 27-29): a Solution Deck always ends its body with the next step (a slide, not a line on the closing)
+  const isNextStep = function (o) { return o && o.type !== 'section' && (/\bnext steps?\b|getting started|first step|kick-?off|the ask\b|decision needed/i.test(String(o.title || '')) ||
+    (typeof solutionTopicCovered_ === 'function' && solutionTopicCovered_([o], 'next step'))); };
+  if (solutionOutline && typeof solutionTopicEntry_ === 'function' && secs.length && !flat().some(isNextStep)) {
+    const nextEntry = solutionTopicEntry_('next steps');
+    const last = secs[secs.length - 1].list;
+    if (flat().length >= body) {
+      for (let j = last.length - 1; j >= 0; j--) {
+        const o = last[j];
+        if (o.type === 'section' || reqTopics.some(function (t) { return typeof solutionTopicCovered_ === 'function' && solutionTopicCovered_([o], t); })) continue;
+        last.splice(j, 1);
+        break;
+      }
+    }
+    if (flat().length < body) { last.push(nextEntry); seen[keyOf(nextEntry.title)] = true; ctx.log.push('Outline: a next-steps slide was added at the end.'); }
+  }
   // V.1_47: a slide that names an earlier section's subject sits in that section ("current forecasting needs" -> 01 Needs)
   moveSlidesToTheirSection_(secs);
   // V.1_53: a Solution Deck's sections have a similar number of slides (deck 24: 8 / 4 / 5 / 7)
@@ -4829,6 +4893,22 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
   }
   // V.1_50: workstream dividers left without their slides (deck 22: two empty ones back to back) go; their places get slides
   if (dropEmptyWorkstreams_(secs) || flat().length < body) backlogFill_(secs, body, seen, keyOf, flat, userPrompt, [], backlog);
+  // one next-step slide, the last body slide of the deck (the specific one, e.g. "Initiate a design workshop", wins)
+  if (solutionOutline && secs.length) {
+    const steps = [];
+    secs.forEach(function (sc) { sc.list.forEach(function (o) { if (isNextStep(o)) steps.push(o); }); });
+    if (steps.length) {
+      const keepStep = steps.filter(function (o) { return !/^the next step$/i.test(String(o.title || '')); }).pop() || steps[steps.length - 1];
+      secs.forEach(function (sc) { sc.list = sc.list.filter(function (o) { return steps.indexOf(o) === -1; }); });
+      secs[secs.length - 1].list.push(keepStep);
+      for (let k = secs.length - 1; k >= 0 && secs.length > 1; k--) { if (!secs[k].list.length) { secs.splice(k, 1); body++; } }
+      if (flat().length < body) backlogFill_(secs, body, seen, keyOf, flat, userPrompt, [], backlog);
+      // the backlog adds at the end: the next step stays last
+      const lastList = secs[secs.length - 1].list;
+      const at = lastList.indexOf(keepStep);
+      if (at !== -1 && at !== lastList.length - 1) { lastList.splice(at, 1); lastList.push(keepStep); }
+    }
+  }
   secs.forEach(function (sc) { sc.count = sc.list.length; });
   const slides = flat();
   if (slides.length < body) ctx.log.push('The outline has ' + slides.length + ' body slides (asked for ' + body + ').');
@@ -4862,6 +4942,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
     cov.title = cov.title.replace(/\s*\bproposal\b/ig, '').replace(/\s{2,}/g, ' ').trim();
     cov.subtitle = cov.subtitle.replace(/^a proposal for /i, 'A solution for ').replace(/\bsolution proposal\b/ig, 'solution').replace(/\s*\bproposal\b/ig, '').replace(/\s{2,}/g, ' ').trim();
   }
+  if (solutionOutline && typeof solutionClosingLine_ === 'function') out.closing_subtitle = solutionClosingLine_(out.closing_subtitle);   // V.1_56
   return { deck_title: cov.title, subtitle: sentenceCase_(cov.subtitle, 2),
     closing_subtitle: sentenceCase_(removeHypeText_(out.closing_subtitle || ''), 2), sections: secs.map(function (sc) { return { title: sc.title, description: sc.description, count: sc.count }; }),
     slides: withDividers, agendaItems: agendaItems,
@@ -4873,7 +4954,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
 // subtitle; the subtitle then says who the proposal is for
 function coverTitle_(title, subtitle, ctx) {
   title = String(title || '').trim(); subtitle = String(subtitle || '').trim();
-  const generic = /^\s*(?:an?\s+)?(?:proposal|presentation|deck|pitch)(?:\s+deck)?(?:\s+(?:for|to)\s+[^:–-]{1,40})?\s*$/i.test(title);
+  const generic = /^\s*(?:an?\s+)?(?:solution|proposal|presentation|deck|pitch)(?:\s+deck)?(?:\s+(?:for|to)\s+[^:–-]{1,40})?\s*$/i.test(title);   // (V.1_56: "Solution deck for Corvina")
   if (!generic || subtitle.split(/\s+/).length < 3) return { title: title, subtitle: subtitle };
   const client = String((ctx && (ctx.clientName || (ctx.proposal && ctx.proposal.client && ctx.proposal.client.name))) || (title.match(/\b(?:for|to)\s+(.+)$/i) || [])[1] || '').trim();
   const t = subtitle.charAt(0).toUpperCase() + subtitle.slice(1);
@@ -4930,6 +5011,11 @@ function outlineChecks_(slides, prompt, n, before, opts) {
   // V.1_53: a Solution Deck also loses near copies of a slide and topics nobody asked for (market size, adjacent opportunities)
   if (opts && opts.solution && typeof solutionOutlineChecks_ === 'function') {
     solutionOutlineChecks_(slides, prompt, opts.tone, before).forEach(function (i) { if (out.indexOf(i) === -1) out.push(i); });
+  }
+  // V.1_56 (deck 29): a slide for a topic the request lists is never removed by these checks
+  if (opts && opts.solution && typeof solutionProtectedSlides_ === 'function') {
+    const keep = solutionProtectedSlides_(slides, prompt);
+    return out.filter(function (i) { return !keep[i]; });
   }
   return out;
 }
@@ -4988,16 +5074,84 @@ function isLibraryDeck_(ctx) { return !!deckLibraryOf_(ctx); }
 function isLibSpec_(sp) { return !!sp && (sp.deckLibrary === 'proposal' || sp.deckLibrary === 'solution'); }
 
 // V.1_51: the model for one call (CONFIG.model is what callGeminiJSON tries first; the usual model stays the fallback)
+// V.1_56: on the global region (the only one that serves the new models) the outline is written by Gemini 4 Argon
 function outlineModel_() {
-  let m = 'gemini-2.5-pro';
+  let m = modelsOnGlobal_() ? 'gemini-4-argon' : 'gemini-2.5-pro';
   try { const p = PropertiesService.getScriptProperties().getProperty('OUTLINE_MODEL'); if (p != null && String(p).trim()) m = String(p).trim(); } catch (e) {}
   return /^(off|none|false|0)$/i.test(m) ? '' : m;
 }
+var MODEL_OVERRIDE_ = null;
 function withModel_(model, fn) {
   if (!model || typeof CONFIG === 'undefined') return fn();
-  const prev = CONFIG.model;
-  CONFIG.model = model;
-  try { return fn(); } finally { CONFIG.model = prev; }
+  const prev = MODEL_OVERRIDE_;
+  MODEL_OVERRIDE_ = model;
+  try { return fn(); } finally { MODEL_OVERRIDE_ = prev; }
+}
+
+/* ---------- V.1_56: which model does which job ----------
+   Script properties (all optional):
+     OUTLINE_MODEL   the outline (sections, slide titles)              default gemini-4-argon
+     CONTENT_MODEL   the slide text, diagrams, risks, thin-slide fills  default gemini-4-argon
+     RESEARCH_MODEL  research, client, checks, titles, other tools      default gemini-3.8-flash
+     IMAGE_MODEL     generated icons                                    default gemini-3.1-flash-image
+     THINKING_LEVEL  reasoning of the Gemini 3.x / 4 models: LOW (default), MEDIUM, HIGH or off
+   The new models are served on the global region only: with VERTEX_LOCATION other than "global" the defaults stay the
+   Gemini 2.5 models. "off" in a property means the Gemini 2.5 default for that job. */
+var FALLBACK_TEXT_MODEL_ = 'gemini-2.5-flash';
+function modelsOnGlobal_() {
+  try { return String(getVertexConfig_().location || '').toLowerCase() === 'global'; } catch (e) { return false; }
+}
+function modelProp_(key) {
+  try { const v = PropertiesService.getScriptProperties().getProperty(key); return v == null ? '' : String(v).trim(); } catch (e) { return ''; }
+}
+function runModels_() {
+  const g = modelsOnGlobal_();
+  const pick = function (key, newDefault, oldDefault) {
+    const v = modelProp_(key);
+    if (/^(off|none|false|0|default)$/i.test(v)) return oldDefault;
+    return v || (g ? newDefault : oldDefault);
+  };
+  return {
+    check: pick('RESEARCH_MODEL', 'gemini-3.8-flash', FALLBACK_TEXT_MODEL_),
+    content: pick('CONTENT_MODEL', 'gemini-4-argon', ''),
+    image: pick('IMAGE_MODEL', 'gemini-3.1-flash-image', 'auto')
+  };
+}
+function contentModel_() { return runModels_().content; }
+// Gemini 3.x and 4 take a reasoning level (LOW keeps a deck inside the Apps Script time limit); Gemini 2.5 rejects it
+function geminiThinkingConfig_(model) {
+  if (!/^gemini-(3|4|[5-9])/i.test(String(model || ''))) return null;
+  if (/image/i.test(String(model))) return null;
+  const lvl = (modelProp_('THINKING_LEVEL') || 'LOW').toUpperCase();
+  if (/^(OFF|NONE|FALSE|0|DEFAULT)$/.test(lvl)) return null;
+  return { thinkingLevel: /^(LOW|MEDIUM|HIGH|MINIMAL)$/.test(lvl) ? lvl : 'LOW' };
+}
+// which model answered each call in this run (shown in the result message, kept across the parts of a long deck)
+var GEMINI_USED_ = {};
+function noteGeminiModel_(model, fallback) {
+  const k = String(model || '?') + (fallback ? ' (fallback)' : '');
+  GEMINI_USED_[k] = (GEMINI_USED_[k] || 0) + 1;
+}
+function mergeModelsUsed_(into) {
+  const out = into && typeof into === 'object' ? into : {};
+  Object.keys(GEMINI_USED_).forEach(function (k) { out[k] = (out[k] || 0) + GEMINI_USED_[k]; });
+  GEMINI_USED_ = {};
+  return out;
+}
+function modelsUsedLine_(used) {
+  const keys = Object.keys(used || {});
+  if (!keys.length) return '';
+  return 'AI models used: ' + keys.sort(function (a, b) { return used[b] - used[a]; }).map(function (k) { return k + ' × ' + used[k]; }).join(', ') + '.';
+}
+// slide writing with the content model; if it fails (time, quota, region) the slide is written with the usual model
+function withContentModel_(ctx, fn) {
+  const m = contentModel_();
+  if (!m) return fn();
+  try { return withModel_(m, fn); } catch (e) {
+    if (/not enabled|VERTEX_PROJECT_ID is not configured|authentication failed|cancel/i.test(String(e && e.message))) throw e;
+    if (ctx && ctx.log) ctx.log.push(m + ' did not answer (' + String(e && e.message).slice(0, 120) + '): written with ' + CONFIG.model + '.');
+    return fn();
+  }
 }
 // V.1_51: the storyline as lines for the writing prompt: "Section: what it proves" then "  - title: message"
 function storylinePlan_(secs) {
@@ -5365,6 +5519,8 @@ function longDeckStep_(ctx, target, st, t0) {
   deleteRunState_(st.runId);
   const secs = Math.round((Date.now() - (st.startedAt || t0)) / 1000);
   let msg = 'SUCCESS: ' + st.drawn + ' branded slides added to this presentation (' + secs + 's, built in parts).';
+  const usedLine = modelsUsedLine_(mergeModelsUsed_(st.models));                 // V.1_56
+  msg += '\n' + AGENT_VERSION_ + (usedLine ? '\n' + usedLine : '');
   if (ctx.log.length) msg += '\n' + ctx.log.slice(-20).join('\n');
   Logger.log(msg);
   return generationResult_(msg, target, st.drawn);

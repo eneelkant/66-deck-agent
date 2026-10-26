@@ -728,7 +728,8 @@ function proposalCoerce_(sp, ctx, used) {
   // V.1_48: a slide with several points is never reduced to one statement (it would lose them): a design already used
   // that shows all the points is better
   const many = (Array.isArray(sp.items) ? sp.items.filter(Boolean).length : 0) >= 2 || (Array.isArray(sp.points) ? sp.points.length : 0) >= 2 ||
-    ((sp.left && (sp.left.points || []).length) || 0) + ((sp.right && (sp.right.points || []).length) || 0) >= 2 || (Array.isArray(sp.rows) && sp.rows.length >= 2);   // V.1_50: two columns of points too
+    ((sp.left && (sp.left.points || []).length) || 0) + ((sp.right && (sp.right.points || []).length) || 0) >= 2 || (Array.isArray(sp.rows) && sp.rows.length >= 2) ||   // V.1_50: two columns of points too
+    (sp.deckLibrary === 'solution' && typeof solutionTextCount_ === 'function' && solutionTextCount_(sp) >= 2);   // V.1_56: points in other fields too (deck 29 security slide)
   for (let i = 0; i < alts.length; i++) {
     if (many && proposalTypeOf_(alts[i]) === 'statement') continue;
     if (!proposalDrawable_(alts[i], used).length) continue;

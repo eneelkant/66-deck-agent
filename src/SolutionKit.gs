@@ -183,7 +183,8 @@ function solutionOutlineRules_(ctx) {
     '- Only topics the request asks for or that explain how the solution works: no market size, industry trends or adjacent opportunities (e.g. predictive maintenance in a monitoring deck) unless the request asks.',
     '- Sections of similar size; a slide sits in the section whose subject it is (the model training slide sits with the prediction, not with the problem).',
     '- No filler: no "future of", "in summary", "key takeaways" slides.',
-    '- V.1_55: no KPI or target slide, cost or pricing slide, or roadmap slide unless the request or the tone story asks for it; targets, prices and times are never invented.'
+    '- V.1_55: no KPI or target slide, cost or pricing slide, or roadmap slide unless the request or the tone story asks for it; targets, prices and times are never invented.',
+    '- V.1_56: every topic the request lists keeps its own slide, named with the request\'s words (e.g. "Reference architecture", "Deployment layers with Terraform"); no value, benefits or "why now" slide in a technical deck unless asked; the last body slide is the next step (what happens first, who, when).'
   ].join('\n');
 }
 
@@ -292,6 +293,11 @@ function solutionContentPrompt_(a) {
     '- Numbers only from the research sources, the approved facts or the request. A number you need but do not have is a target ("Target: ...").',
     '- Prices, SLAs, funding and test results only when the request or the sources give them; otherwise leave the field out.',
     '- A body slide is never typed "agenda", "cover", "closing" or "section" (the code draws those); a source goes in the notes, never in a table column.',
+    '- V.1_56: only current Google Cloud products (Cloud IoT Core, Container Registry and AI Platform are retired: never name them). Pub/Sub feeds Dataflow through a streaming pull subscription.',
+    '- A figure from a study or an industry report describes that study, never this solution: never present it as the model\'s accuracy or the client\'s result.',
+    '- Recovery, uptime and response targets (RTO, RPO, SLA) that the request does not give are labelled "Target" and kept realistic (never 100% uptime).',
+    '- Nothing about ' + ctx.brand.name + '\'s own operating model (follow-the-sun, 24/7, team size, certifications) unless the approved facts say it.',
+    '- Every sentence adds a fact: no closing sentences such as "This is crucial." or "This streamlines repair efforts."; acronyms keep their capitals (DR, HA, P1-P4).',
     '- Only real Google Cloud product names; never invent products, clients, awards or claims about ' + ctx.brand.name + '.',
     '- Cards and steps carry an "icon": one concrete concept for that item (e.g. "shield", "database", "wrench"), each different on a slide.',
     '- Plain text only: no markdown, no asterisks, no emoji, no line breaks inside a text, no reference markers like [1] in slide text.',
@@ -359,7 +365,8 @@ var SOLUTION_TECH_TERMS_ = { json: 'JSON', yaml: 'YAML', api: 'API', apis: 'APIs
   grpc: 'gRPC', dns: 'DNS', tls: 'TLS', ssl: 'SSL', vm: 'VM', vms: 'VMs', gke: 'GKE', gcs: 'GCS', kpi: 'KPI', kpis: 'KPIs', roi: 'ROI', llm: 'LLM',
   llms: 'LLMs', ai: 'AI', ml: 'ML', pii: 'PII', dlp: 'DLP', rbac: 'RBAC', sso: 'SSO', saml: 'SAML', oauth: 'OAuth', hipaa: 'HIPAA', gdpr: 'GDPR',
   iap: 'IAP', rpo: 'RPO', rto: 'RTO', id: 'ID', ids: 'IDs', gpu: 'GPU', gpus: 'GPUs', cpu: 'CPU', sdk: 'SDK', cli: 'CLI', ui: 'UI', ux: 'UX',
-  mqtt: 'MQTT', ilb: 'ILB', nlb: 'NLB', waf: 'WAF', siem: 'SIEM', soc: 'SOC', sre: 'SRE', mfa: 'MFA' };
+  mqtt: 'MQTT', ilb: 'ILB', nlb: 'NLB', waf: 'WAF', siem: 'SIEM', soc: 'SOC', sre: 'SRE', mfa: 'MFA',
+  dr: 'DR', ha: 'HA', p1: 'P1', p2: 'P2', p3: 'P3', p4: 'P4', p5: 'P5', sev1: 'Sev1', sev2: 'Sev2', sev3: 'Sev3' };   // V.1_56 (deck 29: "Dr region", "p2 (high)")
 var SOLUTION_TECH_RE_ = new RegExp('(?<![./@\\w-])(' + Object.keys(SOLUTION_TECH_TERMS_).map(function (k) { return k.replace('/', '\\/'); }).join('|') + ')(?![\\w-]|:\\/\\/)', 'g');
 var SOLUTION_MARK_RE_ = /^\s*[✓✔✗✘×❌✅☑]️?\s*/;
 // keys whose text is a heading or label (sentence case); keys never touched
@@ -386,7 +393,15 @@ function solutionNoNumber_(t) { return String(t || '').replace(/^\s*(\d{1,2}|[iv
 function solutionHyphenCase_(t) { return String(t || '').replace(/([A-Za-z0-9])-([A-Z])([a-z]+)/g, function (m, a, b, c) { return a + '-' + b.toLowerCase() + c; }); }
 function solutionLabelCase_(t) {
   const s = solutionCapFirst_(solutionTerms_(solutionHyphenCase_(solutionNoNumber_(t))));
-  return typeof headingCase_ === 'function' && s.split(/\s+/).length <= 8 ? solutionTerms_(headingCase_(s)) : s;
+  const out = typeof headingCase_ === 'function' && s.split(/\s+/).length <= 8 ? solutionTerms_(headingCase_(s)) : s;
+  return solutionKeepCaps_(String(t || ''), out);
+}
+// V.1_56: words written in capitals (DR, HA, P2, BQ) keep them after sentence case
+function solutionKeepCaps_(orig, out) {
+  const caps = String(orig || '').match(/\b(?:[A-Z]{2,5}s?|[A-Z]\d{1,2})\b/g) || [];
+  let r = String(out || '');
+  caps.forEach(function (w) { r = r.replace(new RegExp('\\b' + w + '\\b', 'gi'), w); });
+  return r;
 }
 // "source: in-truck devices" -> "Source: in-truck devices"; "Model Type · Trained on..." -> "Model type · Trained on..."
 function solutionPointCase_(t, isPoint) {
@@ -464,6 +479,11 @@ function solutionResultsGuard_(slides, prompt, sources, ctx) {
     (Array.isArray(sp.items) ? sp.items : []).forEach(function (it) { if (it && typeof it.text === 'string') it.text = trim(it.text); });
     if (sp.footer && typeof sp.footer.text === 'string') sp.footer.text = trim(sp.footer.text);
     if (changed) { n++; sp.notes = String(sp.notes || '') + '\nResults not given in the request are shown as targets: add the measured figures before sharing.'; }
+    // V.1_56 (deck 29 slide 6): figures that stay because they come from published research say so on the slide
+    const shown = JSON.stringify([sp.items, sp.rows, sp.points]);
+    if (figs(shown).some(function (f) { return /\d/.test(f) && !has(own, f) && has(research, f); }) && !/industry|benchmark|published|research/i.test(String(sp.lead || ''))) {
+      sp.lead = 'Industry figures from published research (sources in the notes), not measured results' + (client ? ' for ' + client : '') + '.';
+    }
   });
   if (n && ctx && ctx.log) ctx.log.push(n + ' results slide(s): figures the request did not give are shown as targets (no invented results).');
   return n;
@@ -496,6 +516,9 @@ function solutionRescue_(sp) {
   });
   const loose = [].concat(sp.points || []).map(str).filter(Boolean);
   ['statement', 'text', 'takeaway'].forEach(function (k) { if (typeof sp[k] === 'string' && sp[k].trim()) loose.push(sp[k].trim()); });
+  // V.1_56 (deck 29 slide 15: the security controls were in fields such as "layers" / "controls" and were lost): text in
+  // any other field is gathered too
+  if (groups.length + loose.length < 2) solutionOtherTexts_(sp).forEach(function (g) { addGroup(g.title, g.points); });
   const titled = groups.filter(function (g) { return g.title && g.points.length; });
   const keep = { title: sp.title, lead: sp.lead, notes: sp.notes, fact_tags: sp.fact_tags, deckLibrary: sp.deckLibrary, cobrand: sp.cobrand, section: sp.section };
   let next = null;
@@ -519,6 +542,9 @@ var SOLUTION_UNASKED_ = [
   { title: /\b(market (size|growth|landscape|trends?|opportunity|overview)|industry (benchmarks?|trends?|landscape)|benchmarks?|cagr)\b/i, asked: /\b(market|industry|benchmark|trend)\w*/i, keep: ['executive'] },
   { title: /\b(costs?|pricing|savings|roi|business case|tco|finops)\b/i, asked: /\b(cost|pricing|price|saving|roi|tco|budget|business case|finops)\w*/i, keep: ['executive', 'offering', 'internal'] },
   { title: /\b(roadmap|phased|phases|timeline|implementation plan|rollout plan)\b/i, asked: /\b(roadmap|phase|timeline|plan|rollout|implementation|wave)\w*/i, keep: ['enablement', 'offering', 'executive'] },
+  // V.1_56 (decks 27-29: "The proven value of predictive maintenance", "The impact of CBM", "A paradigm shift"): selling
+  // slides with industry figures stay out of a technical or enablement deck unless the request asks for them
+  { title: /\b(value|benefits?|impact|business case|why now|imperative|paradigm|opportunit\w*|proven|financial)\b/i, asked: /\b(value|benefit|impact|business case|roi|why|financial|savings?)\w*/i, keep: ['executive', 'offering', 'internal'] },
 ];
 var SOLUTION_OFFTOPIC_RE_ = /\b(market|industry|trends?|landscape|imperative|opportunit(?:y|ies)|future of)\b/i;
 function solutionStems_(o) {
@@ -554,6 +580,7 @@ function solutionOutlineChecks_(slides, prompt, tone, before) {
       if (off || u.keep.indexOf(tone) !== -1) return;
       if (u.title.test(String(o.title || '')) && !u.asked.test(req)) off = true;
     });
+    if (/\bnext steps?\b|getting started|the ask\b/i.test(String(o.title || ''))) off = false;   // V.1_56: the next step always stays
     if (dup || off) out.push(i);
     seen.push(st);
   });
@@ -661,7 +688,7 @@ function solutionTopicEntry_(topic) {
     : /next step|decision|ask/i.test(words) ? 'statement'
     : /results?|metrics?|kpis?|figures/i.test(words) ? 'stats' : 'cards';
   let title = t.charAt(0).toUpperCase() + t.slice(1);
-  if (/^(the )?next steps?$/i.test(t)) title = 'The next step';
+  if (/^(the )?next steps?$/i.test(t)) return { type: 'process', title: 'The next step', brief: 'The recommended next step: 3-4 steps, what happens first, who does it and by when (a workshop, a pilot, a decision)', message: 'What happens next, who does it and when' };   // V.1_56
   return { type: type, title: title.length > 58 ? title.slice(0, 58).replace(/\s+\S*$/, '') : title, brief: 'The requested topic: ' + t, message: 'Covers the requested topic: ' + t };
 }
 
@@ -725,16 +752,28 @@ function solutionTimelineAsProcess_(sp) {
 // "Security controls (IAM / VPC Service Controls / CMEK)" and "Securing data with defense-in-depth" became two slides)
 function solutionTopicCovered_(slides, topic) {
   if (typeof topicStems_ !== 'function') return false;
-  const ts = Object.keys(topicStems_(String(topic || '').replace(/\([^)]*\)/g, ' ').toLowerCase(), false));
-  if (!ts.length) return false;
+  // V.1_56 (deck 29): one shared word ("architecture" in a data-flow slide's message) no longer covers a topic: most of
+  // the topic's words must be on one slide, or the product it names must be in that slide's title
+  const ts = Object.keys(topicStems_(String(topic || '').replace(/\([^)]*\)/g, ' ').toLowerCase(), false)).filter(function (w) { return !/^(throu|using|via|into|with|known)$/.test(w); });
+  const products = (String(topic || '').replace(/\([^)]*\)/g, ' ').match(/\b(?:[A-Z][a-z]*[A-Z][\w]*|[A-Za-z]+\/[A-Za-z]+|Dataflow|Dataproc|Terraform|Ansible|Looker|Vertex AI|Kubernetes|Pub\/Sub|BigQuery|Spanner|Bigtable|Firestore|Cloud SQL|AlloyDB|CMEK|IAM|VPC|GKE|Kafka)\b/g) || [])
+    .filter(function (w) { return !/^(I|A|DR|AI)$/.test(w); });
   // the next step is covered by any slide that proposes one (a workshop, a pilot, a decision to start)
   if (/next steps?|getting started|how to start/i.test(topic) && (slides || []).some(function (o) {
     return o && o.type !== 'section' && /next step|workshop|initiate|get(ting)? started|kick-?off|start with|first step|decision|approve/i.test(String(o.title || ''));
   })) return true;
+  if (!ts.length && !products.length) return false;
+  const need = ts.length <= 2 ? ts.length : Math.ceil(ts.length * 0.6);
   return (slides || []).some(function (o) {
     if (!o || o.type === 'section') return false;
     const ss = topicStems_([o.title, o.message].filter(Boolean).join(' ').toLowerCase(), false);   // (lower case: a first word is not a name)
-    return ts.filter(function (w) { return ss[w]; }).length / ts.length >= 0.5;
+    const hits = ts.filter(function (w) { return ss[w]; }).length;
+    if (ts.length && hits >= need) return true;
+    if (ss['#security'] && ts.indexOf('#security') !== -1 && hits >= need - 1) return true;   // a security slide covers the security controls
+    const title = String(o.title || '').toLowerCase();
+    // the product the topic names is the slide's subject - unless the topic also names a kind of slide (layers,
+    // architecture, runbooks, priorities, regions...): then those words must be there too
+    if (ts.some(function (w) { return /^(layer|archi|runbo|prior|#goal|regio|desig|compa|roadm|phase|steps?|next|#secur|contr|sizin|confi|thres)/.test(w); })) return false;
+    return products.some(function (p) { return title.indexOf(p.toLowerCase()) !== -1; });
   });
 }
 
@@ -784,8 +823,17 @@ function solutionGivenTimes_(slides, prompt, sources) {
   const own = String(prompt || '') + ' ' + String((sources && sources.text) || '');
   let n = 0;
   (slides || []).forEach(function (sp) {
-    if (!sp || !/\b(priorit\w*|slas?|slos?|support|rto|rpo|recovery|response|resolution)\b/i.test(String(sp.title || ''))) return;
-    const times = (JSON.stringify([sp.items, sp.rows, sp.points]).match(/\b\d+(?:[.,]\d+)?\s*(?:min(?:ute)?s?|hours?|hrs?|h|days?|business days?|seconds?|s)\b/gi) || []);
+    // V.1_56 (deck 29): any slide whose title or text speaks of service levels or recovery (a "DR region" slide too), and
+    // times written as "15-min", "<1 hour", "RPO < 15 minutes"
+    if (!sp || typeof sp !== 'object') return;
+    // "100% uptime" is a promise nobody can make: the slide says high availability instead
+    (function walk(o) { Object.keys(o).forEach(function (k) { if (k === 'notes' || k === 'reference') return; const v = o[k];
+      if (typeof v === 'string') o[k] = v.replace(/\b100\s*%\s*(?:uptime|availability)/gi, 'high availability');
+      else if (v && typeof v === 'object') walk(v); }); })(sp);
+    const body = JSON.stringify([sp.items, sp.rows, sp.points, sp.lead, sp.takeaway, sp.statement, sp.text, sp.regions, sp.footer, sp.callout, sp.note]);
+    if (!/\b(priorit\w*|slas?|slos?|support|rto|rpo|recovery|response|resolution|dr|failover|uptime|availability)\b/i.test(String(sp.title || '') + ' ' + body)) return;
+    if (/^(cover|agenda|closing|section|template)$/i.test(String(sp.type || ''))) return;
+    const times = (body.match(/\b\d+(?:[.,]\d+)?\s*-?\s*(?:min(?:ute)?s?|hours?|hrs?|h|days?|business days?|seconds?|s)\b|\b\d+(?:\.\d+)?\s*%\s*(?:uptime|availability)/gi) || []);
     const missing = times.filter(function (x) { const d = (x.match(/\d+(?:[.,]\d+)?/) || [''])[0]; return d && !new RegExp('(^|[^0-9.])' + d.replace('.', '[.,]') + '(?![0-9])').test(own); });
     if (missing.length && !/confirm them before sharing/.test(String(sp.notes || ''))) {
       sp.notes = String(sp.notes || '') + '\nThe times on this slide (' + missing.slice(0, 4).join(', ') + ') are proposals, not given in the request: confirm them before sharing.';
@@ -814,4 +862,101 @@ function solutionThinBullets_(sp) {
   delete sp.points;
   sp.reference = null;
   return true;
+}
+
+/* ---------- 16. V.1_56: the deck 28 / 29 fixes ---------- */
+// slides that cover a topic the request lists are never removed by the outline checks (deck 29 lost the reference
+// architecture, the Terraform layers and the next step that way); the first slide per topic is kept
+function solutionProtectedSlides_(slides, prompt) {
+  const keep = {};
+  const topics = typeof requestedTopics_ === 'function' ? requestedTopics_(prompt) : [];
+  topics.forEach(function (t) {
+    for (let i = 0; i < (slides || []).length; i++) {
+      const o = slides[i];
+      if (!o || o.type === 'section') continue;
+      if (!solutionTopicCovered_([o], t)) continue;
+      // the same comparison twice: the first one is the topic's slide, a later copy can go
+      if (String(o.type || '').toLowerCase() === 'comparison' && slides.slice(0, i).some(function (p) { return p && String(p.type || '').toLowerCase() === 'comparison'; })) break;
+      keep[i] = 1; break;
+    }
+  });
+  (slides || []).forEach(function (o, i) { if (o && /\bnext steps?\b|getting started|the ask\b/i.test(String(o.title || ''))) keep[i] = 1; });
+  return keep;
+}
+
+// V.1_56: text a slide holds in fields the designs do not name ("controls", "layers", "groups", "pillars"...), as headed groups
+var SOLUTION_META_KEYS_ = { title: 1, lead: 1, subtitle: 1, notes: 1, reference: 1, type: 1, design: 1, deckLibrary: 1, dark: 1, cobrand: 1, clientLogo: 1,
+  icon: 1, material: 1, fact_tags: 1, lockTag: 1, section: 1, number: 1, sectionStyle: 1, code: 1, items: 1, points: 1, left: 1, right: 1, columns: 1,
+  rows: 1, statement: 1, text: 1, takeaway: 1, brief: 1, message: 1, tone: 1, status: 1 };
+function solutionOtherTexts_(sp) {
+  const out = [];
+  const real = function (t) { return /[A-Za-z]{3}/.test(String(t || '')); };
+  const head = function (o) { const k = ['title', 'name', 'label', 'layer', 'control', 'heading', 'area']; for (let i = 0; i < k.length; i++) if (typeof o[k[i]] === 'string' && real(o[k[i]])) return o[k[i]]; return ''; };
+  const texts = function (v, acc, skip) {
+    if (typeof v === 'string') { if (real(v) && v !== skip) acc.push(v.trim()); return acc; }
+    if (Array.isArray(v)) { v.forEach(function (x) { texts(x, acc, skip); }); return acc; }
+    if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { if (k !== 'icon' && k !== 'status') texts(v[k], acc, skip); });
+    return acc;
+  };
+  Object.keys(sp || {}).forEach(function (k) {
+    if (SOLUTION_META_KEYS_[k]) return;
+    const v = sp[k];
+    if (Array.isArray(v)) v.forEach(function (x) {
+      if (x && typeof x === 'object' && !Array.isArray(x)) { const h = head(x); out.push({ title: h, points: texts(x, [], h) }); }
+      else if (real(x)) out.push({ title: '', points: texts(x, []) });
+    });
+    else if (v && typeof v === 'object') { const h = head(v); out.push({ title: h, points: texts(v, [], h) }); }
+    else if (typeof v === 'string' && real(v) && v.split(/\s+/).length >= 4) out.push({ title: '', points: [v] });
+  });
+  return out.filter(function (g) { return g.title || g.points.length; });
+}
+function solutionTextCount_(sp) {
+  return solutionOtherTexts_(sp).reduce(function (a, g) { return a + (g.title ? 1 : 0) + g.points.length; }, 0);
+}
+
+// V.1_56 (deck 28: "IoT Core"): products Google has retired are never proposed
+var SOLUTION_RETIRED_ = [
+  [/\b(?:Google\s+)?(?:Cloud\s+)?IoT\s+Core\b/gi, 'IoT gateway'],
+  [/\b(?:Google\s+)?Container\s+Registry\b/g, 'Artifact Registry'],
+  [/\b(?<!Agent\s)(?:Google\s+)?(?:Cloud\s+)?AI\s+Platform\b(?!\s+Notebooks)/g, 'Vertex AI'],
+  [/\bCloud\s+Debugger\b/g, 'Cloud Logging'],
+  [/\bCloud\s+Source\s+Repositories\b/g, 'a Git repository']
+];
+// (decks 28-29: "66degrees operates a follow-the-sun model", "worked by expert engineers day or night"): claims about
+// 66degrees that the request or the approved facts do not make are left out; filler tails ("This precision is vital.") go
+var SOLUTION_BRAND_CLAIM_RE_ = /\b(follow[- ]the[- ]sun|24\s*\/\s*7|24x7|around the clock|day or night|global team|certified (?:experts|engineers)|years of experience|award[- ]winning|industry[- ]leading)\b/i;
+var SOLUTION_FILLER_TAIL_RE_ = /^(this|these|that|it)\b[^.!?]{0,90}\b(is|are|was|remains)\s+(crucial|vital|essential|key|critical|paramount|important|fundamental)\b[^.!?]{0,40}[.!]$|^(this|these)\s+(\w+\s+){0,3}(streamlines?|ensures?|enables?|guarantees?|empowers?)\b[^.!?]{0,60}[.!]$/i;
+function solutionFactsClean_(sp, prompt, facts) {
+  if (!sp || typeof sp !== 'object') return 0;
+  const allowed = (String(prompt || '') + ' ' + JSON.stringify(facts || [])).toLowerCase();
+  let n = 0;
+  const clean = function (str, isNotes) {
+    let t = String(str);
+    SOLUTION_RETIRED_.forEach(function (r) { const u = t.replace(r[0], r[1]); if (u !== t) { n++; t = u; } });
+    const parts = t.split(/(?<=[.!?])\s+(?=[A-Z])/);
+    const keep = parts.filter(function (x, i) {
+      const m = x.match(SOLUTION_BRAND_CLAIM_RE_);
+      if (m && (/66\s*degrees|66°/i.test(x) || isNotes) && allowed.indexOf(m[1].toLowerCase()) === -1) return false;   // (the notes speak for 66degrees)
+      if (!isNotes && parts.length > 1 && i > 0 && SOLUTION_FILLER_TAIL_RE_.test(x.trim())) return false;
+      return true;
+    });
+    if (keep.length && keep.length < parts.length) { n++; t = keep.join(' '); }
+    return t;
+  };
+  (function walk(o) {
+    Object.keys(o).forEach(function (k) {
+      if (k === 'reference' || k === 'design' || k === 'type' || k === 'icon' || k === 'code' || k === 'fact_tags') return;
+      const v = o[k];
+      if (typeof v === 'string') o[k] = clean(v, k === 'notes');
+      else if (Array.isArray(v)) v.forEach(function (x, i) { if (typeof x === 'string') v[i] = clean(x, false); else if (x && typeof x === 'object') walk(x); });
+      else if (v && typeof v === 'object') walk(v);
+    });
+  })(sp);
+  return n;
+}
+// a closing line that is a slogan ("Let's build the future of rail maintenance, together.") says what comes next instead
+function solutionClosingLine_(text) {
+  const t = String(text || '').trim();
+  if (!t || /\b(future|together|journey|transform\w*|unlock|empower\w*|revolution\w*|reimagin\w*|let'?s build|partner(ship)? for)\b/i.test(t)) return 'Questions and next steps';
+  return t;
 }
