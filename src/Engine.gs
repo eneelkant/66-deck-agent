@@ -387,7 +387,7 @@ var ENGINE = (function () {
     // Footer band, date and 66° badge
     rect(els, 0, 349, W, 56, T.blue);
     image(els, 'band-pattern', 626, 349, 94, 56);
-    text(els, 29.5, 368, 220, 16, '>> ' + (ctx.dateLabel || ''), { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
+    if (ctx.dateLabel) text(els, 29.5, 368, 220, 16, '>> ' + ctx.dateLabel, { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
     roundrect(els, 534.7, 318.8, 86.2, 86.2, T.badge, { color: T.white, width: 3 });
     image(els, 'mark-white', 550.3, 343.5, 55, 36.7);
     return { bg: T.white, els: els, noFooter: true };
@@ -1133,7 +1133,7 @@ var ENGINE = (function () {
     els[els.length - 1].square = true;
     image(els, 'mark-white', 28, 30, 55, 36.7);
     image(els, 'band-pattern', 0, H - 56, 94, 56);
-    text(els, 28, 300, pw - 50, 16, '>> ' + (ctx.dateLabel || ''), { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
+    if (ctx.dateLabel) text(els, 28, 300, pw - 50, 16, '>> ' + ctx.dateLabel, { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
     image(els, 'logo-dark', W - 32 - 68.8, 28, 68.8, 16.2);
     text(els, pw + 40, 110, W - pw - 80, 116, s.title, { weight: 600, max: 28, min: 22, maxLines: 3, color: T.title || T.ink, valign: 'bottom' });
     rect(els, pw + 42, 236, 72, 3, T.blue);
@@ -1152,7 +1152,7 @@ var ENGINE = (function () {
     rect(els, 0, H - 40, W, 40, T.blue);
     els[els.length - 1].square = true;
     image(els, 'strip-pattern', W - 238, H - 40, 238, 40);
-    text(els, 32, H - 28, 220, 16, '>> ' + (ctx.dateLabel || ''), { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
+    if (ctx.dateLabel) text(els, 32, H - 28, 220, 16, '>> ' + ctx.dateLabel, { font: 'mono', weight: 400, max: TSZ.body, min: TSZ.body, color: T.white, maxLines: 1 });
     return { bg: T.white, els: els, noFooter: true };
   };
 

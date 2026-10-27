@@ -282,7 +282,8 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
 
   const ALIGN = { left: SlidesApp.ParagraphAlignment.START, center: SlidesApp.ParagraphAlignment.CENTER, right: SlidesApp.ParagraphAlignment.END };
   const VALIGN = { top: SlidesApp.ContentAlignment.TOP, middle: SlidesApp.ContentAlignment.MIDDLE, bottom: SlidesApp.ContentAlignment.BOTTOM };
-  const sans = ctx.brand.fonts.heading.slides, mono = ctx.brand.fonts.mono.slides;
+  // V.1_59: a rebrand uses Plus Jakarta Sans only (dates, numbers and labels too)
+  const sans = ctx.brand.fonts.heading.slides, mono = ctx.sansOnly ? sans : ctx.brand.fonts.mono.slides;
 
   out.els.forEach(function (e) {
     try {
@@ -498,7 +499,7 @@ function drawEngineIcon(slide, e, s, ctx) {
       if (hasTextFrame_(tb)) {
         const tr = tb.getText();
         applyTextStyleSafe_(tr, function (ts) {
-          ts.setFontFamily(ctx.brand.fonts.mono.slides).setFontSize(Math.max(9, Math.min(14, Math.round(size * 0.45)))).setForegroundColor(e.dark ? ENGINE.TOKENS.white : ENGINE.TOKENS.blue);
+          ts.setFontFamily(ctx.sansOnly ? ctx.brand.fonts.heading.slides : ctx.brand.fonts.mono.slides).setFontSize(Math.max(9, Math.min(14, Math.round(size * 0.45)))).setForegroundColor(e.dark ? ENGINE.TOKENS.white : ENGINE.TOKENS.blue);
         });
         try { tr.getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER); } catch (err) {}
         try { tb.setContentAlignment(SlidesApp.ContentAlignment.MIDDLE); } catch (err) {}
