@@ -123,7 +123,7 @@ const render1 = (sb, spec) => sb.ENGINE.render({ slides: [Object.assign({ deckLi
 const sample = (tag, extra) => Object.assign(JSON.parse(JSON.stringify(SAMPLES.find((s) => tagOf(s) === tag && !s.dark))), extra || {});
 
 test("version label is V.1_53 or later", () => {
-  assert.match(read("src/Code.gs"), /AGENT_VERSION_\s*=\s*'66° Deck Agent V\.1_(5[3-9])'/);
+  assert.match(read("src/Code.gs"), /AGENT_VERSION_\s*=\s*'66° Deck Agent V\.1_(5[3-9]|[6-9]\d)'/);
 });
 
 test(".clasp.json pushes the batch 2 Solution design files after the first two", () => {

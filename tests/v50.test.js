@@ -284,5 +284,5 @@ test("a comparison is never reduced to one statement when its design is taken", 
 });
 
 test("version label is V.1_50", () => {
-  assert.match(read("src/Code.gs"), /AGENT_VERSION_ = '66° Deck Agent V\.1_(5[0-9])'/);
+  assert.match(read("src/Code.gs"), /AGENT_VERSION_ = '66° Deck Agent V\.1_(5[0-9]|[6-9]\d)'/);
 });

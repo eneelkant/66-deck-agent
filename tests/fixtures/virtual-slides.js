@@ -48,12 +48,30 @@ function virtualSlides(deck) {
   }
   const pageMock = (p) => ({
     getObjectId: () => p.objectId,
-    insertImage(blob, x, y, w, h) { const e = { objectId: "img" + log.images.length, image: {}, size: { width: { magnitude: w * EMU }, height: { magnitude: h * EMU } }, transform: { scaleX: 1, scaleY: 1, translateX: x * EMU, translateY: y * EMU } }; p.pageElements.push(e); log.images.push({ page: p.objectId, x, y, w, h }); return { setTitle() {}, bringToFront() {} }; },
+    insertImage(blob, x, y, w, h) { const e = { objectId: "img" + log.images.length, image: {}, size: { width: { magnitude: w * EMU }, height: { magnitude: h * EMU } }, transform: { scaleX: 1, scaleY: 1, translateX: x * EMU, translateY: y * EMU } }; p.pageElements.push(e); log.images.push({ page: p.objectId, x, y, w, h }); return { setTitle(t) { e.title = t; }, bringToFront() {} }; },
     getPageElementById(id) {
       const f = find(id); if (!f) return null;
       return { setLeft(x) { f.e.transform.translateX = x * EMU; log.moved.push(id); }, getParentGroup: () => null, getLeft: () => (f.e.transform.translateX || 0) / EMU };
     },
-    getPageElements: () => [], getBackground: () => ({ setSolidFill() {} }), getLayout: () => null
+    getPageElements: () => p.pageElements.map((e) => {
+      const tr = () => e.transform || (e.transform = { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 });
+      const kids = (g) => (g.elementGroup ? g.elementGroup.children : []);
+      const wrap = (x) => ({
+        getPageElementType: () => (x.elementGroup ? "GROUP" : x.image ? "IMAGE" : x.shape ? "SHAPE" : "OTHER"),
+        asShape: () => ({ getText: () => ({ asString: () => textOf(x) || "" }) }),
+        asGroup: () => ({ getChildren: () => kids(x).map(wrap) })
+      });
+      const w = wrap(e);
+      w.getTitle = () => e.title || "";
+      w.getLeft = () => (tr().translateX || 0) / EMU;
+      w.getTop = () => (tr().translateY || 0) / EMU;
+      w.getWidth = () => ((e.size ? e.size.width.magnitude : 0) * (tr().scaleX || 1)) / EMU;
+      w.getHeight = () => ((e.size ? e.size.height.magnitude : 0) * (tr().scaleY || 1)) / EMU;
+      w.setLeft = (x) => { tr().translateX = x * EMU; log.moved.push(e.objectId); };
+      w.setWidth = (v) => { if (e.size) tr().scaleX = (v * EMU) / e.size.width.magnitude; };
+      return w;
+    }),
+    getBackground: () => ({ setSolidFill() {} }), getLayout: () => null
   });
   const api = {
     Slides: {

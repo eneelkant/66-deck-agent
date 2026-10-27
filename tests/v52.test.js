@@ -112,7 +112,7 @@ function runSolution(n, prompt, seed) {
 const tagOf = (d) => (d.reference && d.reference.tag) || "";
 
 test("version label is V.1_52 or later", () => {
-  assert.match(read("src/Code.gs"), /AGENT_VERSION_\s*=\s*'66° Deck Agent V\.1_(5[2-9])'/);
+  assert.match(read("src/Code.gs"), /AGENT_VERSION_\s*=\s*'66° Deck Agent V\.1_(5[2-9]|[6-9]\d)'/);
 });
 
 test(".clasp.json pushes the Solution files after the Proposal files they build on", () => {

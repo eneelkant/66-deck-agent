@@ -151,7 +151,7 @@ function runDeck(n, opts) {
 }
 
 test("version label is V.1_51 or later", () => {
-  assert.match(read("src/Code.gs"), /AGENT_VERSION_\s*=\s*'66° Deck Agent V\.1_(5[1-9])'/);
+  assert.match(read("src/Code.gs"), /AGENT_VERSION_\s*=\s*'66° Deck Agent V\.1_(5[1-9]|[6-9]\d)'/);
 });
 
 test("the whole deck appears at once: the presentation stays empty until every part is drawn, then gets all slides", () => {

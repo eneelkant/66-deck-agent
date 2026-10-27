@@ -132,7 +132,7 @@ const D25_OUTLINE = { deck_title: "Smart leak detection on Google Cloud", subtit
     .map((s) => Object.assign({}, s, { storyline: s.description, slides: s.slides.map(([type, title]) => ({ type, title, message: "Covers " + title.toLowerCase(), points: ["p"] })) })) };
 
 test("version label is V.1_54 or later", () => {
-  assert.match(read("src/Code.gs"), /AGENT_VERSION_\s*=\s*'66° Deck Agent V\.1_(5[4-9])'/);
+  assert.match(read("src/Code.gs"), /AGENT_VERSION_\s*=\s*'66° Deck Agent V\.1_(5[4-9]|[6-9]\d)'/);
 });
 
 test("deck 25 replayed: every listed topic has its own slide and no Proposal filler is added", () => {
