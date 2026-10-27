@@ -371,6 +371,12 @@ function rebrandPresentation(presId, ctx, opts) {
     try {
       const qa = rebrandQa_(presId, start, end);
       stats.qa = qa.length;
+      // V.1_64: the check's findings go to the slide log, slide by slide (redrawn slides are logged when they are drawn)
+      if (typeof recordRebrandChecks_ === 'function') {
+        const redrawn = {};
+        for (let i = start; i < end; i++) if (review[i] && review[i].redraw) redrawn[i] = true;
+        recordRebrandChecks_(qa, start, end, redrawn);
+      }
       if (qa.length) ctx.log.push('Rebrand check: ' + qa.slice(0, 6).join('; ') + (qa.length > 6 ? ' (+' + (qa.length - 6) + ' more)' : '') + '.');
       else ctx.log.push('Rebrand check: no overlapping or unreadable text found.');
     } catch (e) { ctx.log.push('Rebrand check skipped: ' + e.message); }

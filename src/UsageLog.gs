@@ -14,10 +14,52 @@
  * out by the BigQuery views (setup/usage_bigquery.sql), so no price is kept in the code.
  */
 
-const USAGE_DEFAULTS_ = { dataset: 'deck_agent', table: 'deck_usage' };
+const USAGE_DEFAULTS_ = { dataset: 'deck_agent', table: 'deck_usage', slidesTable: 'deck_slides' };
 
-// Tokens used in this Apps Script execution, per model
-var USAGE_ = { byModel: {}, started: Date.now() };
+// Tokens used in this Apps Script execution, per model; V.1_64: and every slide drawn in it (the slide log)
+var USAGE_ = { byModel: {}, started: Date.now(), slides: [] };
+
+/* V.1_64 — the slide log: for every slide drawn, what was asked (the slide's content as the add-on had it), which design
+   drew it and what the deck check found or corrected. Written with the usage rows to deck_agent.deck_slides, so any slide
+   a person reports can be replayed exactly in the tests. */
+function recordSlide_(spec, out, number) {
+  try {
+    const qa = (out && out.qa) || { issues: [], fixed: [] };
+    let json = '';
+    try { json = JSON.stringify(spec || {}); } catch (e) { json = ''; }
+    if (json.length > 60000) json = json.slice(0, 60000);
+    USAGE_.slides.push({
+      slide_no: Number(number) || null,
+      slide_type: String((spec && spec.type) || ''),
+      deck_library: String((spec && spec.deckLibrary) || 'general'),
+      design: String((out && out.drawnWith) || ''),
+      title: String((spec && (spec.title || spec.statement)) || '').slice(0, 300),
+      issues: (qa.issues || []).join(','),
+      fixed: (qa.fixed || []).join(','),
+      fixed_from: String(qa.from || ''),
+      spec_json: json
+    });
+  } catch (e) {}
+}
+// Rebrand: the rebrand check's findings, slide by slide ("slide 8: ... runs into ...")
+function recordRebrandChecks_(qa, start, end, redrawn) {
+  try {
+    const by = {};
+    (qa || []).forEach(function (m) {
+      const k = /^slide (\d+):/.exec(String(m));
+      if (!k) return;
+      const kind = /cannot be read/.test(m) ? 'unreadable' : /runs into/.test(m) ? 'overlap' : /outside the slide/.test(m) ? 'outside' : 'other';
+      (by[k[1]] = by[k[1]] || { kinds: {}, text: [] }).kinds[kind] = 1;
+      by[k[1]].text.push(String(m).slice(0, 200));
+    });
+    for (let i = start; i < end; i++) {
+      const b = by[String(i + 1)];
+      if (redrawn && redrawn[i]) continue;                               // redrawn slides are logged by the engine
+      USAGE_.slides.push({ slide_no: i + 1, slide_type: 'rebrand', deck_library: 'rebrand', design: 'restyled', title: '',
+        issues: b ? Object.keys(b.kinds).join(',') : '', fixed: '', fixed_from: '', spec_json: b ? JSON.stringify({ findings: b.text }) : '' });
+    }
+  } catch (e) {}
+}
 
 // Called after every Vertex AI response (Brand.gs, callVertexGemini_)
 function recordModelUsage_(model, meta) {
@@ -37,7 +79,7 @@ function recordModelUsage_(model, meta) {
 // Runs one part of a run and writes its usage rows. The result (or the error) of the part is passed on unchanged.
 //   info: { runId, mode: 'Create' | 'Rebrand' | 'Flowchart', category }  (later parts only know the runId)
 function usageRun_(info, fn) {
-  USAGE_ = { byModel: {}, started: Date.now() };
+  USAGE_ = { byModel: {}, started: Date.now(), slides: [] };
   let res, err = null;
   try { res = fn(); } catch (e) { err = e; }
   try { writeUsage_(info || {}, usageStatus_(res, err), res); } catch (e2) { Logger.log('Usage log: ' + (e2 && e2.message ? e2.message : e2)); }
@@ -89,6 +131,16 @@ function writeUsage_(info, status, res) {
     };
   });
   insertUsageRows_(rows);
+  // V.1_64: the slide log of this part
+  if (USAGE_.slides.length) {
+    const srows = USAGE_.slides.map(function (r, k) {
+      return { insertId: (runId + '-' + saved.part + '-s' + k).slice(0, 128), json: Object.assign({
+        run_id: runId, part: saved.part, ts: ts, name: who.name, email: who.email, mode: saved.mode, deck_category: saved.category,
+        deck_url: deckUrl, agent_version: version }, r) };
+    });
+    // a part of a long deck can draw many slides: sent in batches (BigQuery takes up to 10 MB per request)
+    for (let i = 0; i < srows.length; i += 25) insertUsageRows_(srows.slice(i, i + 25), 'slides');
+  }
 }
 
 function usageTarget_() {
@@ -96,15 +148,17 @@ function usageTarget_() {
   return {
     project: prop('USAGE_BQ_PROJECT') || prop('VERTEX_PROJECT_ID'),
     dataset: prop('USAGE_BQ_DATASET') || USAGE_DEFAULTS_.dataset,
-    table: prop('USAGE_BQ_TABLE') || USAGE_DEFAULTS_.table
+    table: prop('USAGE_BQ_TABLE') || USAGE_DEFAULTS_.table,
+    slidesTable: prop('USAGE_BQ_SLIDES_TABLE') || USAGE_DEFAULTS_.slidesTable
   };
 }
 
-function insertUsageRows_(rows) {
+function insertUsageRows_(rows, which) {
   const t = usageTarget_();
   if (!t.project || !rows.length) return;
+  const table = which === 'slides' ? t.slidesTable : t.table;
   const url = 'https://bigquery.googleapis.com/bigquery/v2/projects/' + encodeURIComponent(t.project) + '/datasets/' +
-    encodeURIComponent(t.dataset) + '/tables/' + encodeURIComponent(t.table) + '/insertAll';
+    encodeURIComponent(t.dataset) + '/tables/' + encodeURIComponent(table) + '/insertAll';
   const resp = UrlFetchApp.fetch(url, {
     method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
@@ -112,7 +166,7 @@ function insertUsageRows_(rows) {
   });
   const code = resp.getResponseCode();
   const body = resp.getContentText() || '';
-  if (code < 200 || code >= 300 || /"insertErrors"/.test(body)) Logger.log('Usage log HTTP ' + code + ': ' + body.slice(0, 300));
+  if (code < 200 || code >= 300 || /"insertErrors"/.test(body)) Logger.log('Usage log (' + table + ') HTTP ' + code + ': ' + body.slice(0, 300));
 }
 
 // The user's name and email from their Google Drive profile (the add-on already has Drive access), kept for 6 hours

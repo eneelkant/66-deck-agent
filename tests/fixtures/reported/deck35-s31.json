@@ -1,0 +1,18 @@
+{
+ "reported": "plain-layout",
+ "title": "Immediate mobilization actions for week one",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "bullets",
+  "title": "Immediate mobilization actions for week one",
+  "points": [
+   "Conduct project kickoff workshops to finalize objectives and KPIs.",
+   "Establish secure access controls and sandbox environments.",
+   "Begin discovery of data sources, schemas and pipelines.",
+   "Lock governance cadences with the client team."
+  ],
+  "takeaway": "This executive action plan outlines the four immediate steps required in week one."
+ }
+}

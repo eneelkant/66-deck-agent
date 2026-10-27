@@ -1,0 +1,33 @@
+{
+ "reported": "plain-layout",
+ "title": "Self-service analytics consumption personas",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "cards",
+  "title": "Self-service analytics consumption personas",
+  "items": [
+   {
+    "title": "Looker dashboards",
+    "audience": "Executives",
+    "needs": "Governed KPIs in one place"
+   },
+   {
+    "title": "Conversational BI",
+    "audience": "Analysts",
+    "needs": "Ask questions in plain language"
+   },
+   {
+    "title": "Vertex AI Workbench",
+    "audience": "Data scientists",
+    "needs": "Notebook access to governed data"
+   },
+   {
+    "title": "Cloud Run APIs",
+    "audience": "Product teams",
+    "needs": "Data in their apps"
+   }
+  ]
+ }
+}

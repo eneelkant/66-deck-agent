@@ -1,0 +1,37 @@
+{
+ "reported": "plain-layout",
+ "title": "Google Cloud Platform capabilities mapped to needs",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "table",
+  "title": "Google Cloud Platform capabilities mapped to needs",
+  "columns": [
+   "Need",
+   "Legacy siloed tools",
+   "Point cloud solutions",
+   "Google Cloud fabric"
+  ],
+  "rows": [
+   [
+    "Ingestion",
+    "Manual scripts",
+    "Separate ETL tool",
+    "Datastream and Pub/Sub"
+   ],
+   [
+    "Governance",
+    "Spreadsheets",
+    "Separate catalog",
+    "Dataplex"
+   ],
+   [
+    "BI",
+    "Many tools",
+    "One BI tool",
+    "Looker"
+   ]
+  ]
+ }
+}

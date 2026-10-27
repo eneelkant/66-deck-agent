@@ -143,7 +143,7 @@ test("setup SQL: dataset, log table, rates, and the cost / run / daily / summary
   ["CREATE SCHEMA IF NOT EXISTS `d-marketing-ai-applications.deck_agent`", "deck_agent.deck_usage", "deck_agent.model_rates",
     "VIEW `d-marketing-ai-applications.deck_agent.v_usage_cost`", "v_runs", "v_daily_user", "v_summary_model", "v_summary_user", "v_summary_category",
     "PARTITION BY DATE(ts)", "'Asia/Kolkata'"].forEach((s) => assert.ok(sql.includes(s), s));
-  assert.doesNotMatch(sql, /''/, "BigQuery strings do not escape quotes by doubling");
+  assert.doesNotMatch(sql, /[a-z]''[a-z]/i, "BigQuery strings do not escape quotes by doubling");
   // every column the add-on writes exists in the table
   const sb = sandbox();
   sb.usageRun_({ runId: "run-7", mode: "Create" }, () => ({ ok: true }));

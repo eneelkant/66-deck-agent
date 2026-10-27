@@ -1,0 +1,27 @@
+{
+ "reported": "plain-layout",
+ "title": "RACI responsibility matrix across workstreams",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "team",
+  "title": "RACI responsibility matrix across workstreams",
+  "items": [
+   {
+    "title": "66degrees delivery pod",
+    "points": [
+     "Platform provisioning: author Terraform modules",
+     "Source extraction: build ingestion connectors"
+    ]
+   },
+   {
+    "title": "ZoomInfo stakeholders",
+    "points": [
+     "Platform provisioning: approve IAM policies",
+     "Source extraction: grant credentials"
+    ]
+   }
+  ]
+ }
+}

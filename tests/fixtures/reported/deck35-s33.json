@@ -1,0 +1,29 @@
+{
+ "reported": "plain-layout",
+ "title": "Zero-trust data security and privacy controls",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "bullets",
+  "title": "Zero-trust data security and privacy controls",
+  "items": [
+   {
+    "title": "Identity and access governance",
+    "points": [
+     "Role-based access via Cloud IAM",
+     "Column-level masking",
+     "Row-level filters"
+    ]
+   },
+   {
+    "title": "Infrastructure protection",
+    "points": [
+     "CMEK via Cloud KMS",
+     "VPC Service Controls",
+     "Audit logs"
+    ]
+   }
+  ]
+ }
+}

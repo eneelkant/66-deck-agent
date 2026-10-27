@@ -1,0 +1,37 @@
+{
+ "reported": "plain-layout",
+ "title": "The rising risk of unmanaged technical debt",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "bullets",
+  "title": "The rising risk of unmanaged technical debt",
+  "items": [
+   {
+    "title": "Disparate analytics sprawl",
+    "text": "Unmonitored tools create fragmented pipelines.",
+    "points": [
+     "Establish standardized blueprints",
+     "Enforce infrastructure as code"
+    ]
+   },
+   {
+    "title": "Complex pipeline incidents",
+    "text": "Silent failures corrupt reporting.",
+    "points": [
+     "Automated observability",
+     "Self-healing ingestion"
+    ]
+   },
+   {
+    "title": "Unclear data ownership",
+    "text": "No executive alignment.",
+    "points": [
+     "Define ownership roles",
+     "Form a steering committee"
+    ]
+   }
+  ]
+ }
+}

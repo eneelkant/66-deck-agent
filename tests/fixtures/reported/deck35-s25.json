@@ -1,0 +1,28 @@
+{
+ "reported": "plain-layout",
+ "title": "Projected total cost of ownership trajectory",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "stats",
+  "title": "Projected total cost of ownership trajectory",
+  "items": [
+   {
+    "value": "40%",
+    "label": "operating cost reduction",
+    "text": "Projected savings from retiring legacy licenses."
+   },
+   {
+    "value": "60%",
+    "label": "remediation effort reduction",
+    "text": "Fewer hours fixing broken pipelines."
+   },
+   {
+    "value": "35%",
+    "label": "faster issue resolution",
+    "text": "Shorter time to troubleshoot anomalies."
+   }
+  ]
+ }
+}

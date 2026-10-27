@@ -1,0 +1,29 @@
+{
+ "reported": "plain-layout",
+ "title": "Target engineering velocity",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "stats",
+  "title": "Target engineering velocity",
+  "items": [
+   {
+    "value": "100%",
+    "label": "data product freshness SLA"
+   },
+   {
+    "value": "75%",
+    "label": "fewer P1 quality incidents"
+   },
+   {
+    "value": "4x",
+    "label": "faster source onboarding"
+   },
+   {
+    "value": "50%",
+    "label": "shorter deployment lead time"
+   }
+  ]
+ }
+}

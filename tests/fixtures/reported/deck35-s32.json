@@ -1,0 +1,29 @@
+{
+ "reported": "plain-layout",
+ "title": "Value realization and business KPI framework",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "cards",
+  "title": "Value realization and business KPI framework",
+  "items": [
+   {
+    "title": "Pipeline SLA latency",
+    "text": "Track end-to-end ingestion-to-serving latency."
+   },
+   {
+    "title": "Data accuracy",
+    "text": "Measure automated parity pass rates."
+   },
+   {
+    "title": "Unit compute cost per query",
+    "text": "Monitor average slot consumption."
+   },
+   {
+    "title": "Self-service adoption",
+    "text": "Quantify daily active users."
+   }
+  ]
+ }
+}

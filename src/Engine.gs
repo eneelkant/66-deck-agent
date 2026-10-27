@@ -4192,11 +4192,11 @@ var ENGINE = (function () {
       rs.forEach(function (c) {
         if (out) return;
         var ct = ALIASES[String(c.type).toLowerCase()] || String(c.type).toLowerCase();
-        (VARIANTS[ct] || []).forEach(function (v) {
-          if (out || !V[v.tag] || !inLib_(v.tag, 'proposal')) return;
+        reshapeVariants_(ct).forEach(function (tag) {
+          if (out) return;
           try {
-            var o4 = V[v.tag](c, lctx);
-            if (o4 && contentCount_(o4) > 0 && !textOverlaps_(o4).length && !headingsOnly_(o4, c)) { o4.drawnWith = v.tag; out = o4; s = c; }
+            var o4 = V[tag](c, lctx);
+            if (o4 && contentCount_(o4) > 0 && !textOverlaps_(o4).length && !headingsOnly_(o4, c)) { o4.drawnWith = tag; out = o4; s = c; }
           } catch (e) {}
         });
       });
@@ -4392,6 +4392,10 @@ var ENGINE = (function () {
         if (!over) break;
       }
       TSZ.body = TYPE_STEPS[0].body; TSZ.heading = TYPE_STEPS[0].heading;
+      // V.1_64: every slide of every deck type is checked before it is drawn; a slide that fails is drawn again with the
+      // design that shows its content best, and what was found / corrected goes with the slide (the slide log)
+      // (flowcharts - nodes and edges - are drawn by the diagram builder afterwards: not checked here)
+      if (!s.diagram && !(Array.isArray(s.nodes) && s.nodes.length)) out = qualityGate_(out, s, type, lctx);
       if (s.diagram && typeof applyDiagramIrToEngineOutput_ === 'function') {
         out = applyDiagramIrToEngineOutput_(out, s, ctx.tokens || null);
       }
@@ -4402,6 +4406,121 @@ var ENGINE = (function () {
       slides.push(out);
     });
     return slides;
+  }
+
+  /* ---------- V.1_64: the deck checklist, checked on every slide (General, Proposal, Solution decks and Rebrand redraws) ----------
+     empty            a content slide that shows nothing under its title
+     lost-content     less than 60% of the slide's words are on the slide (a design that dropped part of it)
+     headings-only    only the headings are shown while the slide has texts
+     plain-layout     a Proposal or Solution slide drawn with a General plain layout
+     joined-points    points run together in one text ("a; b; c")
+     cut              a text cut short ("…")
+     overlap          two texts on top of each other
+     streak-content   the transition picture behind a content slide
+     A slide with a problem is drawn again with every other design that can show it (its own type, the shapes its content
+     really has, the library's fallbacks); the one with the fewest and lightest problems is kept. */
+  // V.1_64: the designs a reshaped Proposal slide tries first (the general-purpose designs of each shape), then the rest
+  var RESHAPE_FIRST_ = { comparison: ['P66_TWO_PANELS', 'P66_PROS_CONS'], cards: ['P66_TWO_CARDS_PHOTO', 'P66_ICON_COLUMNS', 'P66_CARD_GRID', 'P66_CARDS_2X2', 'P66_ICON_GRID'],
+    process: ['P66_NUMBERED_ROWS', 'P66_STEP_FLOW', 'P66_CHEVRON_PHASES'], table: ['P66_TABLE'], team: ['P66_TEAM_STRUCTURE', 'P66_TEAM_ROLES', 'P66_ORG_TREE'], stats: ['P66_KPI_TILES'] };
+  function reshapeVariants_(t) {
+    var first = RESHAPE_FIRST_[t] || [];
+    var rest = (VARIANTS[t] || []).map(function (v) { return v.tag; }).filter(function (x) { return first.indexOf(x) === -1; });
+    return first.concat(rest).filter(function (x) { return V[x] && inLib_(x, 'proposal'); });
+  }
+  var QA_WEIGHT_ = { empty: 100, 'lost-content': 50, 'headings-only': 40, 'plain-layout': 40, overlap: 30, cut: 20, 'joined-points': 10, 'streak-content': 60 };
+  // keys that hold ids, kinds and styles, not words the reader sees
+  var QA_SKIP_KEYS_ = { icon: 1, material: 1, tag: 1, id: 1, kind: 1, group: 1, from: 1, to: 1, source: 1, target: 1, shape: 1, style: 1, color: 1,
+    status: 1, unit: 1, align: 1, size: 1, lockTag: 1, cardStyle: 1, look: 1, sectionStyle: 1, chart: 0 };
+  var QA_FRAME_ = { cover: 1, agenda: 1, closing: 1, section: 1, template: 1, quote: 1 };
+  function qaWords_(t) { return (String(t || '').toLowerCase().match(/[a-z0-9][a-z0-9'%-]{3,}/g) || []); }
+  function slideIssues_(out, s, type) {
+    if (!out || QA_FRAME_[type]) return [];
+    var iss = [];
+    var lib = libOf_(s);
+    var shownText = (out.els || []).filter(function (e) { return e.t === 'text'; }).map(function (e) { return String(e.text || ''); });
+    if (contentCount_(out) === 0) iss.push('empty');
+    else {
+      var want = {}, n = 0, got = 0;
+      specLongTexts_(s).concat(specShortTexts_(s)).forEach(function (t) { qaWords_(t).forEach(function (w) { if (!want[w]) { want[w] = 1; n++; } }); });
+      if (n >= 12) {
+        var shown = {};
+        shownText.forEach(function (t) { qaWords_(t).forEach(function (w) { shown[w] = 1; }); });
+        Object.keys(want).forEach(function (w) { if (shown[w]) got++; });
+        if (got / n < 0.6) iss.push('lost-content');
+      }
+      if (headingsOnly_(out, s)) iss.push('headings-only');
+    }
+    if (lib !== 'general' && /^base:/.test(String(out.drawnWith || '')) && type !== 'statement') iss.push('plain-layout');
+    if (shownText.some(function (t) { return (t.match(/;\s/g) || []).length >= 2 || /\.;/.test(t); })) iss.push('joined-points');
+    if (cutCount_(out)) iss.push('cut');
+    if (textOverlaps_(out).length) iss.push('overlap');
+    if (out.bgImage === 'section-bg' && typeof photoRegion_ === 'function') {
+      var rg = photoRegion_(out.els, W, H);
+      if (rg[0] <= 1 && rg[1] <= 1 && rg[2] >= W - 1 && rg[3] >= H - 1) iss.push('streak-content');
+    }
+    return iss;
+  }
+  // short texts too (headings, labels, cells) for the words a slide should show
+  function specShortTexts_(s) {
+    var out = [];
+    (function walk(v, depth) {
+      if (depth > 5 || v == null) return;
+      if (typeof v === 'string') { if (String(v).split(/\s+/).length < 6) out.push(v); return; }
+      if (Array.isArray(v)) { v.forEach(function (x) { walk(x, depth + 1); }); return; }
+      if (typeof v === 'object') Object.keys(v).forEach(function (k) { if (!(depth === 0 && SPEC_SKIP_[k]) && !QA_SKIP_KEYS_[k]) walk(v[k], depth + 1); });
+    })(s, 0);
+    return out;
+  }
+  function qaScore_(iss) { return (iss || []).reduce(function (t, k) { return t + (QA_WEIGHT_[k] || 10); }, 0); }
+  function layoutAllSteps_(s, type, lctx) {
+    var o = null;
+    for (var k = 0; k < TYPE_STEPS.length; k++) {
+      TSZ.body = TYPE_STEPS[k].body; TSZ.heading = TYPE_STEPS[k].heading;
+      AUDIT = [];
+      try { o = layoutSlide(s, type, lctx); } catch (e) { o = null; }
+      var over = (AUDIT || []).some(function (a) { return a.truncated; });
+      AUDIT = null;
+      if (o && !over) break;
+    }
+    TSZ.body = TYPE_STEPS[0].body; TSZ.heading = TYPE_STEPS[0].heading;
+    return o;
+  }
+  function qualityGate_(out, s, type, lctx) {
+    var first = slideIssues_(out, s, type);
+    if (!first.length) { out.qa = { issues: [], fixed: [] }; return out; }
+    var lib = libOf_(s), best = { out: out, iss: first, score: qaScore_(first), spec: s };
+    var tryOne = function (spec, t) {
+      if (best.score === 0) return;
+      t = ALIASES[String(t || type).toLowerCase()] || String(t || type).toLowerCase();
+      if (!L[t]) return;
+      var o = layoutAllSteps_(spec, t, lctx);
+      if (!o) return;
+      var iss = slideIssues_(o, spec, t), sc = qaScore_(iss);
+      if (sc < best.score) best = { out: o, iss: iss, score: sc, spec: spec };
+    };
+    var cur = String(out.drawnWith || '');
+    // 1. the other designs of the slide's type in its library
+    (VARIANTS[type] || []).forEach(function (v) {
+      if (v.tag !== cur && V[v.tag] && inLib_(v.tag, lib)) tryOne(Object.assign({}, s, { reference: { tag: v.tag } }), type);
+    });
+    // 2. the shapes its content really has (Proposal), the library's text designs (Solution), the plain cards (General)
+    if (lib === 'proposal' && typeof proposalReshapes_ === 'function') {
+      var rs = []; try { rs = proposalReshapes_(s) || []; } catch (e) { rs = []; }
+      rs.forEach(function (c) {
+        var ct = ALIASES[String(c.type).toLowerCase()] || String(c.type).toLowerCase();
+        reshapeVariants_(ct).forEach(function (tag) { tryOne(Object.assign({}, c, { reference: { tag: tag } }), ct); });
+      });
+    }
+    if (lib === 'solution') SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (V[t] && t !== cur) tryOne(Object.assign({}, flattenSpec_(s, type), { reference: { tag: t } }), type); });
+    if (lib === 'general') {
+      var flat = flattenSpec_(s, type);
+      tryOne(Object.assign({}, flat, { reference: null }), type);
+      if ((flat.items || []).length >= 2) tryOne(Object.assign({}, flat, { reference: null, type: 'cards' }), 'cards');
+    }
+    var res = best.out;
+    res.qa = { issues: best.iss, fixed: best.out === out ? [] : first.filter(function (k) { return best.iss.indexOf(k) === -1; }), from: best.out === out ? '' : cur };
+    if (best.out !== out && typeof Logger !== 'undefined' && Logger.log) Logger.log('V.1_64 check: "' + String(s.title || '').slice(0, 50) + '" ' + first.join(', ') + ' -> drawn with ' + res.drawnWith + (best.iss.length ? ' (still: ' + best.iss.join(', ') + ')' : ''));
+    return res;
   }
 
   // V.1_42: the Proposal Deck design library (ProposalDesigns.gs) adds its designs here and draws with the same helpers
@@ -4435,6 +4554,7 @@ var ENGINE = (function () {
     addProposalDesign: addProposalDesign, addSolutionDesign: addSolutionDesign, shareDesign: shareDesign, kit: KIT,
     inLibrary: function (tag, lib) { return inLib_(tag, lib === 'proposal' || lib === 'solution' ? lib : 'general'); },
     textOverlaps: textOverlaps_,
+    slideIssues: function (out, spec) { var sp = cleanSpec(spec || {}); var t = ALIASES[String(sp.type || 'bullets').toLowerCase()] || String(sp.type || 'bullets').toLowerCase(); return slideIssues_(out, sp, L[t] ? t : 'bullets'); },
     titleFits: function (t) { return wrap(String(t), TITLE_W, 'sans', 500, 20).length <= 1; },
     titleMaxChars: function (t) { return maxCharsFor(t, TITLE_W, 20, 500); },
     agendaTextFits: function (t) { return wrap(String(t), AGENDA_DESC_W, 'sans', 400, 11).length <= 1; },

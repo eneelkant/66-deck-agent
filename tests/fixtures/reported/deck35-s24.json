@@ -1,0 +1,30 @@
+{
+ "reported": "plain-layout",
+ "title": "Scope: what is in and what is out",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "bullets",
+  "title": "Scope: what is in and what is out",
+  "items": [
+   {
+    "title": "In scope",
+    "points": [
+     "Request-driven access queues delay business analysis by weeks",
+     "Departmental data silos carry conflicting logic across sales and finance",
+     "Opaque data lineage erodes executive trust in reported numbers",
+     "Duplicated transformation scripts are rebuilt for single-use dashboards"
+    ]
+   },
+   {
+    "title": "Out of scope",
+    "points": [
+     "Request-driven access queues delay business analysis by weeks",
+     "Departmental data silos carry conflicting logic across sales and finance",
+     "Opaque data lineage erodes executive trust in reported numbers"
+    ]
+   }
+  ]
+ }
+}

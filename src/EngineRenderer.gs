@@ -229,8 +229,21 @@ function getActivePresentationSafe_() {
   return pres;
 }
 
+// V.1_64: the deck check's findings in words
+const QA_LABELS_ = { empty: 'nothing under the title', 'lost-content': 'part of its content missing', 'headings-only': 'only headings shown',
+  'plain-layout': 'a plain layout', 'joined-points': 'points run together', cut: 'a text cut short', overlap: 'texts on top of each other',
+  'streak-content': 'the transition picture behind content' };
 function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   const out = ENGINE.render({ slides: [spec] }, { dateLabel: dateLabel, sectionNo: spec.number || null, tokens: ctx.tokens || null })[0];
+  try { if (typeof recordSlide_ === 'function') recordSlide_(spec, out, number); } catch (e) {}   // V.1_64: the slide log
+  // V.1_64: the deck check in the result: a slide it corrected is counted, a slide it could not correct is named
+  try {
+    const qa = out.qa || {};
+    if ((qa.fixed || []).length) ctx.qaFixed = (ctx.qaFixed || 0) + 1;
+    if ((qa.issues || []).length && ctx.log && (ctx.qaNamed = (ctx.qaNamed || 0) + 1) <= 6) {
+      ctx.log.push('Deck check: slide ' + number + ' "' + String(spec.title || '').slice(0, 50) + '" still has: ' + qa.issues.map(function (k) { return QA_LABELS_[k] || k; }).join(', ') + '.');
+    }
+  } catch (e) {}
   const s = safeSize_(pageW, ENGINE.W) / ENGINE.W;
 
   slide.getPageElements().forEach(function (el) { try { el.remove(); } catch (e) {} });

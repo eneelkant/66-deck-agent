@@ -1,0 +1,31 @@
+{
+ "reported": "plain-layout",
+ "title": "Joint delivery team and governance structure",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "team",
+  "title": "Joint delivery team and governance structure",
+  "teams": [
+   {
+    "name": "ZoomInfo team",
+    "roles": [
+     "Executive sponsor: approves scope",
+     "Domain data product owners: define KPIs"
+    ]
+   },
+   {
+    "name": "66degrees team",
+    "roles": [
+     "Engagement lead: sprint delivery",
+     "Principal architect: lakehouse design"
+    ]
+   }
+  ],
+  "governance": {
+   "name": "Executive steering committee",
+   "text": "Bi-weekly alignment"
+  }
+ }
+}

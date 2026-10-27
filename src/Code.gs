@@ -2875,6 +2875,8 @@ function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
 
   stats.libraryIcons = ctx.libraryIconsPlaced || 0;
   progressStage_(ctx, 'brand', 'done', stats.redrawn + ' slides drawn in this presentation');
+  // V.1_64: slides the deck check drew again with a better design
+  if (ctx.qaFixed) { ctx.log.push('Deck check: ' + ctx.qaFixed + ' slide(s) drawn again with a design that shows all of their content.'); ctx.qaFixed = 0; }
   return stats;
 }
 
@@ -4947,7 +4949,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_63';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_64';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck

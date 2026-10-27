@@ -1,0 +1,33 @@
+{
+ "reported": "plain-layout",
+ "title": "Internal BI versus external data monetization APIs",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "comparison",
+  "title": "Internal BI versus external data monetization APIs",
+  "rows": [
+   {
+    "label": "Latency",
+    "left": "Seconds to minutes",
+    "right": "Sub-second"
+   },
+   {
+    "label": "Access",
+    "left": "Departmental RBAC",
+    "right": "Multi-tenant API keys"
+   },
+   {
+    "label": "Serving store",
+    "left": "BigQuery",
+    "right": "Cloud Bigtable"
+   }
+  ],
+  "columns": [
+   "Aspect",
+   "Internal BI analytics",
+   "External monetization APIs"
+  ]
+ }
+}

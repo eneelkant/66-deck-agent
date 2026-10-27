@@ -1,0 +1,27 @@
+{
+ "reported": "plain-layout",
+ "title": "Ad-hoc scripting versus standardized DataOps",
+ "spec": {
+  "deckLibrary": "proposal",
+  "lead": "A short lead line that explains the slide in one sentence.",
+  "notes": "n",
+  "type": "comparison",
+  "title": "Ad-hoc scripting versus standardized DataOps",
+  "left": {
+   "title": "Legacy approach",
+   "points": [
+    "Request-driven access queues delay business analysis by weeks",
+    "Departmental data silos carry conflicting logic across sales and finance",
+    "Opaque data lineage erodes executive trust in reported numbers"
+   ]
+  },
+  "right": {
+   "title": "Target state",
+   "points": [
+    "Request-driven access queues delay business analysis by weeks",
+    "Departmental data silos carry conflicting logic across sales and finance",
+    "Opaque data lineage erodes executive trust in reported numbers"
+   ]
+  }
+ }
+}
