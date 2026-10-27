@@ -51,7 +51,7 @@ function virtualSlides(deck) {
     insertImage(blob, x, y, w, h) { const e = { objectId: "img" + log.images.length, image: {}, size: { width: { magnitude: w * EMU }, height: { magnitude: h * EMU } }, transform: { scaleX: 1, scaleY: 1, translateX: x * EMU, translateY: y * EMU } }; p.pageElements.push(e); log.images.push({ page: p.objectId, x, y, w, h }); return { setTitle(t) { e.title = t; }, bringToFront() {} }; },
     getPageElementById(id) {
       const f = find(id); if (!f) return null;
-      return { setLeft(x) { f.e.transform.translateX = x * EMU; log.moved.push(id); }, getParentGroup: () => null, getLeft: () => (f.e.transform.translateX || 0) / EMU };
+      return { setLeft(x) { f.e.transform.translateX = x * EMU; log.moved.push(id); }, setTop(y) { f.e.transform.translateY = y * EMU; log.moved.push(id); }, bringToFront() {}, asImage: () => ({ getBlob: () => ({ kept: id }) }), getParentGroup: () => null, getLeft: () => (f.e.transform.translateX || 0) / EMU };
     },
     getPageElements: () => p.pageElements.map((e) => {
       const tr = () => e.transform || (e.transform = { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 });

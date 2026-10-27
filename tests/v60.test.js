@@ -99,7 +99,7 @@ test("texts of the same kind shrink together; the rebrand check finds no overlap
 
 test("the 66 mark takes the old mark's place on every slide and never covers footer text", () => {
   const R = run();
-  const marks = R.V.log.images;
+  const marks = R.V.log.images.filter((m) => m.page !== R.V.state.slides[0].objectId);   // the cover keeps its picture (V.1_61)
   assert.ok(marks.length >= 10);
   marks.forEach((m) => {
     assert.ok(Math.abs(m.x - 18) < 1 && m.w < 22, "mark at the old mark's place: " + JSON.stringify(m));

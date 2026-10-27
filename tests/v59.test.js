@@ -102,7 +102,7 @@ test("titles and headings in sentence case; the deck's names and acronyms keep t
 
 test("one 66 mark per slide (the deck's old marks go) and footer text clear of it; one background", () => {
   const R = run();
-  const marks = R.V.log.images.length;
+  const marks = R.V.log.images.filter((m) => m.page !== R.V.state.slides[0].objectId).length;   // (V.1_61: the cover keeps its picture)
   assert.equal(marks, 13, "one mark on each content slide");
   const oldMarks = R.V.all().filter(({ e }) => e.image && !/^img/.test(e.objectId));
   const bottomLeft = oldMarks.filter(({ e }) => (e.transform.translateY || 0) / 12700 > 340 && (e.transform.translateX || 0) / 12700 < 80);
