@@ -3236,6 +3236,9 @@ function setRunNames_(prompt, extra) {
     name = words.join(' ');
     if (!name || name.length < 3 || /^[A-Z]{2,5}$/.test(name)) continue;          // acronyms keep their capitals anyway
     if (words.length === 1 && lower[name.toLowerCase()]) continue;               // "Customers" at a line start, "Scale" ...
+    // V.1_63 (deck 35: "Enterprise data and Analytics proposal"): ordinary business words written with capitals in the
+    // request ("Data and Analytics", "Analytics") are not names
+    if (words.every(function (w) { return /^(of|and|for|&)$/i.test(w) || COMMON_HEAD_WORDS_.test(w.toLowerCase()) || /^(enterprise|analytics|intelligence|engineering|platform|cloud|digital|modernization|modernisation)$/i.test(w); })) continue;
     RUN_NAMES_[name.toLowerCase()] = name;
   }
   (extra || []).forEach(function (n) { if (n && String(n).length >= 2) RUN_NAMES_[String(n).toLowerCase()] = String(n); });
@@ -3338,11 +3341,15 @@ function chooseDesignsByContent_(plan, ctx) {
   const trialOf = function (sp, tag) { return Object.assign({}, sp, { reference: Object.assign({}, sp.reference || {}, { tag: tag }) }); };
   const wanted = {};                                                   // designs Gemini chose, slide by slide
   plan.slides.forEach(function (sp) { if (sp && sp.design) wanted[String(sp.design).trim()] = true; });
+  const lastAt = st.lastAt || (st.lastAt = {});                       // V.1_63: where each design was last placed
+  let at = st.at || 0;
   plan.slides.forEach(function (sp) {
+    at++;
     let type = normalizeType_(sp.type);
     if (type === 'template' || String(sp.type || '').toLowerCase() === 'template') { if (sp.tag) used[sp.tag] = 1; return; }
     // V.1_42b: a Proposal Deck slide no proposal design can draw is reshaped into one that can (never the plain layout)
     if (typeof proposalCycle_ === 'function' && proposalCycle_(sp, used)) type = normalizeType_(sp.type);    // V.1_50: a loop is a cycle
+    ctx.designAt = { lastAt: lastAt, at: at };                          // V.1_63: where designs were last placed (reshaping)
     if (typeof proposalCoerce_ === 'function' && proposalCoerce_(sp, ctx, used)) type = normalizeType_(sp.type);
     // V.1_42: frame slides of a Proposal Deck (agenda, section dividers) keep the design the deck structure gave them
     if (sp.lockTag) {
@@ -3364,7 +3371,7 @@ function chooseDesignsByContent_(plan, ctx) {
       try { m0 = ENGINE.measure(sp, { tokens: ctx.tokens || null }); } catch (e) {}
       prevTag = current;
       prevLook = lookKey(type, current, m0);
-      if (current) used[current] = (used[current] || 0) + 1;
+      if (current) { used[current] = (used[current] || 0) + 1; lastAt[current] = at; }
       if (prevLook) looksUsed[prevLook] = (looksUsed[prevLook] || 0) + 1;
       prevDark = !!(m0 && m0.dark) && type !== 'section';
       if (prevDark) darkUsed++;
@@ -3411,6 +3418,10 @@ function chooseDesignsByContent_(plan, ctx) {
       const geminiPick = isLibSpec_(sp) && c.fitsWell && sp.design && String(sp.design).trim() === d.tag;
       if (!geminiPick) score -= 70 * (looksUsed[c.look] || 0);
       if (d.tag === prevTag) score -= 60;
+      // V.1_63 (deck 35: the same four blue-header cards on slides 19, 37, 40 and 49): a design used again in a long deck
+      // stays at least 8 slides away from its last place; designs that show icons are preferred for parallel items
+      if (lastAt[d.tag] && at - lastAt[d.tag] < 8) score -= 140;
+      if (m.icons > 0 && ['cards', 'process', 'diagram'].indexOf(type) !== -1) score += 30;
       if (c.look === prevLook && !geminiPick) score -= 50;
       // 3. Variety between decks (every user): designs and looks used in the last decks lose, unused ones win
       score += recencyScore_(history, d.tag);
@@ -3428,13 +3439,14 @@ function chooseDesignsByContent_(plan, ctx) {
       swaps++;
     }
     prevTag = sp.reference ? sp.reference.tag : null;
+    if (prevTag) lastAt[prevTag] = at;
     prevLook = best ? best.c.look : prevTag;
     if (prevTag) used[prevTag] = (used[prevTag] || 0) + 1;
     if (prevLook) looksUsed[prevLook] = (looksUsed[prevLook] || 0) + 1;
     prevDark = !!(best && best.c.m.dark);
     if (prevDark) darkUsed++;
   });
-  st.prevTag = prevTag; st.prevLook = prevLook; st.prevDark = prevDark; st.darkUsed = darkUsed;
+  st.prevTag = prevTag; st.prevLook = prevLook; st.prevDark = prevDark; st.darkUsed = darkUsed; st.at = at;
   if (ctx.chooserState) { st.history = history; return swaps; }          // long deck: saved once, when the deck is finished
   saveDesignUsage_(Object.keys(used), Object.keys(looksUsed));
   return swaps;
@@ -4352,7 +4364,19 @@ function fillThinSlides_(plan, ctx) {
           if (txt && !/[A-Za-z]{3}/.test(String(it.text || '') + (Array.isArray(it.points) ? it.points.join(' ') : ''))) { it.text = String(txt); delete it.points; }
         });
       } else if (x.kind === 'items' || x.kind === 'kpis') sp.items = (sp.items || []).filter(Boolean).concat(add);
-      else sp.points = (sp.points || []).filter(Boolean).concat(add);
+      else {
+        // V.1_63 (deck 35 slide 59: the title and the speaker summary came back as two more bullets): a point that repeats
+        // the title, the lead, the takeaway or the notes, or a point already there, is not added
+        const norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+        const seen = {};
+        [sp.title, sp.lead, sp.takeaway, sp.statement].concat(sp.points || []).forEach(function (t) { if (norm(t)) seen[norm(t)] = 1; });
+        const notes = norm(sp.notes);
+        sp.points = (sp.points || []).filter(Boolean).concat(add.filter(function (a) {
+          const k = norm(typeof a === 'object' && a ? (a.text || a.title) : a);
+          if (!k || seen[k] || (k.length > 40 && notes.indexOf(k) !== -1)) return false;
+          seen[k] = 1; return true;
+        }));
+      }
       tidyItemText_(sp);
       sentenceCaseHeadings_(sp);
       n++;
@@ -4923,7 +4947,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_62';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_63';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5759,6 +5783,8 @@ function startLongDeck_(ctx, target, p, started) {
     st.workId = wp.getId();
     st.workSkip = wp.getSlides()[0] ? wp.getSlides()[0].getObjectId() : '';
     st.blankIds = p.blankDeck ? target.getSlides().map(function (sl) { return sl.getObjectId(); }) : [];
+    st.startCount = target.getSlides().length;                         // V.1_63: an empty first slide is removed at the end
+    try { st.firstId = target.getSlides()[0].getObjectId(); } catch (e) { st.firstId = ''; }
     ctx.workId = st.workId;
     drawSlidesIntoActive_(wp, head, ctx, false);
   } else {
@@ -5793,6 +5819,11 @@ function assembleWorkDeck_(target, st, t0, ctx) {
   }
   // the presentation was empty (one blank slide): that slide goes
   (st.blankIds || []).forEach(function (id) { try { const sl = target.getSlideById(id); if (sl) sl.remove(); } catch (e) {} });
+  // V.1_63 (deck 35: an empty slide 1 before the cover): a presentation that had one slide, still empty, loses it
+  try {
+    const all = target.getSlides();
+    if (st.startCount === 1 && st.firstId && all.length > 1 && all[0].getObjectId() === st.firstId && isBlankDeck([all[0]])) all[0].remove();
+  } catch (e) {}
   try { trashDriveFile(st.workId); } catch (e) {}
   st.workId = null;
   return true;

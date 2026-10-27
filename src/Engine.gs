@@ -450,15 +450,17 @@ var ENGINE = (function () {
 
   // 66D_LAYOUT_SECTION_001 (template slides 2, 6, 91): dark streak background, SemiBold white title left-middle, short underline.
   // No section number unless the spec carries one.
+  // V.1_63: every deck type has the same transition slide (deck 35 slide 4): dark streaks, the section number, the title
+  // and a thin line under it - the light watermark divider is no longer used
   L.section = function (s, ctx) {
     var els = [];
-    if (s.sectionStyle === 'light') return sectionLight_(s);
-    if (s.number) text(els, 32.4, 118, 80, 36, s.number, { weight: 600, max: 28, min: 24, maxLines: 1, color: T.white });
-    var t = text(els, 32.4, 164, 420, 80, s.title, { weight: 600, max: 28, min: 20, maxLines: 2, color: T.white });
-    var ly = 164 + Math.max(t.height, lineHeight('sans', t.size || 28)) + 14;
-    line(els, 33.4, ly, 33.4 + 120, ly, T.white, 1);
-    if (s.lead) text(els, 32.4, ly + 14, 420, 60, s.lead, { weight: 400, max: TSZ.body + 2, min: TSZ.body, maxLines: 3, color: T.white });
-    return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true };
+    var no = s.noNumber ? '' : String(s.number || '');
+    if (no) text(els, 32.4, 150, 80, 26, no, { weight: 400, max: 18, min: 16, maxLines: 1, color: T.white });
+    var t = text(els, 32.4, 180, 330, 60, s.title, { weight: 400, max: 15, min: 13, maxLines: 2, color: T.white });
+    var lw = Math.min(330, Math.max(110, (t.width || 160) + 6)), ly = 180 + t.height + 6;
+    line(els, 33.4, ly, 33.4 + lw, ly, T.white, 0.75);
+    if (s.lead) text(els, 32.4, ly + 12, 330, 48, s.lead, { weight: 400, max: TSZ.body, min: TSZ.body - 1, maxLines: 3, color: T.white });
+    return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true, noBalance: true };
   };
 
   // Proposal section divider, light (66degrees proposals): panel background, title and one subtitle line left-middle,
@@ -3943,6 +3945,10 @@ var ENGINE = (function () {
   }
   // V.1_58: the content the base layouts read (text, points, left / right points), gathered from the other shapes the
   // writer uses: items with points or roles, teams, left / right items, before / after, rows {label, left, right}
+  function sentencesOf_(l) {
+    return (l || []).map(function (x) { x = String(x || '').trim().replace(/[;,]$/, ''); return !x ? '' : /[.!?]$/.test(x) ? x : x + '.'; })
+      .filter(Boolean).map(function (x) { return x.charAt(0).toUpperCase() + x.slice(1); }).join(' ');
+  }
   function flattenSpec_(s0, type) {
     var s = Object.assign({}, s0);
     var strOf = function (x) {
@@ -3960,10 +3966,11 @@ var ENGINE = (function () {
     if (Array.isArray(s.items)) s.items = s.items.map(function (it) {
       if (!it || typeof it !== 'object' || String(it.text || it.description || '').trim()) return it;
       var l = listOf(it);
-      return l.length ? Object.assign({}, it, { text: l.join('; ') + (/[.!?]$/.test(l[l.length - 1]) ? '' : '.') }) : it;
+      // V.1_63 (deck 35: "40%; Projected", "policies.; Domain"): the points stay sentences, each with its own full stop
+      return l.length ? Object.assign({}, it, { text: sentencesOf_(l) }) : it;
     });
     if ((!Array.isArray(s.items) || !s.items.length) && Array.isArray(s.teams) && s.teams.length) {
-      s.items = s.teams.map(function (t) { var l = listOf(t); return { title: String((t && (t.name || t.title)) || ''), text: l.join('; ') || String((t && t.text) || '') }; });
+      s.items = s.teams.map(function (t) { var l = listOf(t); return { title: String((t && (t.name || t.title)) || ''), text: sentencesOf_(l) || String((t && t.text) || '') }; });
     }
     if (type === 'comparison') {
       var pairs = [['left', 'right'], ['before', 'after'], ['current', 'future'], ['today', 'target'], ['problem', 'solution'], ['from', 'to']];
@@ -4003,6 +4010,12 @@ var ENGINE = (function () {
       if (AUDIT) AUDIT.length = mark;
       HEADER_MAX_W = 470;
       try { out = layoutSlideOnce_(s, type, lctx); } finally { HEADER_MAX_W = 0; }
+    }
+    // V.1_63 (deck 35 slide 8): the full-slide streak picture is the transition slide's own; a content slide that would
+    // fill the slide with it is drawn on plain Night Blue instead (a strip, band or panel of photo stays as it is)
+    if (out && out.bgImage === 'section-bg' && ['cover', 'section', 'closing', 'template'].indexOf(type) === -1 && typeof photoRegion_ === 'function') {
+      var reg = photoRegion_(out.els, W, H);
+      if (reg[0] <= 1 && reg[1] <= 1 && reg[2] >= W - 1 && reg[3] >= H - 1) { delete out.bgImage; out.bg = T.ink; out.dark = true; }
     }
     return out;
   }
@@ -4171,6 +4184,23 @@ var ENGINE = (function () {
       if (typeof Logger !== 'undefined' && Logger.log) Logger.log('V.1_58: ' + tag + ' would show only the headings of "' + String(s.title || '') + '"; another layout is used.');
       out = lib === 'solution' ? (solutionFallback_(flattenSpec_(s, type), type, tag, lctx) || out) : null;
     }
+    // V.1_63 (deck 35: "Label: a; b; c" bullets): a Proposal slide whose design gives way is drawn in another proposal
+    // design of the shape its content really has (two sides, rows, two teams, a list of actions) before any plain layout
+    if (!out && lib === 'proposal' && !FRAME_TYPES_[type] && typeof proposalReshapes_ === 'function') {
+      var rs = [];
+      try { rs = proposalReshapes_(s) || []; } catch (e) { rs = []; }
+      rs.forEach(function (c) {
+        if (out) return;
+        var ct = ALIASES[String(c.type).toLowerCase()] || String(c.type).toLowerCase();
+        (VARIANTS[ct] || []).forEach(function (v) {
+          if (out || !V[v.tag] || !inLib_(v.tag, 'proposal')) return;
+          try {
+            var o4 = V[v.tag](c, lctx);
+            if (o4 && contentCount_(o4) > 0 && !textOverlaps_(o4).length && !headingsOnly_(o4, c)) { o4.drawnWith = v.tag; out = o4; s = c; }
+          } catch (e) {}
+        });
+      });
+    }
     if (!out) {
       var flat = flattenSpec_(s, type);
       out = L[type](flat, lctx);
@@ -4308,6 +4338,8 @@ var ENGINE = (function () {
     var boxes = res.filter(function (a) { return a.body; });
     var fill = boxes.length ? boxes.reduce(function (t, a) { return t + Math.min(a.fill, 1); }, 0) / boxes.length : 0.8;
     return {
+      drawnWith: lay ? lay.drawnWith || '' : '',                        // V.1_63: the design that really drew it (checks and tests)
+      icons: lay ? (lay.els || []).filter(function (e) { return e.t === 'icon'; }).length : 0,   // V.1_63: icons the design shows
       look: lay ? lookOf_(lay, type) : type,                            // visual family (designs that look alike share it)
       dark: !!(lay && (lay.dark || lay.bgImage)),                       // photo or dark design (for the deck rhythm)
       content: lay ? contentCount_(lay) : 0,                            // 0 = the design shows nothing under the title

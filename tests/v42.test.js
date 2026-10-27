@@ -80,13 +80,13 @@ test("structure: 15-slide proposal = 12 written slides + 3 numbered dividers, sp
   assert.equal(JSON.stringify(secs[0].points), JSON.stringify(["Slide 1", "Slide 2", "Slide 3"]));
   const agenda = plan.slides[1];
   assert.equal(agenda.lockTag, "P66_AGENDA_SPIRAL");
-  assert.equal(agenda.items.map((i) => i.title).join("|"), "Introduction|Understanding your needs|Our approach|Delivery and team|Thank you");
+  assert.equal(agenda.items.map((i) => i.title).join("|"), "Understanding your needs|Our approach|Delivery and team");   // V.1_63: sections only
   assert.ok(plan.slides.every((s) => s.section === undefined));
   g.applyProposalFrame_(plan.slides, ctx);
   assert.ok(secs.every((s) => s.lockTag === "P66_SECTION_DARK" && s.deckLibrary === "proposal"));
 });
 
-test("structure: sections merged or split to the planned number; a workstream divider is light and not numbered", () => {
+test("structure: sections merged or split to the planned number; a workstream divider is the dark transition, not numbered (V.1_63)", () => {
   const g = load();
   const mk = (sec) => sec.map((n, i) => ({ type: "cards", title: "S" + i, section: n }));
   assert.equal(g.proposalGroups_(mk(["A", "A", "B", "C", "C", "D", "D"]), 3).length, 3);
@@ -94,9 +94,10 @@ test("structure: sections merged or split to the planned number; a workstream di
   const ctx = { presentationType: "Proposal Deck", proposal: { client: null, logoId: "", dividerTag: "P66_SECTION_NAVY", agendaWide: "P66_AGENDA_TWO_COLUMNS" } };
   const ws = [{ type: "section", level: 2, title: "Technical workstream", number: "02" }, { type: "section", title: "Approach", number: "02" }];
   g.applyProposalFrame_(ws, ctx);
-  assert.equal(ws[0].lockTag, "P66_SECTION_LIGHT");
+  assert.equal(ws[0].lockTag, "P66_SECTION_DARK");
   assert.equal(ws[0].number, undefined);
-  assert.equal(ws[1].lockTag, "P66_SECTION_NAVY");
+  assert.equal(ws[0].noNumber, true);
+  assert.equal(ws[1].lockTag, "P66_SECTION_DARK");
 });
 
 test("agenda: up to 7 items spiral; more -> two columns (topics cut to fit) or table of contents up to 11; continued slide when too long", () => {
@@ -122,7 +123,7 @@ test("agenda: up to 7 items spiral; more -> two columns (topics cut to fit) or t
   assert.ok(out.els.some((e) => e.t === "text" && e.text === "Agenda (continued)"));
 });
 
-test("styles: dark streak dividers about 3 decks in 4, navy about 1 in 4; two columns about 3 in 4", () => {
+test("styles (V.1_63): the dark streak transition in every deck; two columns about 3 in 4", () => {
   const g = load();
   let navy = 0, toc = 0;
   for (let i = 0; i < 2000; i++) {
@@ -130,7 +131,7 @@ test("styles: dark streak dividers about 3 decks in 4, navy about 1 in 4; two co
     if (p.dividerTag === "P66_SECTION_NAVY") navy++;
     if (p.agendaWide === "P66_AGENDA_CONTENTS") toc++;
   }
-  assert.ok(navy > 380 && navy < 620, String(navy));
+  assert.equal(navy, 0, String(navy));
   assert.ok(toc > 380 && toc < 620, String(toc));
 });
 

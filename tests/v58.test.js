@@ -190,7 +190,7 @@ test("Ulta slides 5 and 16: comparison and team content in other shapes is shown
   const shown = (sp) => texts(lay(g, sp)).join(" | ");
   assert.match(shown({ deckLibrary: "proposal", type: "comparison", title: "Current challenges", lead: "L", left: { title: "Current state", items: [{ title: "Batch promotions", text: "Weekly emails to every member" }] }, right: { title: "Future state", items: [{ title: "Real-time picks", text: "Recommendations per member" }] } }), /Weekly emails to every member/);
   assert.match(shown({ deckLibrary: "proposal", type: "comparison", title: "Current challenges", lead: "L", columns: ["Current state", "Future state"], rows: [{ label: "Promotions", left: "Batch", right: "Live" }, { label: "Data", left: "Silos", right: "Unified" }] }), /Promotions: Batch[\s\S]*Promotions: Live/);
-  assert.match(shown({ deckLibrary: "proposal", type: "team", title: "Delivery team", lead: "L", items: [{ title: "Steering committee", points: ["Executive sponsor", "Architecture board"] }, { title: "Ulta Beauty team", points: ["Product owner"] }, { title: "66degrees team", points: ["Engagement lead"] }] }), /Executive sponsor; Architecture board/);
+  assert.match(shown({ deckLibrary: "proposal", type: "team", title: "Delivery team", lead: "L", items: [{ title: "Steering committee", points: ["Executive sponsor", "Architecture board"] }, { title: "Ulta Beauty team", points: ["Product owner"] }, { title: "66degrees team", points: ["Engagement lead"] }] }), /Executive sponsor\. Architecture board\./);   // V.1_63: points stay sentences
 });
 
 test("texts are never cut into a different sentence: no comma clause closed with a full stop, no 16-word cut", () => {

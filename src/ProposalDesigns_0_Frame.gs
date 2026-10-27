@@ -86,8 +86,9 @@
       var x = X0 + 6 + c * 300, y = top;
       list.forEach(function (r) {
         sec++;
-        K.ellipse(els, x, y + lh / 2 - 2.5, 5, 5, T.ink);
-        K.text(els, x + 14, y, 270, lh, r.title, { weight: 500, max: TSZ.heading, min: 10, maxLines: 1, color: T.ink, valign: 'middle' });
+        // V.1_63: each section carries its number (01, 02 ...) like the transition slides
+        K.text(els, x - 4, y, 22, lh, K.pad2(sec), { weight: 500, max: TSZ.heading, min: 10, maxLines: 1, color: T.blue, valign: 'middle' });
+        K.text(els, x + 20, y, 264, lh, r.title, { weight: 500, max: TSZ.heading, min: 10, maxLines: 1, color: T.ink, valign: 'middle' });
         y += lh;
         r.points.forEach(function (p) {
           K.ring(els, x + 22, y + lh / 2 - 2.5, 5, T.white, T.ink, 0.6);
@@ -108,8 +109,8 @@
     var top = 138, lh = Math.min(24, (350 - top) / n);
     rows.forEach(function (r, i) {
       var y = top + i * lh;
-      K.ellipse(els, X0 + 8, y + lh / 2 - 2.5, 5, 5, T.ink);
-      K.text(els, X0 + 24, y, 560, lh, r.title, { weight: 400, max: TSZ.heading, min: 10, maxLines: 1, color: T.ink, valign: 'middle' });
+      K.text(els, X0 + 2, y, 24, lh, K.pad2(i + 1), { weight: 500, max: TSZ.heading, min: 10, maxLines: 1, color: T.blue, valign: 'middle' });   // V.1_63
+      K.text(els, X0 + 30, y, 554, lh, r.title, { weight: 400, max: TSZ.heading, min: 10, maxLines: 1, color: T.ink, valign: 'middle' });
     });
     return { bg: T.white, els: els, noBalance: true };
   });
@@ -117,7 +118,7 @@
   /* ---------- Section divider A: dark streaks, numbered — proposals pages 3, 6, 9 ... ---------- */
   add('P66_SECTION_DARK', 'section', { desc: 'proposal section divider: dark streaks, section number and title' }, function (s, lctx) {
     var els = [];
-    var no = s.number || (lctx && lctx.sectionNo ? K.pad2(lctx.sectionNo) : '');
+    var no = s.noNumber ? '' : (s.number || (lctx && lctx.sectionNo ? K.pad2(lctx.sectionNo) : ''));   // V.1_63: a workstream has none
     if (no) K.text(els, 32.4, 150, 80, 26, String(no), { weight: 400, max: 18, min: 16, maxLines: 1, color: T.white });
     var t = K.text(els, 32.4, 180, 330, 60, s.title, { weight: 400, max: 15, min: 13, maxLines: 2, color: T.white });
     var lw = Math.min(330, Math.max(110, (t.width || 160) + 6));

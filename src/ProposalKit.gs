@@ -322,7 +322,8 @@ function prepareProposal_(userPrompt, sources, ctx, opts) {
   const solution = typeof isSolutionDeck_ === 'function' && isSolutionDeck_(ctx);
   if (!(isProposalDeck_(ctx) || solution) || ctx.proposal) return ctx.proposal || null;
   opts = opts || {};
-  const p = proposalStyles_({ client: null, logoId: '', sectionStyle: Math.random() < 1 / 3 ? 'light' : 'dark' }, solution ? 'solution' : 'proposal');
+  // V.1_63: every deck has one transition slide, the dark streaks (deck 35: grey watermark dividers mixed in)
+  const p = proposalStyles_({ client: null, logoId: '', sectionStyle: 'dark' }, solution ? 'solution' : 'proposal');
   progressStage_(ctx, 'match', 'active', solution ? 'Finding the client' : 'Finding the client and its logo');
   // Explicit sidebar client name/domain take precedence (never inferred from email/uploads alone).
   let c = null;
@@ -370,8 +371,9 @@ function applyProposalFrame_(slides, ctx) {
     if (t === 'section') {
       sp.sectionStyle = p.sectionStyle;
       // V.1_42: one divider style per deck; a workstream inside a section (level 2) is the light divider, not numbered
-      if (!sp.lockTag) sp.lockTag = Number(sp.level) === 2 && p.lib !== 'solution' ? 'P66_SECTION_LIGHT' : p.dividerTag;
-      if (sp.lockTag === 'P66_SECTION_LIGHT') delete sp.number;
+      // V.1_63: a workstream inside a section is the same dark streak transition, without a number
+      if (Number(sp.level) === 2) { sp.noNumber = true; delete sp.number; }
+      sp.lockTag = PROPOSAL_DIVIDER_TAGS_.dark;
     }
     if (t === 'stats') proposalKpiLabels_(sp);
     if (p.client) restoreName_(sp, p.client);
@@ -440,8 +442,10 @@ var PROPOSAL_DIVIDER_TAGS_ = { dark: 'P66_SECTION_DARK', navy: 'P66_SECTION_NAVY
 function proposalStyles_(p, lib) {
   if (!p) return p;
   // V.1_52: a Solution Deck uses the two dividers every 66degrees solution deck has: dark streaks, or the light watermark
-  if (lib === 'solution' && !p.lib) { p.lib = 'solution'; p.dividerTag = Math.random() < 1 / 3 ? PROPOSAL_DIVIDER_TAGS_.light : PROPOSAL_DIVIDER_TAGS_.dark; }
-  if (!p.dividerTag) p.dividerTag = Math.random() < 0.25 ? PROPOSAL_DIVIDER_TAGS_.navy : PROPOSAL_DIVIDER_TAGS_.dark;
+  // V.1_63: the transition slide is always the dark streaks (slide 4 of deck 35), in every deck type
+  if (lib === 'solution' && !p.lib) p.lib = 'solution';
+  p.dividerTag = PROPOSAL_DIVIDER_TAGS_.dark;
+  p.sectionStyle = 'dark';
   if (!p.agendaWide) p.agendaWide = Math.random() < 0.25 ? 'P66_AGENDA_CONTENTS' : 'P66_AGENDA_TWO_COLUMNS';
   return p;
 }
@@ -565,7 +569,7 @@ function proposalStructure_(plan, ctx, k) {
   body.forEach(function (sp) { delete sp.section; });
   let extra = null;
   if (agenda) {
-    rows = [{ title: 'Introduction', points: [] }].concat(rows, closing ? [{ title: 'Thank you', points: [] }] : []);
+    // V.1_63 (deck 35): the agenda lists the sections only (no "Introduction" / "Thank you" rows)
     extra = proposalAgenda_(agenda, rows, p);
   }
   plan.slides = [].concat(cover ? [cover] : [], agenda ? [agenda] : [], extra ? [extra] : [], out, closing ? [closing] : []);
@@ -595,8 +599,7 @@ function proposalAgendaSync_(slides) {
     else rows.push({ title: heading(sp), points: [] });
   });
   if (hasSections) rows.forEach(function (r) { if (r.divider) r.divider.points = r.points.filter(Boolean).slice(0, 5); });
-  const all = [{ title: 'Introduction', points: [] }].concat(rows.map(function (r) { return { title: r.title, points: hasSections ? r.points : [] }; }));
-  if (slides.some(function (sp) { return proposalTypeOf_(sp) === 'closing'; })) all.push({ title: 'Thank you', points: [] });
+  const all = rows.map(function (r) { return { title: r.title, points: hasSections ? r.points : [] }; });   // V.1_63: sections only
   const more = proposalAgenda_(agenda, all, { agendaWide: agenda.agendaWide });
   const cont = agendas.filter(function (sp) { return sp.continued; })[0];
   if (cont) cont.items = more ? more.items : [];
@@ -800,6 +803,21 @@ function proposalCoerce_(sp, ctx, used) {
   }
   const t = proposalTypeOf_(sp);
   if (['cover', 'agenda', 'closing', 'section', 'template'].indexOf(t) !== -1) return false;
+  // V.1_63 (deck 35 slide 6: "<33% · Industry benchmark..." written small in card headings): items that each carry a figure
+  // are figures - the slide becomes KPI tiles (big numbers) when a figures design can show them
+  if (t !== 'stats' && t !== 'chart' && Array.isArray(sp.items) && sp.items.length >= 2 && sp.items.length <= 4 &&
+      sp.items.every(function (it) { return it && typeof it === 'object' && /\d/.test(String(it.value || '')) && String(it.value).length <= 12; })) {
+    const st = Object.assign({}, sp, { type: 'stats', reference: null, items: sp.items.map(function (it) {
+      return { value: String(it.value), label: String(it.label || it.title || ''), text: String(it.text || (Array.isArray(it.points) ? it.points.join(' ') : '') || '') };
+    }) });
+    delete st.design;
+    if (proposalDrawable_(st).length) {
+      Object.keys(sp).forEach(function (k) { delete sp[k]; });
+      Object.assign(sp, st);
+      if (ctx && ctx.log) ctx.log.push('Proposal design: "' + String(sp.title || '').slice(0, 50) + '" shown as figures (each item has a number).');
+      return true;
+    }
+  }
   if (proposalDrawable_(sp, used).length) return false;
   // V.1_48: figures stay figures: a KPI / stats slide whose only design is taken uses it again (deck 21: the KPI targets
   // lost their numbers on a layer stack); the same for a risk slide that the risk rows can show
@@ -831,7 +849,119 @@ function proposalCoerce_(sp, ctx, used) {
     }
   }
   // nothing new fits: a proposal design already used is drawn again (never the plain layout when one can draw it)
+  if (!proposalDrawable_(sp).length && proposalReshape_(sp, ctx, used)) return true;
   if (!proposalDrawable_(sp).length && ctx && ctx.log) ctx.log.push('No ' + (sp.deckLibrary === 'solution' ? 'solution' : 'proposal') + ' design for "' + String(sp.title || '').slice(0, 50) + '": plain ' + t + ' layout used.');
+  return false;
+}
+
+/* ---------- V.1_63: the shape the content really has (deck 35: 14 slides came out as "Label: a; b; c" bullets) ----------
+   A slide no proposal design could draw as written is read for its real shape and drawn in a proposal design of that
+   shape - also one used earlier in the deck (a long deck runs out of fresh designs) - before any plain layout:
+     two sides (legacy / target, in scope / out of scope, internal / external)  -> two panels, pros / cons, or a table
+     rows compared on aspects                                                   -> a table (aspect | left | right)
+     two groups of roles (client team / 66degrees team, RACI)                    -> the team structure
+     a list of actions or sentences                                             -> numbered rows or step boxes
+   Every word of the slide stays: a candidate is only taken when its design shows all of it without cutting a text. */
+function proposalSentences_(o) {
+  if (o == null) return [];
+  if (typeof o === 'string' || typeof o === 'number') return String(o).trim() ? [String(o).trim()] : [];
+  if (Array.isArray(o)) return o.reduce(function (a, x) { return a.concat(proposalSentences_(x)); }, []);
+  if (typeof o !== 'object') return [];
+  const head = String(o.title || o.label || o.name || o.role || '').trim(), body = String(o.text || o.description || o.detail || '').trim();
+  if (head && body) return [head + ': ' + body];
+  if (head || body) return [head || body];
+  return [];
+}
+function proposalSide_(o) {
+  if (!o) return null;
+  if (typeof o === 'string') return { label: '', points: [o] };
+  const label = String(o.label || o.title || o.name || o.heading || '').trim();
+  let pts = [];
+  ['points', 'bullets', 'items', 'details', 'actions', 'roles', 'members', 'controls', 'steps'].some(function (k) { pts = proposalSentences_(o[k]); return pts.length > 0; });
+  const text = String(o.text || o.description || o.detail || '').trim();
+  if (!pts.length && text) pts = text.split(/(?<=[.!?])\s+(?=[A-Z])/).map(function (x) { return x.trim(); }).filter(Boolean);
+  else if (text) pts = [text].concat(pts);
+  // any other text the side carries ("audience", "needs" ...) is kept as a point
+  Object.keys(o).forEach(function (k) {
+    if (/^(label|title|name|heading|text|description|detail|points|bullets|items|details|actions|roles|members|controls|steps|icon|material|value|tag)$/.test(k)) return;
+    if (typeof o[k] === 'string' && o[k].trim()) pts.push(k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' ') + ': ' + o[k].trim());
+  });
+  return label && pts.length ? { label: label, points: pts } : null;
+}
+function proposalReshapes_(sp) {
+  const out = [];
+  const keep = { title: sp.title, lead: sp.lead, notes: sp.notes, section: sp.section, deckLibrary: sp.deckLibrary, cobrand: sp.cobrand, takeaway: sp.takeaway };
+  const mk = function (type, extra) { return Object.assign({}, keep, { type: type, reference: null }, extra); };
+  const items = (Array.isArray(sp.items) ? sp.items : []).filter(function (it) { return it && typeof it === 'object'; });
+  const title = String(sp.title || '');
+  // two sides
+  let sides = null;
+  if (sp.left && sp.right) sides = [proposalSide_(sp.left), proposalSide_(sp.right)];
+  else if (items.length === 2) sides = items.map(proposalSide_);
+  else if (Array.isArray(sp.teams) && sp.teams.length === 2) sides = sp.teams.map(proposalSide_);
+  const teamLike = /\b(team|raci|roles?|responsib\w*|stakeholders?|governance structure|who does what)\b/i.test(title);
+  if (sides && sides[0] && sides[1]) {
+    if (teamLike) out.push(mk('team', { teams: sides.map(function (x) { return { name: x.label, roles: x.points }; }), governance: sp.governance || null, items: [] }));
+    out.push(mk('comparison', { left: { label: sides[0].label, points: sides[0].points }, right: { label: sides[1].label, points: sides[1].points }, items: [] }));
+    // the two sides as two cards (a from -> to shift), when the two-panel design was just used
+    out.push(mk('cards', { items: sides.map(function (x) { return { title: x.label, text: x.points.map(function (q) { return /[.!?]$/.test(q) ? q : q + '.'; }).join(' ') }; }) }));
+  }
+  // rows compared on aspects
+  const rows = (Array.isArray(sp.rows) ? sp.rows : []).filter(function (r) { return r && typeof r === 'object' && !Array.isArray(r) && (r.label || r.aspect) && (r.left || r.before) && (r.right || r.after); });
+  if (rows.length >= 2) {
+    let cc = (Array.isArray(sp.columns) ? sp.columns : []).map(function (c) { return typeof c === 'string' ? c : (c && (c.title || c.label)) || ''; }).filter(Boolean);
+    if (cc.length === 3) cc = cc.slice(1);
+    if (cc.length !== 2) { const vs = title.split(/\s+(?:vs\.?|versus)\s+/i); cc = vs.length === 2 ? vs.map(function (x) { x = x.trim(); return x.charAt(0).toUpperCase() + x.slice(1); }) : ['Today', 'Proposed']; }
+    out.push(mk('table', { columns: ['Aspect'].concat(cc), rows: rows.map(function (r) { return [String(r.label || r.aspect), String(r.left || r.before), String(r.right || r.after)]; }), items: [] }));
+    out.push(mk('comparison', { left: { label: cc[0], points: rows.map(function (r) { return String(r.label || r.aspect) + ': ' + String(r.left || r.before); }) },
+      right: { label: cc[1], points: rows.map(function (r) { return String(r.label || r.aspect) + ': ' + String(r.right || r.after); }) }, items: [] }));
+  }
+  // a list of actions or sentences: one row / step each (the takeaway stays the takeaway, never a step)
+  const pts = proposalSentences_(sp.points).filter(function (p) { return p.toLowerCase() !== title.trim().toLowerCase(); });
+  if (pts.length >= 3 && pts.length <= 6) {
+    const its = pts.map(function (p) { const m = /^(.{3,60}?):\s+(.+)$/.exec(p); return m ? { title: m[1], text: m[2] } : { title: p, text: '' }; });
+    out.push(mk('process', { items: its, points: [] }));
+    out.push(mk('cards', { items: its, points: [] }));
+  }
+  // groups with points (3-6): cards whose text is the points
+  if (items.length >= 3 && items.length <= 6 && items.every(function (it) { return proposalSide_(it); })) {
+    const its = items.map(function (it) { const x = proposalSide_(it); return { title: x.label, text: x.points.map(function (q) { return /[.!?]$/.test(q) ? q : q + '.'; }).join(' '), icon: it.icon }; });
+    out.push(mk('cards', { items: its }));
+    out.push(mk('process', { items: its }));
+  }
+  return out;
+}
+// Every word of the slide is shown: the words of the candidate's texts that the design draws
+// (strict: no text longer than its box at the largest type size; otherwise the fit step and the smaller type sizes of the
+//  renderer make it fit, as for every other slide)
+function proposalShowsAll_(cand, strict) {
+  if (typeof ENGINE === 'undefined' || !ENGINE.measure) return true;
+  let m = null;
+  try { m = ENGINE.measure(cand, {}); } catch (e) { return false; }
+  return !!m && m.content > 0 && (!strict || !(m.overflow || []).length) && String(m.drawnWith || '').indexOf('base:') !== 0;
+}
+function proposalReshape_(sp, ctx, used) {
+  if (!sp || sp.deckLibrary !== 'proposal') return false;
+  const cands = proposalReshapes_(sp);
+  // passes: a fresh design that fits as written, any design that fits, a fresh design, any design (in the first passes a
+  // design placed in the last 8 slides is left out, so the same look does not come back right away)
+  const near = function (tag) { const w = ctx && ctx.designAt; return !!(w && w.lastAt && w.lastAt[tag] && w.at - w.lastAt[tag] < 8); };
+  for (let pass = 0; pass < 4; pass++) {
+    for (let i = 0; i < cands.length; i++) {
+      const c = cands[i];
+      // fresh designs first, then one used earlier in the deck (least used first)
+      const designs = proposalDrawable_(c, pass % 2 === 0 ? used : null).filter(function (d) { return pass >= 2 || !near(d.tag); })
+        .sort(function (a, b) { return ((used && used[a.tag]) || 0) - ((used && used[b.tag]) || 0); });
+      for (let j = 0; j < designs.length; j++) {
+        const trial = Object.assign({}, c, { reference: { tag: designs[j].tag } });
+        if (!proposalShowsAll_(trial, pass < 2)) continue;
+        Object.keys(sp).forEach(function (k) { delete sp[k]; });
+        Object.assign(sp, c, { design: designs[j].tag });
+        if (ctx && ctx.log) ctx.log.push('Proposal design: "' + String(sp.title || '').slice(0, 50) + '" shown as ' + sp.type + ' (' + designs[j].tag + ') instead of plain text.');
+        return true;
+      }
+    }
+  }
   return false;
 }
 

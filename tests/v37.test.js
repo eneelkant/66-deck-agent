@@ -67,13 +67,12 @@ test("corners: 66° bottom-left and client logo bottom-right from agenda to befo
   assert.equal(logos(render(g, { type: "cover", deckLibrary: "proposal", cobrand: true, title: "x" })).length, 0);
 });
 
-test("light section divider: panel background, big 66° watermark bottom-right, clear of the footer row", () => {
+test("section divider (V.1_63): always the dark streak transition, also when a light style is asked", () => {
   const g = load();
   const out = render(g, { type: "section", deckLibrary: "proposal", cobrand: true, sectionStyle: "light", number: "02", title: "Proposed solution and approach", lead: "How we deliver" });
-  assert.equal(out.bg, g.ENGINE.TOKENS.bgLight);
-  assert.ok(!out.dark);
-  const wm = out.els.find((e) => e.asset === "watermark-66");
-  assert.ok(wm && wm.x > 360 && wm.y + wm.h <= 350);
+  assert.equal(out.bgImage, "section-bg");
+  assert.ok(out.dark);
+  assert.ok(!out.els.some((e) => e.asset === "watermark-66"));
   assert.ok(g.inlineAssetBlob_ && /^iVBOR/.test(g.WATERMARK_66_PNG_), "watermark is a built-in PNG");
 });
 
@@ -84,7 +83,7 @@ test("proposal frame: tags every slide once per deck; General decks are untouche
   assert.deepEqual(slides.map((s) => s.deckLibrary), ["proposal", "proposal", "proposal", "proposal", "proposal"]);
   assert.deepEqual(slides.map((s) => !!s.cobrand), [false, true, true, true, false]);
   assert.equal(slides[0].clientLogo, true);
-  assert.equal(slides[2].sectionStyle, "light");
+  assert.equal(slides[2].sectionStyle, "dark");   // V.1_63: one transition style
   const gen = [{ type: "cards" }];
   g.applyProposalFrame_(gen, {});
   assert.equal(gen[0].deckLibrary, undefined);
