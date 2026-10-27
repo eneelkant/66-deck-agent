@@ -62,7 +62,7 @@
     return w;
   }
   function photoOut(els) { return { bg: T.ink, bgImage: 'section-bg', els: els, noBalance: true }; }
-  function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.7)); }
+  function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.94)); }   // V.1_58: boxes reach the bottom (deck 31: empty lower third)
   // V.1_53: dark slides (black with the content in white), like the dark card slides of the solution decks
   var DARK_BG = '#050B1F', DARK_CARD = '#111A33', DARK_LINE = '#26324F', DARK_HEAD = '#7FA4FF', DARK_BODY = '#D8DEEA', DARK_MUTED = '#9AA6BF';
   function pal(s) {
@@ -231,7 +231,8 @@
       heading(els, x + pad, yy, iw, it.title, P.ink, 3, 'center');
       yy += hB + 8;
       if (hasTag) { if (it.tag) chip(els, cx, yy, it.tag, P.dark ? DARK_LINE : TINT, P.dark ? T.white : T.blue, iw, true); yy += 24; }
-      K.text(els, x + pad, yy, iw, top + ch - yy - pad, linesOf(it).join(' '), { weight: 400, max: TSZ.body, min: TSZ.body, align: 'center', color: P.body });
+      var stxt = linesOf(it).join(' ');                                // V.1_58: long or labelled texts read left-aligned
+      K.text(els, x + pad, yy, iw, top + ch - yy - pad, stxt.replace(/\s+·\s+/g, '\n'), { weight: 400, max: TSZ.body, min: TSZ.body, align: (/·/.test(stxt) || stxt.split(/\s+/).length > 14) ? 'left' : 'center', color: P.body });
     });
     if (take) K.text(els, CX, BOTTOM - 16, CW, 16, take, { weight: 400, max: 9.5, min: 9, maxLines: 1, align: 'center', color: P.muted });
     return done(els, P);
@@ -413,7 +414,7 @@
     var rowH = tb.rows.map(function (r) { return Math.max(22, maxOf(r, function (c, j) { return th(c, ws[j] - 2 * pad, 9.5, j === 0 ? 500 : 400); }) + 10); });
     var total = headH + rowH.reduce(function (a, b) { return a + b; }, 0), avail = BOTTOM - top - noteH;
     if (total > avail) return null;
-    var k = Math.min(1.35, avail / total);
+    var k = Math.min(2.6, avail * 0.97 / total);                  // V.1_58: rows share the free space (no empty lower third)
     var rec = s.recommend === true || /★|recommend/i.test(String(tb.cols[tb.n - 1]));
     var xs = [CX];
     ws.forEach(function (w, j) { xs.push(xs[j] + w); });
@@ -448,7 +449,7 @@
     var rowH = tb.rows.map(function (r) { return Math.max(26, maxOf(r, function (c, j) { return th(c, ws[j] - 2 * pad, TSZ.body, j === 0 ? 500 : 400); }) + 14); });
     var total = headH + rowH.reduce(function (a, b) { return a + b; }, 0), avail = BOTTOM - top;
     if (total > avail) return null;
-    var k = Math.min(1.3, avail / total);
+    var k = Math.min(2.6, avail * 0.97 / total);                  // V.1_58: rows share the free space
     var xs = [CX];
     ws.forEach(function (w, j) { xs.push(xs[j] + w); });
     K.rect(els, CX, top, CW, headH, T.blue);
@@ -487,6 +488,9 @@
     var rowH = tb.rows.map(function (r) { return Math.max(17, maxOf(r, function (c, j) { return th(c, ws[j] - 2 * pad, 9, j === 0 ? 500 : 400); }) + 6); });
     var total = headH + rowH.reduce(function (a, b) { return a + b; }, 0);
     if (y0 + total > BOTTOM) return null;
+    // V.1_58 (deck 31 slide 4: the lower 40% empty): the rows share the free space
+    var kk = Math.min(3.5, (BOTTOM - y0 - headH) * 0.97 / Math.max(1, total - headH));
+    if (kk > 1) rowH = rowH.map(function (h) { return h * kk; });
     var xs = [CX];
     ws.forEach(function (w, j) { xs.push(xs[j] + w); });
     K.rect(els, CX, y0, CW, headH, T.blue);

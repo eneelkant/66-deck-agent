@@ -624,6 +624,45 @@ function proposalAlternatives_(sp) {
   const out = [];
   const items = Array.isArray(sp.items) ? sp.items.filter(Boolean) : [];
   const pts = proposalPointItems_(sp.points);
+  // V.1_58 (deck 31): the shape the content really has comes first
+  const strOf = function (x) { return typeof x === 'string' ? x : (x && (x.title || x.name || x.label || x.text)) || ''; };
+  const listOf = function (o) { return ((o && (o.points || o.items || o.parts || o.bullets || o.components)) || []).map(strOf).map(function (x) { return String(x).trim(); }).filter(Boolean); };
+  // layers written as items ("Layer 4: ML and streaming" with its parts) -> the layer stack, top layer first
+  const layerItems = items.filter(function (it) { return it && typeof it === 'object' && /^\s*(layer|tier|level)\s*\d/i.test(String(it.title || it.label || '')) && listOf(it).length >= 2; });
+  if (sp.deckLibrary === 'solution' && layerItems.length >= 3 && layerItems.length === items.length) {
+    const num = function (it) { return Number((/\d+/.exec(String(it.title || it.label)) || [0])[0]); };
+    const ordered = layerItems.slice().sort(function (a, b) { return num(b) - num(a); });
+    out.push(base('diagram', { layers: ordered.map(function (it) { return { label: String(it.title || it.label).replace(/^\s*(layer|tier|level)\s*\d+\s*[:·.\-–—]\s*/i, '').replace(/^./, function (c) { return c.toUpperCase(); }), items: listOf(it).slice(0, 6) }; }), items: [] }));
+  }
+  if (sp.deckLibrary === 'solution' && Array.isArray(sp.layers) && sp.layers.length >= 3) out.push(base('diagram', {}));
+  // a primary / DR region pair written as two columns -> the region topology
+  const isRegion = /\b(dr|disaster recovery|regions?|failover|multi-region|active-passive|primary and)\b/i.test(String(sp.title || ''));
+  const sides = sp.left && sp.right ? [sp.left, sp.right] : (items.length === 2 ? items : null);
+  if (sp.deckLibrary === 'solution' && isRegion && sides) {
+    const zones = function (o) {
+      const raw = (o && (o.items || o.zones || o.points)) || [];
+      return raw.slice(0, 3).map(function (z) { return typeof z === 'string' ? { title: z, text: '' } : { title: String(z.title || z.name || z.label || ''), text: String(z.text || z.description || '') }; }).filter(function (z) { return z.title; });
+    };
+    const regs = sides.map(function (o) { return { label: String((o && (o.title || o.label || o.name)) || ''), zones: zones(o), detail: String((o && (o.detail || o.footer)) || '') }; });
+    if (regs.every(function (r) { return r.label && r.zones.length; })) out.push(base('diagram', { regions: regs, left: null, right: null, items: [], note: String(sp.takeaway || '') }));
+  }
+  // a step written as fields (goal, input, action...) keeps every field as its text: "Goal: ... · Action: ..."
+  if (items.length >= 2 && items.every(function (it) { return it && typeof it === 'object' && !String(it.text || '').trim() && !(Array.isArray(it.points) && it.points.length); })) {
+    const SKIPK = { title: 1, label: 1, name: 1, icon: 1, material: 1, value: 1, tag: 1, number: 1, step: 1, points: 0 };
+    const withText = items.map(function (it) {
+      const parts = [];
+      Object.keys(it).forEach(function (k) {
+        if (SKIPK[k]) return;
+        const v = it[k];
+        if (typeof v === 'string' && v.trim()) parts.push(k === 'text' ? v.trim() : k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' ') + ': ' + v.trim());
+      });
+      return Object.assign({}, it, { text: parts.join(' · ') });
+    });
+    if (withText.every(function (it) { return it.text; })) {
+      out.push(base('process', { items: withText }));
+      out.push(base('cards', { items: withText }));
+    }
+  }
   const callout = sp.callout ? String(sp.callout.text || sp.callout.title || '').trim() : '';
   let take = String(sp.takeaway || callout || sp.statement || '').trim();
   if (take.toLowerCase() === String(sp.title || '').trim().toLowerCase()) take = '';   // V.1_52: never the title again as the takeaway
@@ -713,8 +752,52 @@ function proposalDrawable_(sp, used) {
     return inLib(d.tag) && !(used && used[d.tag]) && (!ENGINE.canDraw || ENGINE.canDraw(Object.assign({}, sp, { reference: { tag: d.tag } })));
   });
 }
+// V.1_58 (deck 31: the Ulta roadmap was six cards reading "Phase 1 ... · Month 1 to Month 2"): a phased roadmap written as
+// steps with their months becomes the Gantt roadmap (phases as bars, gates and checkpoints as milestones)
+const ROADMAP_TITLE_RE_ = /\b(roadmap|phased|phases|timeline|plan|rollout|delivery plan|schedule)\b/i;
+function roadmapAsGantt_(sp) {
+  if (!sp || sp.deckLibrary !== 'proposal' || sp.lockTag || !ROADMAP_TITLE_RE_.test(String(sp.title || ''))) return false;
+  const t = proposalTypeOf_(sp);
+  if (['process', 'timeline', 'cards'].indexOf(t) === -1 || (Array.isArray(sp.lanes) && sp.lanes.length)) return false;
+  const items = (Array.isArray(sp.items) ? sp.items : []).filter(function (it) { return it && typeof it === 'object'; });
+  if (items.length < 3 || items.length > 10) return false;
+  let unit = '';
+  const parsed = items.map(function (it) {
+    const all = [it.timing, it.duration, it.when, it.text, it.label, it.subtitle].filter(Boolean).join(' · ');
+    const m = /\b(month|week|quarter|q|sprint)\s*(\d{1,2})(?:\s*(?:to|-|–|through)\s*(?:(?:month|week|quarter|q|sprint)\s*)?(\d{1,2}))?/i.exec(all);
+    if (!m) return null;
+    const u = /^q/i.test(m[1]) ? 'Quarter' : m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+    if (unit && unit !== u) return null;
+    unit = u;
+    const phase = (/\bphase\s*\d[^·.;]*/i.exec(all) || [''])[0].trim();
+    const gate = /\b(gate|checkpoint|milestone|sign-?off|go-live|handoff)\b/i.test(String(it.title || '') + ' ' + phase);
+    return { start: Number(m[2]), end: Number(m[3] || m[2]), label: String(it.title || it.label || '').trim(), phase: phase, gate: gate };
+  });
+  if (parsed.some(function (x) { return !x || !x.label; })) return false;
+  const maxP = Math.max.apply(null, parsed.map(function (x) { return x.end; }));
+  if (maxP < 3 || maxP > 12) return false;
+  const lanes = [];
+  parsed.filter(function (x) { return !x.gate; }).forEach(function (x) {
+    lanes.push({ name: x.phase ? x.phase.replace(/\s*[·:]\s*$/, '') : x.label, bars: [{ start: x.start, end: x.end, label: x.phase ? x.label : '' }] });
+  });
+  const gates = parsed.filter(function (x) { return x.gate; });
+  if (gates.length) lanes.push({ name: 'Value checkpoints', bars: gates.map(function (x) { return { start: x.end, milestone: true, label: x.label }; }) });
+  if (lanes.length < 3 || lanes.length > 8) return false;
+  const periods = []; for (let k = 1; k <= maxP; k++) periods.push(unit + ' ' + k);
+  const trial = Object.assign({}, sp, { type: 'timeline', periods: periods, lanes: lanes, items: [], reference: { tag: 'P66_GANTT' } });
+  delete trial.design;
+  if (typeof ENGINE === 'undefined' || !ENGINE.canDraw || !ENGINE.canDraw(trial)) return false;
+  Object.keys(sp).forEach(function (k) { delete sp[k]; });
+  Object.assign(sp, trial, { design: 'P66_GANTT', reference: null });
+  return true;
+}
 function proposalCoerce_(sp, ctx, used) {
   if (!sp || (sp.deckLibrary !== 'proposal' && sp.deckLibrary !== 'solution') || sp.lockTag) return false;
+  if (!(used && used.P66_GANTT) && roadmapAsGantt_(sp)) {
+    if (typeof referenceForTag_ === 'function') { try { sp.reference = referenceForTag_(ctx && ctx.lib, 'P66_GANTT'); } catch (e) {} }
+    if (ctx && ctx.log) ctx.log.push('Proposal design: "' + String(sp.title || '').slice(0, 50) + '" drawn as a Gantt roadmap (its steps carry their months).');
+    return true;
+  }
   const t = proposalTypeOf_(sp);
   if (['cover', 'agenda', 'closing', 'section', 'template'].indexOf(t) !== -1) return false;
   if (proposalDrawable_(sp, used).length) return false;
@@ -943,6 +1026,9 @@ function proposalContentPrompt_(a) {
     '- A figure from industry research is labelled as an industry figure on the slide ("Industry benchmark: ...", "Across grocers, ..."), never shown as the client\'s number.',
     '- A KPI value is a figure ("25%", "3x", "$2M"); a point in time ("Week 1", "Q3", "Day 30") is never a KPI. A roadmap shows every phase the plan names, Phase 1 first.',
     '- Titles state what the slide shows; never promise a result the research does not support ("cuts waste in half" only with that figure on the slide).',
+    '- A KPI slide shows KPI tiles: every KPI has a figure; a target is not also labelled an industry benchmark; the notes use the same figures as the slide.',
+    '- A risk always carries its mitigation ({title: risk, text: impact, points: [mitigations]}); a roadmap is lanes and bars with months, gates as milestones.',
+    '- The team slide lists roles under each team (never a team name alone); a current vs future comparison fills both columns with points.',
     '- The notes match the slide (same products, numbers and design); a passive disaster recovery region runs no active services; two requested topics are never merged into one slide.',
     '- "notes": 2-3 sentences for the presenter, with research source numbers like [2] when used. "fact_tags": IDs of approved facts used, or [].',
     'APPROVED FACTS ABOUT ' + ctx.brand.name.toUpperCase() + ' (the only claims allowed about it):\n' + (a.approvedFacts || []).slice(0, 25).map(function (f) { return '- ' + f; }).join('\n'),

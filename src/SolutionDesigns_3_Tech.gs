@@ -74,7 +74,7 @@
     var t = K.text(els, X0, 22, W - 2 * X0 - 40, bandH - 30, s.title || '', { weight: 500, max: 20, min: 15, maxLines: 2, color: T.white, valign: 'middle' });
     return t;
   }
-  function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.7)); }
+  function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.94)); }   // V.1_58: boxes reach the bottom (deck 31: empty lower third)
 
   // V.1_53: dark slides (black with the content in white), like the dark card slides of the solution decks
   var DARK_BG = '#050B1F', DARK_CARD = '#111A33', DARK_LINE = '#26324F', DARK_HEAD = '#7FA4FF', DARK_BODY = '#D8DEEA', DARK_MUTED = '#9AA6BF';
@@ -449,7 +449,7 @@
     var issueSlide = /\b(risks?|issues?|runbooks?|run book|troubleshoot\w*|problems?|fix\w*|incidents?|failures?|known)\b/i.test(String(s.title || '') + ' ' + String(s.lead || ''));
     var rows = K.items(s, 8).map(function (it) {
       it = it || {};
-      return { title: clean(it.title || it.issue || it.risk), fix: clean(it.fix || it.action || it.mitigation || it.resolution || (issueSlide ? it.text : '')), status: clean(it.status || it.level).toLowerCase() };
+      return { title: clean(it.title || it.issue || it.risk), fix: clean(it.fix || it.action || it.mitigation || it.resolution || (issueSlide ? it.text : '')), status: clean(it.status || it.level || it.severity || it.priority).toLowerCase(), icon: it.icon || '', material: it.material || '' };
     }).filter(function (r) { return r.title && real(r.fix); });
     var n = rows.length;
     if (n < 3 || n > 7) return null;
@@ -463,14 +463,22 @@
     var hs = rows.map(function (r) { return Math.max(30, Math.max(th(r.title, lw - 12, 9.5, 500), th(r.fix, rw, 9, 400)) + 14); });
     var total = hs.reduce(function (a, b) { return a + b; }, 0) + gap * (n - 1);
     if (total > avail) return null;
-    var k = Math.min(1.35, avail / total), y = top;
+    var k = Math.min(2, avail * 0.97 / total), y = top;                 // V.1_58: the rows fill the slide
+    // V.1_58 (deck 31 slide 17: "i" and "!" marks on runbooks that have no status): a status mark only when the rows
+    // carry a status or severity; otherwise each row has the icon of its subject. The fix reads in body colour.
+    var hasStatus = rows.some(function (r) { return r.status; });
     rows.forEach(function (r, i) {
       var h = hs[i] * k, warn = !/low|minor|info|grey|gray|ok/.test(r.status);
       K.roundrect(els, CX, y, CW, h, T.white, { color: LINE, width: 0.75 });
-      K.ellipse(els, CX + 12, y + h / 2 - 8, 16, 16, warn ? '#F2A33A' : '#9AA6B2');
-      K.text(els, CX + 12, y + h / 2 - 8, 16, 16, warn ? '!' : 'i', { weight: 500, max: 9, min: 9, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
+      if (hasStatus) {
+        K.ellipse(els, CX + 12, y + h / 2 - 8, 16, 16, warn ? '#F2A33A' : '#9AA6B2');
+        K.text(els, CX + 12, y + h / 2 - 8, 16, 16, warn ? '!' : 'i', { weight: 500, max: 9, min: 9, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
+      } else {
+        K.ellipse(els, CX + 8, y + h / 2 - 12, 24, 24, TINT);
+        K.icon(els, (r.icon || r.material) ? { icon: r.icon, material: r.material } : { icon: (r.title + ' ' + r.fix).toLowerCase().slice(0, 160), title: r.title }, CX + 13, y + h / 2 - 7, 14, false);
+      }
       K.text(els, CX + 38, y, lw - 12, h, r.title, { weight: 500, max: 9.5, min: 9, valign: 'middle', color: T.ink });
-      K.text(els, CX + 38 + lw, y, rw, h, r.fix, { weight: 400, max: 9, min: 8.5, valign: 'middle', color: T.blue });
+      K.text(els, CX + 38 + lw, y, rw, h, r.fix, { weight: 400, max: 9, min: 8.5, valign: 'middle', color: T.ink });
       y += h + gap;
     });
     if (take) K.text(els, CX, BOTTOM - 14, CW, 14, take, { weight: 400, max: 9, min: 8.5, maxLines: 1, align: 'center', color: MUTED });

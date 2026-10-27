@@ -74,7 +74,7 @@
     var t = K.text(els, X0, 22, W - 2 * X0 - 40, bandH - 30, s.title || '', { weight: 500, max: 20, min: 15, maxLines: 2, color: T.white, valign: 'middle' });
     return t;
   }
-  function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.7)); }
+  function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.94)); }   // V.1_58: boxes reach the bottom (deck 31: empty lower third)
 
   // V.1_53: dark slides (black with the content in white), like the dark card slides of the solution decks
   var DARK_BG = '#050B1F', DARK_CARD = '#111A33', DARK_LINE = '#26324F', DARK_HEAD = '#7FA4FF', DARK_BODY = '#D8DEEA', DARK_MUTED = '#9AA6BF';
@@ -274,12 +274,15 @@
     var hasHead = cols.some(function (c) { return c.title; });
     var need = maxOf(cols, function (c) { return (hasHead ? lh(TSZ.heading) + 10 : 0) + ptsH(c.points, cw, TSZ.body, 8); }) + 2 * pad;
     if (need > avail) return null;
-    var ph = Math.min(avail, Math.max(need, avail * 0.75));
+    var ph = boxH(need, avail);
     K.rect(els, CX, top, CW, ph, T.white, { color: LINE, width: 0.75 });
+    // V.1_58: the bullets spread over the panel (no empty lower half)
+    var most = maxOf(cols, function (c) { return c.points.length; });
+    var bg = 8 + Math.min(22, Math.max(0, ph - need) / Math.max(1, most));
     cols.forEach(function (c, i) {
       var x = CX + pad + i * (cw + gap), y = top + pad;
       if (hasHead) { heading(els, x, y, cw, c.title, T.blue, 1); y += lh(TSZ.heading) + 10; }
-      bullets(els, x, y, cw, top + ph - pad - y, c.points, 8);
+      bullets(els, x, y, cw, top + ph - pad - y, c.points, bg);
     });
     return { bg: T.white, els: els, noBalance: true };
   });

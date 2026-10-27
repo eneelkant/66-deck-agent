@@ -125,8 +125,9 @@ var ENGINE = (function () {
       var clauseAt = joined.lastIndexOf(', ');
       if (endAt > joined.length * 0.5) {
         kept = wrap(joined.slice(0, endAt + 1), w, font, weight, sz);      // last complete sentence
-      } else if (clauseAt > joined.length * 0.55 && /[.!?]$/.test(String(text).trim())) {
-        kept = wrap(joined.slice(0, clauseAt) + '.', w, font, weight, sz);
+      } else if (false && clauseAt) {
+        // V.1_58 (deck 31: "...among member chat answers, loan document summaries."): a list is never cut at a comma
+        // and closed with a full stop, which changes what it says
       } else {
         var last = kept[cap - 1];
         while (last.length && textWidth(last + '…', font, weight, sz) > w) last = last.slice(0, -1);
@@ -282,11 +283,12 @@ var ENGINE = (function () {
 
   // Box height follows the content: tall enough for the text plus padding, at least 60% of the free space, never more.
   // Boxes with only 2-3 lines are reported to the fit check, which writes fuller text, so boxes are not left empty.
+  function maxOf_(list, f) { var m = 0; (list || []).forEach(function (x, i) { m = Math.max(m, f(x, i)); }); return m; }
   function boxH(need, avail) {
     var a = Number(avail), n = Number(need);
     if (!isFinite(a) || a < 1) a = 1;
     if (!isFinite(n) || n < 1) n = 1;
-    return Math.min(a, Math.max(n, a * 0.7));                     // V.1_34: boxes reach further down (no empty bottom third)
+    return Math.min(a, Math.max(n, a * 0.94));                    // V.1_58: boxes reach the bottom (deck 31: an empty lower third)
   }
   var boxH_ = boxH;
   // Cuts a text at the last whole word that fits on one line (no ellipsis; trailing joining words are dropped)
@@ -971,7 +973,13 @@ var ENGINE = (function () {
       });
       y += 20;
     }
-    var axisW = 40, plotTop = y + 14, plotBottom = BOTTOM - 30, plotH = plotBottom - plotTop;
+    var axisW = 40;
+    // V.1_58: room under the bars for the category labels (up to three lines at the size that fits them)
+    var slotW0 = (cw - axisW) / Math.max(cats.length, 1);
+    var cSize = uniformSize(cats.map(String), slotW0 - 4, 3 * lineHeight('sans', 8) + 2, { weight: 500, max: 10, min: 8, maxLines: 3 });
+    var cLines = Math.max.apply(null, cats.map(function (c) { return Math.min(3, wrap(String(c), slotW0 - 4, 'sans', 500, cSize).length); }).concat([1]));
+    var labH = cLines * lineHeight('sans', cSize) + 2;
+    var plotTop = y + 14, plotBottom = BOTTOM - Math.max(30, labH + 8), plotH = plotBottom - plotTop;
     var maxV = 0;
     series.forEach(function (se) { se.values.forEach(function (v) { if (v > maxV) maxV = v; }); });
     maxV = niceMax(maxV * 1.08, (s.chart && s.chart.unit) || '');
@@ -1009,7 +1017,8 @@ var ENGINE = (function () {
       });
     }
     line(els, x0 - 4, plotBottom, cx + cw, plotBottom, T.ink, 1);
-    cats.forEach(function (c, i) { text(els, x0 + slotW * i + 2, plotBottom + 6, slotW - 4, 26, c, { weight: 500, max: 10, min: 10, align: 'center', maxLines: 2, color: T.ink }); });
+    // V.1_58 (deck 31: "GenAI in production…" twice): category labels shrink to 8pt and take 3 lines before anything is cut
+    cats.forEach(function (c, i) { text(els, x0 + slotW * i + 2, plotBottom + 6, slotW - 4, labH, c, { weight: 500, max: cSize, min: cSize, align: 'center', maxLines: 3, color: T.ink }); });
     if (hasInsight) {
       // Insight panel sized to its text (no half-empty panel), aligned with the top of the chart
       var px = CX + 444, pw = CW - 444, avail = BOTTOM - top;
@@ -3276,8 +3285,14 @@ var ENGINE = (function () {
     var w = CW - 60, x = CX + 30, chips = strs(s.parts || (s.items || []).map(function (it) { return it.title; }), 8);
     rect(els, CX, top, CW, BOTTOM - top, T.white, { color: T.cardLine, width: 0.75 });
     var foot = s.takeaway || '';
-    var avail = BOTTOM - top - 24 - (chips.length ? 46 : 0) - (foot ? 40 : 0);
-    var lh = Math.min(64, (avail - (layers.length - 1) * 16) / layers.length), y = top + 12;
+    // V.1_58 (deck 31 slide 10: the layer texts ran under the "+" marks and into the product chips): every layer is tall
+    // enough for its name and its text; the chips row goes first when space is short, then the design gives way
+    var footLines = foot ? Math.min(2, wrap(String(foot), w - 80, 'sans', 500, TSZ.body).length) : 0, footH = foot ? 16 + footLines * lineHeight('sans', TSZ.body) + 8 : 0;
+    var layerNeed = maxOf_(layers, function (l) { return 14 + lineHeight('sans', TSZ.heading + 2) + (l.text ? Math.min(2, wrap(String(l.text), w - 40, 'sans', 400, TSZ.body).length) * lineHeight('sans', TSZ.body) + 4 : 0); });
+    var fitLh = function (withChips) { return Math.min(70, (BOTTOM - top - 24 - (withChips ? 46 : 0) - footH - (layers.length - 1) * 16) / layers.length); };
+    if (chips.length && fitLh(true) < layerNeed) chips = [];
+    if (fitLh(chips.length > 0) < layerNeed) return null;
+    var lh = Math.max(layerNeed, fitLh(chips.length > 0)), y = top + 12;
     layers.forEach(function (l, i) {
       rect(els, x, y, w, lh, T.white, { color: T.cardLine, width: 1 });
       var t = text(els, x + 20, y + 6, w - 40, 22, l.title, { weight: 500, max: TSZ.heading + 2, min: TSZ.heading, maxLines: 1, align: 'center', color: i === 0 ? T.ink : T.blue });
@@ -3300,9 +3315,9 @@ var ENGINE = (function () {
       y += 36;
     }
     if (foot) {
-      var pw = Math.min(w - 40, textWidth(foot, 'sans', 500, TSZ.body) + 60);
-      rect(els, x + w / 2 - pw / 2, y + 4, pw, 24, T.blue);
-      text(els, x + w / 2 - pw / 2 + 10, y + 4, pw - 20, 24, foot, { weight: 500, max: TSZ.body, min: TSZ.body, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
+      var pw = Math.min(w - 40, textWidth(foot, 'sans', 500, TSZ.body) * 1.08 + 60), ph2 = footH - 12;
+      rect(els, x + w / 2 - pw / 2, y + 4, pw, ph2, T.blue);
+      text(els, x + w / 2 - pw / 2 + 10, y + 4, pw - 20, ph2, foot, { weight: 500, max: TSZ.body, min: TSZ.body, maxLines: 2, align: 'center', valign: 'middle', color: T.white });
     }
     return { bg: T.bgLight, els: els, noBalance: true };
   };
@@ -3908,6 +3923,71 @@ var ENGINE = (function () {
   }
 
   // Elements below the title area (images excluded): 0 means the design drew no content
+  // V.1_58 (deck 31: "Current state / Future state" and three team panels drawn with their headings only): the long
+  // texts of a spec, and whether a drawn slide shows none of them
+  var SPEC_SKIP_ = { title: 1, lead: 1, subtitle: 1, notes: 1, takeaway: 1, reference: 1, type: 1, design: 1, deckLibrary: 1, icon: 1, material: 1, fact_tags: 1, lockTag: 1, center: 1, banner: 1, statement: 1, _dropped: 1, text: 0 };
+  function specLongTexts_(s) {
+    var out = [];
+    (function walk(v, k, depth) {
+      if (depth > 5 || v == null) return;
+      if (typeof v === 'string') { if (String(v).split(/\s+/).length >= 6) out.push(v); return; }
+      if (Array.isArray(v)) { v.forEach(function (x) { walk(x, '', depth + 1); }); return; }
+      if (typeof v === 'object') Object.keys(v).forEach(function (kk) { if (!(depth === 0 && SPEC_SKIP_[kk])) walk(v[kk], kk, depth + 1); });
+    })(s, '', 0);
+    return out;
+  }
+  function headingsOnly_(out, s) {
+    if (!out || !out.els) return false;
+    var shown = out.els.filter(function (e) { return e.t === 'text' && e.y >= 64 && String(e.text || '').split(/\s+/).length >= 5; }).length;
+    return shown === 0 && specLongTexts_(s).length >= 2;
+  }
+  // V.1_58: the content the base layouts read (text, points, left / right points), gathered from the other shapes the
+  // writer uses: items with points or roles, teams, left / right items, before / after, rows {label, left, right}
+  function flattenSpec_(s0, type) {
+    var s = Object.assign({}, s0);
+    var strOf = function (x) {
+      if (x == null) return '';
+      if (typeof x === 'string' || typeof x === 'number') return String(x).trim();
+      var h = String(x.title || x.role || x.name || x.label || '').trim(), t = String(x.text || x.description || x.detail || '').trim();
+      return h && t ? h + ': ' + t : (h || t);
+    };
+    var listOf = function (o) {
+      if (!o || typeof o !== 'object') return [];
+      var keys = ['points', 'bullets', 'roles', 'members', 'items', 'details', 'actions', 'steps', 'controls'];
+      for (var i = 0; i < keys.length; i++) if (Array.isArray(o[keys[i]]) && o[keys[i]].length) return o[keys[i]].map(strOf).filter(Boolean);
+      return [];
+    };
+    if (Array.isArray(s.items)) s.items = s.items.map(function (it) {
+      if (!it || typeof it !== 'object' || String(it.text || it.description || '').trim()) return it;
+      var l = listOf(it);
+      return l.length ? Object.assign({}, it, { text: l.join('; ') + (/[.!?]$/.test(l[l.length - 1]) ? '' : '.') }) : it;
+    });
+    if ((!Array.isArray(s.items) || !s.items.length) && Array.isArray(s.teams) && s.teams.length) {
+      s.items = s.teams.map(function (t) { var l = listOf(t); return { title: String((t && (t.name || t.title)) || ''), text: l.join('; ') || String((t && t.text) || '') }; });
+    }
+    if (type === 'comparison') {
+      var pairs = [['left', 'right'], ['before', 'after'], ['current', 'future'], ['today', 'target'], ['problem', 'solution'], ['from', 'to']];
+      var L0 = null, R0 = null;
+      pairs.forEach(function (p) { if (!L0 && s[p[0]] && s[p[1]]) { L0 = s[p[0]]; R0 = s[p[1]]; } });
+      var side = function (o) {
+        if (typeof o === 'string') return { title: '', points: [o] };
+        o = Object.assign({}, o || {});
+        if (!(Array.isArray(o.points) && o.points.length)) { var l = listOf(o); if (l.length) o.points = l; }
+        if (!o.title && !o.label) o.title = o.name || o.heading || '';
+        return o;
+      };
+      if (L0) { s.left = side(L0); s.right = side(R0); }
+      var rows = Array.isArray(s.rows) ? s.rows.filter(function (r) { return r && typeof r === 'object' && !Array.isArray(r); }) : [];
+      if (rows.length && !((s.left && (s.left.points || []).length) || (s.right && (s.right.points || []).length))) {
+        var cols = arr(s.columns, 3).map(function (c) { return typeof c === 'string' ? c : (c && (c.title || c.label)) || ''; }).filter(Boolean);
+        if (cols.length === 3) cols = cols.slice(1);
+        s.left = Object.assign({ title: cols[0] || 'Today' }, s.left || {}, { points: rows.map(function (r) { return [r.label || r.aspect, r.left || r.before].filter(Boolean).join(': '); }) });
+        s.right = Object.assign({ title: cols[1] || 'Proposed' }, s.right || {}, { points: rows.map(function (r) { return [r.label || r.aspect, r.right || r.after].filter(Boolean).join(': '); }) });
+      }
+    }
+    if ((!Array.isArray(s.points) || !s.points.length) && type === 'bullets' && Array.isArray(s.items)) s.points = s.items.map(strOf).filter(Boolean);
+    return s;
+  }
   function contentCount_(out) {
     return ((out && out.els) || []).filter(function (e) {
       var y = e.t === 'line' ? Math.min(e.y1, e.y2) : e.y;
@@ -3982,7 +4062,8 @@ var ENGINE = (function () {
     SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, short); });
     if (out) return out;
     // still too long: at most 4 items and 16 words per text (cut at a whole word)
-    var words = function (t) { var w = String(t || '').split(/\s+/); return w.length > 16 ? w.slice(0, 16).join(' ').replace(/[,;:]$/, '') + '.' : String(t || ''); };
+    // V.1_58 (deck 31: "Input: sample JSON or."): texts are never cut to a word count; only fewer items and points
+    var words = function (t) { return String(t || ''); };
     var tiny = Object.assign({}, short);
     if (Array.isArray(short.items)) tiny.items = short.items.slice(0, 4).map(function (it) {
       if (!it || typeof it !== 'object') return typeof it === 'string' ? words(it) : it;
@@ -4085,10 +4166,38 @@ var ENGINE = (function () {
     // V.1_55: in a Solution Deck a design that would cut a text short ("…") gives way to one that shows it all
     if (out && lib === 'solution' && !FRAME_TYPES_[type] && cutCount_(out)) { var cut = out; out = solutionFallback_(s, type, tag, lctx) || cut; }
     if (!out && lib === 'solution' && !FRAME_TYPES_[type]) out = solutionFallback_(s, type, tag, lctx);
-    out = out || L[type](s, lctx);
+    // V.1_58: a design that shows only headings while the slide has texts gives way too
+    if (out && !FRAME_TYPES_[type] && headingsOnly_(out, s)) {
+      if (typeof Logger !== 'undefined' && Logger.log) Logger.log('V.1_58: ' + tag + ' would show only the headings of "' + String(s.title || '') + '"; another layout is used.');
+      out = lib === 'solution' ? (solutionFallback_(flattenSpec_(s, type), type, tag, lctx) || out) : null;
+    }
+    if (!out) {
+      var flat = flattenSpec_(s, type);
+      out = L[type](flat, lctx);
+      if (lib !== 'solution' && headingsOnly_(out, s) && type !== 'cards' && L.cards && (flat.items || []).length >= 2) out = L.cards(Object.assign({}, flat, { reference: null }), lctx);
+      s = flat;
+    }
     if (!out.drawnWith) out.drawnWith = 'base:' + type;                   // V.1_53: which design drew the slide (checks and tests)
+    // V.1_58 (deck 31: cut risk captions, the architecture rows over the "+" marks): a General or Proposal slide whose
+    // layout would cut a text or put texts on top of each other is drawn with another design of its type that shows it all
+    // a cut only counts while the slide is really drawn (the fit check measures first and shortens the text)
+    var lastStep = RENDERING_ && TSZ.body === TYPE_STEPS[TYPE_STEPS.length - 1].body;
+    if (lib !== 'solution' && !FRAME_TYPES_[type] && ['agenda', 'template', 'quote'].indexOf(type) === -1 && ((lastStep && cutCount_(out)) || textOverlaps_(out).length)) {
+      var better = null;
+      (VARIANTS[type] || []).forEach(function (v) {
+        if (better || !V[v.tag] || v.tag === out.drawnWith || !inLib_(v.tag, lib)) return;
+        try {
+          var o3 = V[v.tag](s, lctx);
+          if (o3 && contentCount_(o3) > 0 && !cutCount_(o3) && !textOverlaps_(o3).length && !headingsOnly_(o3, s)) { o3.drawnWith = v.tag; better = o3; }
+        } catch (e) {}
+      });
+      if (better) {
+        if (typeof Logger !== 'undefined' && Logger.log) Logger.log('V.1_58: "' + String(s.title || '') + '" drawn with ' + better.drawnWith + ' instead of ' + out.drawnWith + ' (no cut or overlapping text).');
+        out = better;
+      }
+    }
     // Never an empty slide: content the chosen type cannot show is drawn as cards (items) or bullets (points)
-    if (['cover', 'agenda', 'closing', 'section', 'statement', 'quote', 'template'].indexOf(type) === -1 && contentCount_(out) === 0) {
+    if (['cover', 'agenda', 'closing', 'section', 'statement', 'quote', 'template'].indexOf(type) === -1 && (contentCount_(out) === 0 || (lib !== 'solution' && headingsOnly_(out, s)))) {
       var alt = null;
       // 1. a design of this type made for the slide's special content (risks -> RAID register, prices, RAG status...)
       (VARIANTS[type] || []).forEach(function (v) {
@@ -4217,7 +4326,12 @@ var ENGINE = (function () {
     V[k] = function () { return inLib_(k, LIB_MODE_) ? f.apply(null, arguments) : null; };
   });
 
+  var RENDERING_ = false;
   function render(deck, ctx) {
+    RENDERING_ = true;
+    try { return render0_(deck, ctx); } finally { RENDERING_ = false; }
+  }
+  function render0_(deck, ctx) {
     ctx = ctx || {};
     var slides = [], sectionNo = 0;
     if (ctx.tokens) {

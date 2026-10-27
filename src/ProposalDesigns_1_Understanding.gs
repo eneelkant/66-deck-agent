@@ -41,8 +41,21 @@
       rows.forEach(function (r) { m = Math.max(m, K.textWidth(String(r[j] || ''), 'sans', j === 0 ? 500 : 400, 10)); });
       return Math.min(Math.max(m + 18, j === 0 ? 100 : 90), j === 0 ? 190 : 340);
     });
+    // V.1_58 (deck 31: "Recommend / ation models"): a column is never narrower than its longest word
+    var longest = columns.map(function (c, j) {
+      var m = 0;
+      [String(c)].concat(rows.map(function (r) { return String(r[j] || ''); })).forEach(function (t) {
+        t.split(/\s+/).forEach(function (wd) { m = Math.max(m, K.textWidth(wd, 'sans', 500, 10) * 1.1 + 20); });
+      });
+      return m;
+    });
     var tot = nat.reduce(function (a, b) { return a + b; }, 0);
     var widths = nat.map(function (n) { return n * w / tot; });
+    var short = widths.map(function (wd, j) { return Math.max(0, longest[j] - wd); }), need0 = short.reduce(function (a, b) { return a + b; }, 0);
+    if (need0 > 0) {
+      var spare0 = widths.map(function (wd, j) { return short[j] ? 0 : Math.max(0, wd - longest[j]); }), sp = spare0.reduce(function (a, b) { return a + b; }, 0);
+      if (sp >= need0) widths = widths.map(function (wd, j) { return short[j] ? longest[j] : wd - spare0[j] * need0 / sp; });
+    }
     var sizes = [10, 9.5, 9];
     for (var k = 0; k < sizes.length; k++) {
       var sz = sizes[k];
@@ -52,7 +65,7 @@
       });
       var need = hh + rh.reduce(function (a, b) { return a + b + 12; }, 0);
       if (need <= maxH) {
-        var pad = Math.min(11, 6 + (maxH - need) / (2 * rows.length) * 0.6);
+        var pad = Math.min(30, 6 + (maxH - need) / (2 * rows.length) * 0.92);   // V.1_58: rows share the free space
         return { widths: widths, size: sz, hh: hh, rh: rh, pad: pad, h: hh + rh.reduce(function (a, b) { return a + b + 2 * pad; }, 0) };
       }
     }

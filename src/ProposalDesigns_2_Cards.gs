@@ -268,6 +268,16 @@
     desc: '3-5 white rows (icon, short label, one-line text) and a blue "Deliverable" bar at the bottom, dark photo strip on the right (one workstream or phase and what it delivers)', words: '8-16; label 1-3 words' }, function (s) {
     var items = itemsOf(s, 5), n = items.length;
     if (n < 3 || n > 5) return null;
+    // V.1_58 (deck 31: two of three risks showed their mitigation, one did not): an item's points are shown after its
+    // text ("Mitigation: ..." on a risk slide), so a row never loses them
+    var riskSlide = /\b(risks?|mitigat\w*)\b/i.test(String(s.title || ''));
+    items = items.map(function (it) {
+      var pts = (it.points || []).map(String).filter(Boolean);
+      if (!pts.length || pts.every(function (p) { return String(it.text || '').indexOf(p) !== -1; })) return it;
+      var add = pts.map(function (p) { return p.replace(/[.;]+$/, ''); }).join('; ') + '.';
+      return Object.assign({}, it, { text: (it.text ? String(it.text).replace(/\s*$/, '') + ' ' : '') + (riskSlide ? 'Mitigation: ' : '') + add });
+    });
+    if (riskSlide && items.some(function (it) { return !/mitigat|prevent|reduce|monitor|control|fallback|retrain|encrypt|mask|tokeni|cach|test|review/i.test(String(it.text || '')); })) return null;   // a risk without its mitigation gives way
     // V.1_47: the "Deliverable" bar only shows a deliverable; a general takeaway sits on the bar without that label
     var delGiven = String(s.deliverable || (s.callout && /deliverable/i.test(String(s.callout.label || s.callout.title || '')) && s.callout.text) || '').trim();
     var del = delGiven || String(s.takeaway || '').trim();
@@ -285,7 +295,7 @@
     var gap = 8, avail = BOTTOM - top - (del ? barH + gap : 0);
     var sum = need.reduce(function (a, b) { return a + b; }, 0) + gap * (n - 1);
     if (sum > avail) return null;
-    var extra = Math.min(14, (avail - sum) / n);
+    var extra = Math.min(40, (avail - sum) * 0.97 / n);               // V.1_58: the rows fill the slide
     var y = top;
     items.forEach(function (it, i) {
       var rh = need[i] + extra;
@@ -405,7 +415,11 @@
     var asSentence = function (pts) {
       var t = pts.map(function (p, k) {
         p = String(p).trim().replace(/[.;,]+$/, '');
-        return k && /^[A-Z][a-z]/.test(p) ? p.charAt(0).toLowerCase() + p.slice(1) : p;
+        // V.1_58 ("google Kubernetes Engine"): a name keeps its capital (a word followed by another capitalised word, or a
+        // Google product word)
+        var w = p.split(/\s+/);
+        var named = /^(Google|Cloud|BigQuery|Vertex|Looker|Gemini|Kubernetes|Apigee|Pub\/Sub|Dataflow|Dataproc|Anthos|Workspace|Chrome|Android|iOS|SAP|Oracle|Salesforce|Microsoft|AWS|Azure)\b/.test(p) || (w[1] && /^[A-Z]/.test(w[1]));
+        return k && !named && /^[A-Z](?=[a-z-])/.test(p) ? p.charAt(0).toLowerCase() + p.slice(1) : p;
       }).join('; ');
       return t ? t + '.' : t;
     };

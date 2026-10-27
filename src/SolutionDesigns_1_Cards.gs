@@ -76,7 +76,7 @@
     var t = K.text(els, X0, 22, W - 2 * X0 - 40, bandH - 30, s.title || '', { weight: 500, max: 20, min: 15, maxLines: 2, color: T.white, valign: 'middle' });
     return t;
   }
-  function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.7)); }
+  function boxH(need, avail) { return Math.min(avail, Math.max(need, avail * 0.94)); }   // V.1_58: boxes reach the bottom (deck 31: empty lower third)
   var GENERIC_CHIP_RE_ = /^(current state|future state|today|impact|limitation|constraint|inefficiency|financial burden|resource gap|benefits?|challenges?|risks?|process|issues?|problems?|solutions?|outcomes?|gaps?|opportunity|value|cost|efficiency|key point|note|compliance|security|data ownership|data at rest|data in transit|governance|privacy|scalability|reliability|availability|performance|integration|monitoring|support|overview|summary|details?|features?|capabilit(?:y|ies)|components?|requirements?)$/i;   // V.1_55: deck 26 chips
 
   // V.1_53: dark slides (black with the content in white), like the dark card slides of the solution decks
@@ -417,15 +417,17 @@
     var colNeed = groups.map(function (g) { return pad * 2 + g.reduce(function (a, it) { return a + secH(it, colW) + 14; }, -14); });
     var need = Math.max.apply(null, colNeed);
     if (need > avail) return null;
-    var ph = Math.min(avail, Math.max(need, avail * 0.72));
+    var ph = boxH(need, avail);
     K.rect(els, CX, top, CW, ph, T.white, { color: LINE, width: 0.75 });
     groups.forEach(function (g, c) {
+      // V.1_58 (deck 31 slide 19: half of the panel empty): the sections spread over the whole panel
+      var spare = Math.max(0, ph - colNeed[c]), sgap = 14 + Math.min(36, spare / Math.max(1, g.length));
       var x = CX + pad + c * (colW + pad), y = top + pad;
       g.forEach(function (it) {
         heading(els, x, y, colW, it.title, T.blue, 1);
         var hh = secH(it, colW);
         bullets(els, x, y + lh(TSZ.heading) + 6, colW, hh - lh(TSZ.heading) - 6, linesOf(it), 5);
-        y += hh + 14;
+        y += hh + sgap;
       });
     });
     return { bg: T.white, els: els, noBalance: true };

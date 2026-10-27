@@ -158,7 +158,9 @@ function solutionToneCard_(tone) {
     // V.1_57 (deck 30 review)
     'ALSO: current Google Cloud names (Pub/Sub, Dataflow, Cloud Run functions; never "Cloud Pub/Sub", "Cloud Dataflow" or IoT Core); a figure from industry ' +
     'research is labelled on the slide as an industry figure; no 66degrees results, credentials or proof boxes unless the request asks; the notes name the same ' +
-    'products and design as the slide; a passive disaster recovery region runs no active services; two topics the request lists (e.g. support and the next step) are two slides.'
+    'products and design as the slide; a passive disaster recovery region runs no active services; two topics the request lists (e.g. support and the next step) are two slides. ' +
+    'Layers are written as layers[{label, items[]}]; a primary / DR pair as regions[{label, zones[{title,text}]}]; runbooks as items[{title: issue, fix}]; ' +
+    'next steps as items[{title, text}] (one sentence each, never "Goal: ... Action: ..." chains); a KPI label says exactly what the figure measures; a study period is never a KPI; support priorities list each level with its response time.'
   ].join('\n');
 }
 
@@ -183,6 +185,7 @@ function solutionOutlineRules_(ctx) {
     '- The named parts of the solution (services, tiers, levels, layers, steps) keep the same names on every slide.',
     '- The Google Cloud products are explained where they are used (the architecture, how it works), never one slide per product.',
     '- The last body slide gives the recommended next step or the ask.',
+    '- V.1_58: a today-versus-new comparison (manual checks vs predicted alerts) sits in the first section, where the problem is told; deployment (Terraform) sits with operations.',
     '- No 66degrees credentials or "why 66degrees" slide unless the request asks for it; a client result only from the request or the sources.',
     '- Only topics the request asks for or that explain how the solution works: no market size, industry trends or adjacent opportunities (e.g. predictive maintenance in a monitoring deck) unless the request asks.',
     '- Sections of similar size; a slide sits in the section whose subject it is (the model training slide sits with the prediction, not with the problem).',

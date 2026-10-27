@@ -195,6 +195,19 @@
       l.bars.forEach(function (b) { b.start = Math.max(1, b.start); b.end = Math.min(Math.max(b.end, b.start), periods.length); });
     });
     lanes = lanes.filter(function (l) { return l.name && l.bars.length; });
+    // V.1_58 (deck 31: the Ulta roadmap with a gate inside each phase lane could not be drawn): checkpoints that share a
+    // lane with bars move to one checkpoint lane of their own, under the phases
+    lanes.forEach(function (l) {                                      // a one-period gate or checkpoint is a milestone diamond
+      l.bars.forEach(function (b) { if (!b.milestone && b.start === b.end && /\b(gate|checkpoint|milestone|sign-?off|go-live|go\/no-go|handoff|decision)\b/i.test(String(b.label || '') + ' ' + l.name)) b.milestone = true; });
+    });
+    var mixed = lanes.filter(function (l) { return l.bars.some(function (b) { return b.milestone; }) && l.bars.some(function (b) { return !b.milestone; }); });
+    if (mixed.length) {
+      var ms = [];
+      mixed.forEach(function (l) { l.bars = l.bars.filter(function (b) { if (b.milestone) { ms.push(b); return false; } return true; }); });
+      var own = lanes.filter(function (l) { return l.bars.length && l.bars.every(function (b) { return b.milestone; }); })[0];
+      if (own) own.bars = own.bars.concat(ms).sort(function (a, b) { return a.start - b.start; });
+      else lanes.push({ name: /checkpoint|gate/i.test(ms.map(function (b) { return b.label; }).join(' ')) ? 'Value checkpoints' : 'Milestones', bars: ms.sort(function (a, b) { return a.start - b.start; }) });
+    }
     // V.1_57: the roadmap names "Phase 2" and "Phase 3" but has no Phase 1 lane: the first phase gets its own lane
     // in the free periods before Phase 2, so the plan never starts at Phase 2
     var phaseNo = function (l) { var m = /\bphase\s*(\d)\b/i.exec(l.name); return m ? Number(m[1]) : 0; };
@@ -287,15 +300,10 @@
         var bh0 = Math.min(18, (l.tracks > 1 ? trackH0 - 4 : trackH0 - 12));
         var room = l.tracks > 1 ? (rowH - 8) / l.tracks - 2 : rowH - 8;
         b.bh = bh0;
-        if (b.label && lwOf(b.label) > bw0 - 12 && room >= 28) {
-          // two lines inside a taller bar when each half fits
-          var words = String(b.label).split(/\s+/), best = null;
-          for (var k = 1; k < words.length; k++) {
-            var a = words.slice(0, k).join(' '), c = words.slice(k).join(' ');
-            var wmax = Math.max(lwOf(a), lwOf(c));
-            if (wmax <= bw0 - 12 && (!best || wmax < best)) best = wmax;
-          }
-          if (best) { b.two = true; b.bh = Math.min(room, 28); }
+        if (b.label && lwOf(b.label) > bw0 - 12) {
+          // V.1_58: two or three lines inside a taller bar when the row has the room
+          var nl = K.wrap(String(b.label), (bw0 - 12) / 1.12, 'sans', 500, 9).length, needH = nl * K.lineHeight('sans', 9) + 8;
+          if (nl <= 3 && needH <= room) { b.two = true; b.lines = nl; b.bh = Math.max(bh0, needH); }
         }
         b.by = l.tracks > 1 ? y + 4 + b.track * (rowH - 8) / l.tracks + ((rowH - 8) / l.tracks - b.bh) / 2 : y + (rowH - b.bh) / 2;
         taken.push({ x: bx0, y: b.by, w: bw0, h: b.bh });
@@ -333,7 +341,7 @@
         if (!b.label) return;
         var lw2 = lwOf(b.label);
         if (lw2 <= w - 12) { K.text(els, x + 6, by, w - 10, bh, b.label, { weight: 500, max: 9, min: 9, maxLines: 1, valign: 'middle', color: K.onFill(fill) }); return; }
-        if (b.two) { K.text(els, x + 6, by, w - 10, bh, b.label, { weight: 500, max: 9, min: 9, maxLines: 2, valign: 'middle', color: K.onFill(fill) }); return; }
+        if (b.two) { K.text(els, x + 6, by, w - 10, bh, b.label, { weight: 500, max: 9, min: 9, maxLines: b.lines || 2, valign: 'middle', color: K.onFill(fill) }); return; }
         var right = { x: x + w + 5, y: by, w: lw2, h: bh }, left = { x: x - 5 - lw2, y: by, w: lw2, h: bh };
         var side = [right, left].filter(function (sp) { return sp.x >= gx && sp.x + sp.w <= gx + gw && !hits(sp); })[0];
         if (!side) { failed = true; return; }

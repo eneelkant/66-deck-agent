@@ -1054,6 +1054,8 @@ ${recentList.length ? 'RECENTLY USED DESIGNS (used in the last decks made with t
 For "cards" items, "icon" must be a name from ${libIconNames.length ? 'LIBRARY_ICONS (preferred) or ' : ''}BRAND_ICONS and "material" the closest Google Material Icons name.
 PRODUCT NAMES: use current Google Cloud names (Pub/Sub, Dataflow, Dataproc, Cloud Run functions, Looker Studio, Artifact Registry); never IoT Core (retired): devices publish to Pub/Sub through a gateway.
 CONSISTENCY: the speaker notes describe the same products, numbers and design as the slide (never Cloud Run in the notes when the slide says Cloud Run functions); a passive or standby disaster recovery region runs no active services; two topics the request lists are never merged into one slide.
+CHARTS AND KPIS: chart categories are 1-3 words and all different ("Credit unions", "Banks", never two labels starting the same way); a KPI label says exactly what the number measures ("Share of failures that are mechanical", not "Mechanical failure rate"); a study's period or sample size is never a KPI; every KPI has a figure.
+SUPPORT PRIORITIES: one row or card per priority level (P1-P4 or Severity 1-4) with its response time; times not given in the request are marked as proposals in the notes.
 FIGURES: a figure from industry research (analysts, studies, other companies) is labelled on the slide as an industry figure ("Industry benchmark: ...", "Across retailers, ..."), never shown as the client's own number. A pie or donut is only for numeric parts of one whole.
 ICON RULES: the icon names the item's subject (a doctor for physicians, a document for drafts and notes, a check for sign-off, a chart for monitoring); every item on a slide has a different icon; a light bulb only for an item about ideas.
 Use charts and stats wherever real or target numbers make the point clearer.
@@ -1108,10 +1110,12 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
     }
   }
   plan.slides = plan.slides.map(function (sp) { return realChartOrStats_(sp); }); // charts only with real multi-point data
+  try { addRunNames_(namesFromNotes_(plan.slides)); } catch (e) {}           // V.1_58: names from the research keep their capitals
   plan.slides.forEach(function (sp) { dropRepeatedHighlights_(sp); sentenceCaseHeadings_(sp); });
   // Every stat on a slide must be found in the research, the approved facts or the user's material
   if (!sources.pdfs.length && !(sources.images || []).length) {
-    const corpus = [JSON.stringify(sources.research || []), String(sources.text || ''), JSON.stringify(approvedFacts || [])].join(' ');
+    // V.1_58 (deck 31: "2,400 traction motors" removed although the request said it): the request's own figures count
+    const corpus = [JSON.stringify(sources.research || []), String(sources.text || ''), JSON.stringify(approvedFacts || []), String(userPrompt || '')].join(' ');
     const dropped = verifyStatNumbers_(plan.slides, corpus);
     if (dropped.length) ctx.log.push('Removed ' + dropped.length + ' figure(s) not found in the sources: ' + dropped.join(', ') + '.');
   }
@@ -1612,7 +1616,7 @@ function termCase_(str) {
 function walkText_(o, fn) {
   if (!o || typeof o !== 'object') return;
   Object.keys(o).forEach(function (k) {
-    if (k === 'reference' || k === 'notes' || k === 'design' || k === 'type' || k === 'tag' || k === 'icon' || k === 'material' || k === 'fact_tags' || k === 'code') return;   // (V.1_54: code as written)
+    if (k === 'reference' || k === 'notes' || k === 'design' || k === 'type' || k === 'tag' || k === 'icon' || k === 'material' || k === 'fact_tags' || k === 'code' || k === '_dropped') return;   // (V.1_54: code as written)
     if (typeof o[k] === 'string') o[k] = fn(o[k]); else walkText_(o[k], fn);
   });
 }
@@ -1768,6 +1772,9 @@ function finalVoicePass_(slides, ctx) {
       }
     }
     dropTimeValues_(sp);
+    // V.1_58 (deck 31: "Executive Sponsor (COO / VP Member Services)"): table headings and row labels in sentence case
+    if (Array.isArray(sp.rows)) sp.rows.forEach(function (r) { if (Array.isArray(r) && typeof r[0] === 'string') r[0] = sentenceCase_(r[0], 2); else if (r && typeof r === 'object' && typeof r.label === 'string') r.label = sentenceCase_(r.label, 2); });
+    if (Array.isArray(sp.columns)) sp.columns = sp.columns.map(function (c) { return typeof c === 'string' ? sentenceCase_(c, 2) : c; });
     if (solutionVoice || sp.deckLibrary === 'solution') dropBrandProof_(sp, ctx);
     if (t === 'stats') { splitRangeValues_(sp); statsOneKind_(sp); dropWideRanges_(sp); }
     if (!trainsModels) walkText_(sp, groundedNotTrained_);
@@ -1812,7 +1819,7 @@ function dropWideRanges_(sp) {
   };
   const bad = sp.items.filter(wide);
   if (!bad.length) return;
-  if (sp.items.length - bad.length >= 2) sp.items = sp.items.filter(function (it) { return !wide(it); });
+  if (sp.items.length - bad.length >= 2) { noteDrop_(sp, bad); sp.items = sp.items.filter(function (it) { return !wide(it); }); }
   else if (!/Check before sharing: wide ranges/.test(String(sp.notes || ''))) sp.notes = String(sp.notes || '') + '\nCheck before sharing: wide ranges on this slide are vendor benchmarks; use a single sourced figure.';
 }
 // V.1_39: Gemini is grounded in the client's content, not trained on it ("train Gemini models with Apple-specific data")
@@ -1878,8 +1885,8 @@ function statsOneKind_(sp) {
   const isTarget = function (it) { return /^\s*target\b/i.test(String((it && it.label) || '')); };
   const targets = sp.items.filter(isTarget), facts = sp.items.filter(function (it) { return !isTarget(it); });
   if (!targets.length || !facts.length) return;
-  if (facts.length >= 2) sp.items = facts;
-  else if (targets.length >= 2) sp.items = targets;
+  if (facts.length >= 2) { noteDrop_(sp, targets); sp.items = facts; }
+  else if (targets.length >= 2) { noteDrop_(sp, facts); sp.items = targets; }
 }
 // A credentials slide recognised by its content: headcounts, certification counts, partner awards (V.1_35)
 function credentialsContent_(sp) {
@@ -2067,7 +2074,7 @@ function shortTitle_(t) {
   return x;
 }
 
-const COUNT_WORDS_ = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const NOTE_COUNT_WORDS_ = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
 function itemCountOf_(sp) {
   const list = sp.items || sp.points || sp.results || sp.rows;
@@ -2078,9 +2085,9 @@ function itemCountOf_(sp) {
 function fixCountWord_(label, count) {
   const m = String(label).match(/^(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b\s*/i);
   if (!m || !count) return label;
-  const said = /^\d+$/.test(m[1]) ? parseInt(m[1], 10) : COUNT_WORDS_.indexOf(m[1].toLowerCase());
+  const said = /^\d+$/.test(m[1]) ? parseInt(m[1], 10) : NOTE_COUNT_WORDS_.indexOf(m[1].toLowerCase());
   if (said === count) return label;
-  const word = /^\d+$/.test(m[1]) ? String(count) : (COUNT_WORDS_[count] || String(count));
+  const word = /^\d+$/.test(m[1]) ? String(count) : (NOTE_COUNT_WORDS_[count] || String(count));
   return word.charAt(0).toUpperCase() + word.slice(1) + ' ' + String(label).slice(m[0].length);
 }
 
@@ -2615,6 +2622,46 @@ function presenterNotes_(sp) {
 // V.1_57 (deck 30: seven slides had the "This slide covers ... Walk through ..." fallback): slides without presenter
 // notes get them from one short Gemini call (the research / check model) that only uses what the slide shows;
 // the fallback sentence stays for any slide the call leaves out
+// V.1_58 (deck 31 slide 18: the notes still walked through a fourth KPI the code had removed): what the code removes
+// from a slide is recorded on it, and finalizeNotes_ takes those figures out of the notes
+function noteDrop_(sp, items) {
+  if (!sp || !items || !items.length) return;
+  if (!Array.isArray(sp._dropped)) sp._dropped = [];
+  items.forEach(function (it) { if (it && typeof it === 'object') sp._dropped.push({ value: String(it.value == null ? '' : it.value).trim(), label: String(it.label || it.title || '').trim() }); });
+}
+function notesWithoutDropped_(sp) {
+  let notes = String(sp.notes || '');
+  const dropped = Array.isArray(sp._dropped) ? sp._dropped : [];
+  delete sp._dropped;
+  if (!notes) return notes;
+  dropped.forEach(function (d) {
+    const v = d.value.replace(/^[<>~≈]+/, '');
+    if (!v || !/\d/.test(v)) return;
+    const esc = v.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+    const re = new RegExp('(^|[^0-9.])' + esc + '(?![0-9])');
+    notes = notes.split(/(?<=[.!?])\s+/).map(function (sent) {
+      if (!re.test(sent)) return sent;
+      const clauses = sent.split(/,\s+(?:and\s+)?|;\s+/);
+      if (clauses.length < 2) return '';
+      const kept = clauses.filter(function (c) { return !re.test(c); });
+      if (!kept.length) return '';
+      let out = kept.join(', ');
+      if (!/[.!?]$/.test(out)) out += '.';
+      return out.replace(/,\s*([^,]+)$/, kept.length > 2 ? ', and $1' : ' and $1');
+    }).filter(Boolean).join(' ');
+  });
+  // "All four pilot metrics" on a slide that shows three
+  const items = Array.isArray(sp.items) ? sp.items.filter(Boolean) : [];
+  if (items.length >= 2 && items.length <= 10) {
+    notes = notes.replace(/\b(all|these|the|our)\s+(two|three|four|five|six|seven|eight)\b/gi, function (m, a, w) {
+      const k = NOTE_COUNT_WORDS_.indexOf(w.toLowerCase());
+      if (k === items.length || !dropped.length) return m;
+      const rep = NOTE_COUNT_WORDS_[items.length];
+      return a + ' ' + (/^[A-Z]/.test(w) ? rep.charAt(0).toUpperCase() + rep.slice(1) : rep);
+    });
+  }
+  return notes;
+}
 function notesBare_(n) {
   return !String(n || '').replace(/\s*\[\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\]/g, '')
     .replace(/Illustrative figure[^.]*\.|Verify before sharing\.|Check before sharing:[^.]*\./gi, '').trim();
@@ -2667,7 +2714,35 @@ function writeMissingNotes_(plan, ctx) {
   if (ctx.log && done) ctx.log.push('V.1_57: presenter notes written for ' + done + ' slide' + (done === 1 ? '' : 's') + ' that had none.');
   return done;
 }
+// V.1_58 (deck 31 slide 18: the note listed "30 min, 4 hours, 24 hours", the slide showed 15 minutes and two hours):
+// the "times on this slide" note names only times the slide still shows
+function recheckTimesNote_(sp) {
+  const re = /\n?The times on this slide \(([^)]*)\) are proposals, not given in the request: confirm them before sharing\./;
+  const m = re.exec(String(sp.notes || ''));
+  if (!m) return;
+  const copy = Object.assign({}, sp); delete copy.notes;
+  const body = JSON.stringify(copy);
+  const still = m[1].split(/,\s*/).filter(function (t) { const d = (t.match(/\d+(?:[.,]\d+)?/) || [''])[0]; return d && new RegExp('(^|[^0-9.])' + d.replace('.', '[.,]') + '(?![0-9])').test(body); });
+  sp.notes = String(sp.notes).replace(re, still.length ? '\nThe times on this slide (' + still.join(', ') + ') are proposals, not given in the request: confirm them before sharing.' : '');
+}
+// V.1_58 (deck 31 slide 2: the agenda notes promised "client proof" and a "17-part story"): the agenda's notes say what
+// the agenda shows
+function agendaNotes_(sp) {
+  const items = (Array.isArray(sp.items) ? sp.items : []).map(function (it) { return String((it && (it.title || it)) || '').trim(); })
+    .filter(function (t) { return t && !/^(introduction|thank you)$/i.test(t); });
+  if (items.length < 2) return;
+  const low = items.map(function (t, i) { return i ? t.charAt(0).toLowerCase() + t.slice(1) : t; });
+  sp.notes = 'Walk the audience through the ' + (NOTE_COUNT_WORDS_[items.length] || items.length) + ' parts of the presentation: ' +
+    low.slice(0, -1).join(', ') + ' and ' + low[low.length - 1] + '.';
+  if (typeof keepNames_ === 'function') sp.notes = keepNames_(sp.notes);
+}
 function finalizeNotes_(plan, sources, ctx) {
+  (plan.slides || []).forEach(function (sp) {
+    if (!sp) return;
+    if (sp._dropped) sp.notes = notesWithoutDropped_(sp);
+    recheckTimesNote_(sp);
+    if (String(sp.type || '').toLowerCase() === 'agenda') agendaNotes_(sp);
+  });
   try { writeMissingNotes_(plan, ctx); } catch (e) {}
   const research = (sources && sources.research) || [];
   plan.slides.forEach(function (sp) {
@@ -2943,8 +3018,9 @@ function convertUploadToGoogle_(blob, name, targetMime) {
 ========================= */
 function fitContentToDesigns_(plan, ctx, started) {
   const res = { fixed: 0, left: 0 };
-  for (let round = 0; round < 2; round++) {
+  for (let round = 0; round < 3; round++) {                      // V.1_58: a third round for texts still too long (deck 31: 16 left)
     if (Date.now() - started > 230000) break;                     // stay well inside the 6-minute limit
+    if (round === 2 && res.fixed === 0) break;
     const issues = [];
     plan.slides.forEach(function (sp, i) {
       const t = String(sp.type || '').toLowerCase();
@@ -2991,7 +3067,8 @@ function fitContentToDesigns_(plan, ctx, started) {
     const prompt = [
       'You are editing text on 66degrees consulting slides so that every text fits its box exactly.',
       'For each item, rewrite "text" so its length (characters, spaces included) is between min_chars and max_chars.',
-      '- action "shorten": keep the key message, numbers and names; cut filler words.',
+      '- action "shorten": keep the key message, numbers and names; cut filler words. A list keeps every one of its items (each item says less);',
+      '  never drop an option or end on "and", "or" or a half phrase. Short labels (chart categories, column heads) stay different from each other.',
       '- action "expand": add ONE or TWO short, specific sentences (how it works, why it matters, a concrete example). Never repeat',
       '  the slide title or its words, never pad with filler, never add new numbers, clients, awards or claims about 66degrees.',
       '- kind "bullet": keep it ONE sentence (make it fuller, do not add a second sentence). Keep a "Label: " start if it has one.',
@@ -3008,7 +3085,8 @@ function fitContentToDesigns_(plan, ctx, started) {
       const it = issues[f.id];
       if (!it || !f.text) return;
       const txt = ENGINE.cleanText(String(f.text));
-      if (it.action === 'shorten' && txt.length > it.max_chars * 1.05) return;   // still too long: keep trying next round
+      // still too long: kept when it is shorter than before (the next round takes it from there), else tried again
+      if (it.action === 'shorten' && txt.length > it.max_chars * 1.05 && txt.length >= String(it.current || '').length) return;
       setByPath_(plan.slides[it.slide], it.path, it.path[0] === 'title' ? sentenceCase_(txt.replace(/[.]$/, '')) : txt);
       res.fixed++;
     });
@@ -3161,6 +3239,40 @@ function setRunNames_(prompt, extra) {
     RUN_NAMES_[name.toLowerCase()] = name;
   }
   (extra || []).forEach(function (n) { if (n && String(n).length >= 2) RUN_NAMES_[String(n).toLowerCase()] = String(n); });
+  const keys = Object.keys(RUN_NAMES_).filter(function (k) { return !PRODUCT_NAMES_[k]; });
+  RUN_NAMES_RE_ = keys.length ? new RegExp('\\b(' + keys.sort(function (a, b) { return b.length - a.length; })
+    .map(function (n) { return n.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&').replace(/ /g, '\\s+'); }).join('|') + ')\\b', 'gi') : null;
+}
+// V.1_58 (deck 31: "Datasets in project darwin", "Activate darwin profiles"): names the research brought in (written with
+// capitals in the slides' notes: "Project Darwin", "Ultamate Rewards") keep their capitals on the slides too
+const NAME_STOP_ = /^(phase|month|week|day|step|stage|tier|layer|level|gate|wave|sprint|quarter|year|the|a|an|our|we|this|that|these|those|in|on|at|for|with|and|or|of|by|from|to|it|its|their|they|our|your|you|i|he|she|as|if|when|while|after|before|during|then|each|every|all|both|over|under|across|through|into|per|via|first|second|third|next|finally|today|now|here|there|walk|start|notice|note|see|let|across)$/i;
+function namesFromNotes_(slides) {
+  const notes = (slides || []).map(function (sp) { return String((sp && sp.notes) || '').replace(/\n\s*Sources?:[\s\S]*$/i, ''); }).join(' \n ');
+  const out = {}, single = {}, lowerSeen = {};
+  (notes.match(/\b[a-z][a-z]+\b/g) || []).forEach(function (w) { lowerSeen[w] = true; });
+  notes.split(/(?<=[.!?:])\s+|\n/).forEach(function (sent) {
+    const words = sent.trim().split(/\s+/);
+    for (let i = 1; i < words.length; i++) {
+      const clean = function (w) { return String(w || '').replace(/['’]s$/, '').replace(/[^A-Za-z0-9&/-]/g, ''); };
+      let w = clean(words[i]);
+      if (!/^[A-Z][a-z]+$/.test(w) || NAME_STOP_.test(w) || COMMON_HEAD_WORDS_.test(w.toLowerCase())) continue;
+      if (/^\d/.test(clean(words[i + 1]))) continue;                       // "Phase 1", "Tier 2"
+      const run = [w];
+      let j = i + 1;
+      while (j < words.length && /^[A-Z][A-Za-z]+$/.test(clean(words[j])) && !NAME_STOP_.test(clean(words[j]))) { run.push(clean(words[j])); j++; }
+      // a capitalised word right before ("Project Darwin", "BigQuery Darwin")
+      const prev = clean(words[i - 1]);
+      if (/^[A-Z][a-z]+$/.test(prev) && i - 1 > 0 && !NAME_STOP_.test(prev)) run.unshift(prev);
+      if (run.length >= 2 && run.length <= 4) out[run.join(' ')] = true;
+      if (run.length === 1 || /^(Project|Program|Programme)$/.test(run[0])) single[w] = (single[w] || 0) + 1;
+      i = j - 1;
+    }
+  });
+  Object.keys(single).forEach(function (w) { if (single[w] >= 2 && !lowerSeen[w.toLowerCase()]) out[w] = true; });
+  return Object.keys(out).filter(function (n) { return !PRODUCT_NAMES_[n.toLowerCase()]; });
+}
+function addRunNames_(names) {
+  (names || []).forEach(function (n) { if (n && n.length >= 3) RUN_NAMES_[String(n).toLowerCase()] = String(n); });
   const keys = Object.keys(RUN_NAMES_).filter(function (k) { return !PRODUCT_NAMES_[k]; });
   RUN_NAMES_RE_ = keys.length ? new RegExp('\\b(' + keys.sort(function (a, b) { return b.length - a.length; })
     .map(function (n) { return n.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&').replace(/ /g, '\\s+'); }).join('|') + ')\\b', 'gi') : null;
@@ -3588,6 +3700,7 @@ function verifyStatNumbers_(slides, corpus) {
     });
     if (ok.length >= 2 && ok.length < sp.items.length) {
       sp.items.forEach(function (it) { if (ok.indexOf(it) === -1) dropped.push(String(it.value) + ' ' + String(it.label || '')); });
+      noteDrop_(sp, sp.items.filter(function (it) { return ok.indexOf(it) === -1; }));
       sp.items = ok;
     } else if (ok.length < sp.items.length) {
       sp.notes = String(sp.notes || '') + '\nCheck before sharing: some figures on this slide were not found in the research sources.';
@@ -3677,16 +3790,36 @@ const KPI_TITLE_RE_ = /\b(kpis?|key performance|metrics?|measur\w* (success|impa
 const TIME_VALUE_RE_ = /^\s*(week|wk|day|month|quarter|sprint|phase|wave|stage|year|fy|h|q)\s*-?\s*\d{1,4}\s*$|^\s*q[1-4](\s*\d{2,4})?\s*$|^\s*(19|20)\d{2}\s*$/i;
 function isFigureValue_(v) { const t = String(v == null ? '' : v); return /\d/.test(t) && !TIME_VALUE_RE_.test(t); }
 // A KPI row (items / stats / kpis with values) loses its "Week 1" tiles when two real figures are left
+// V.1_58 (deck 31: "15 mo · Study operational tracking window"): a study's time window or sample is context, not a KPI
+const STUDY_META_RE_ = /\b(study|tracking|observation|analysis|sample|survey|research)\s+(window|period|size|length|duration|span)\b|\b(tracked|observed|studied)\s+(over|for|across)\b|\bwindow\b/i;
 function dropTimeValues_(sp) {
   ['items', 'stats', 'kpis', 'metrics'].forEach(function (k) {
     const list = sp[k];
     if (!Array.isArray(list)) return;
-    const withValue = list.filter(function (it) { return it && typeof it === 'object' && it.value != null && String(it.value).trim(); });
+    // V.1_58: a target that is an industry benchmark says so once ("Target: ... (industry benchmark)" contradicts itself)
+    list.forEach(function (it) {
+      if (!it || typeof it !== 'object') return;
+      ['label', 'title'].forEach(function (f) {
+        if (typeof it[f] === 'string' && /^\s*target:\s*/i.test(it[f]) && /\(industry (benchmark|figure|study)\)/i.test(it[f])) it[f] = it[f].replace(/^\s*target:\s*/i, 'Industry benchmark: ').replace(/\s*\(industry (benchmark|figure|study)\)/i, '');
+      });
+    });
+    const figs = list.filter(function (it) { return it && typeof it === 'object' && it.value != null && /\d/.test(String(it.value)); });
+    if (figs.length >= 3) {
+      const meta = figs.filter(function (it) { return STUDY_META_RE_.test(String(it.label || it.title || '')); });
+      if (meta.length && figs.length - meta.length >= 2) { noteDrop_(sp, meta); sp[k] = sp[k].filter(function (it) { return meta.indexOf(it) === -1; }); }
+    }
+    // a KPI without a figure next to KPIs with figures is left out ("Target: session basket size" with no number)
+    const cur = sp[k];
+    const noFig = cur.filter(function (it) { return it && typeof it === 'object' && 'value' in it && !String(it.value || '').trim() && /^\s*target\b/i.test(String(it.label || it.title || '')); });
+    if (noFig.length && cur.length - noFig.length >= 2 && figs.length >= 2) { noteDrop_(sp, noFig); sp[k] = cur.filter(function (it) { return noFig.indexOf(it) === -1; }); }
+    const list2 = sp[k];
+    const withValue = list2.filter(function (it) { return it && typeof it === 'object' && it.value != null && String(it.value).trim(); });
     if (withValue.length < 2) return;
     const timeOnes = withValue.filter(function (it) { return TIME_VALUE_RE_.test(String(it.value)); });
     if (!timeOnes.length) return;
     if (withValue.length - timeOnes.length >= 2) {
-      sp[k] = list.filter(function (it) { return timeOnes.indexOf(it) === -1; });
+      noteDrop_(sp, timeOnes);
+      sp[k] = list2.filter(function (it) { return timeOnes.indexOf(it) === -1; });
       try { Logger.log('V.1_57: "' + timeOnes.map(function (it) { return it.value; }).join('", "') + '" is a point in time, not a figure; left out of "' + String(sp.title || '') + '".'); } catch (e) {}
     }
   });
@@ -3694,7 +3827,7 @@ function dropTimeValues_(sp) {
 function statsNeedNumbers_(sp) {
   if (String(sp.type || '').toLowerCase() !== 'stats' || !Array.isArray(sp.items)) return sp;
   const numeric = sp.items.filter(function (it) { return it && isFigureValue_(it.value); });
-  if (numeric.length >= 2) { sp.items = numeric; return sp; }
+  if (numeric.length >= 2) { noteDrop_(sp, sp.items.filter(function (it) { return numeric.indexOf(it) === -1; })); sp.items = numeric; return sp; }
   // V.1_47: a KPI slide with no figure left stays a KPI slide: the empty-slide check writes target KPIs for it
   if (!numeric.length && !sp.items.some(function (it) { return it && (it.label || it.text); })) { sp.items = []; return sp; }
   // V.1_48: a KPI slide keeps its KPIs: those without a number get a target from the empty-slide check (never turned into cards)
@@ -4477,11 +4610,20 @@ function replaceDuplicateSlides_(plan, ctx) {
   if (typeof solutionTopicCovered_ === 'function') requestedTopics_(ctx.userPrompt).forEach(function (t) {
     if (gaps.missing.indexOf(t) !== -1 || gaps.rework.some(function (r) { return r.topic === t; })) return;
     if (!/[a-z]{3}/i.test(t) || Object.keys(topicStems_(t, true)).length < 2) return;
-    if (!solutionTopicCovered_(keptNow.filter(Boolean).filter(function (sp) { return !skip[String(sp.type || '').toLowerCase()]; }), t)) gaps.missing.push(t);
+    if (solutionTopicCovered_(keptNow.filter(Boolean).filter(function (sp) { return !skip[String(sp.type || '').toLowerCase()]; }), t)) return;
+    // V.1_58 (deck 31: "Where generative AI helps" was written next to "Three member service workflows" - the same three
+    // workflows twice): a slide that already covers the topic loosely is rewritten under the topic's name, in its own
+    // slot, unless it is the slide of another requested topic
+    const loose = slideForTopic_(keptNow, t, skip);
+    const otherOwner = loose !== -1 && requestedTopics_(ctx.userPrompt).some(function (o) { return o !== t && slideForTopic_(keptNow, o, skip) === loose; });
+    if (loose !== -1 && !otherOwner) gaps.rework.push({ i: loose, topic: t, retitle: true });
+    else gaps.missing.push(t);
   });
   gaps.rework.forEach(function (r) { if (dupIdx.indexOf(r.i) === -1) dupIdx.push(r.i); });
   const topicJobs = gaps.rework.map(function (r) {
-    return r.topic.replace(/\s*\([^)]*\)/, '') + ': use exactly these parts, in this order, as the items: ' + topicParts_(r.topic).join(', ');
+    const parts = topicParts_(r.topic);
+    if (r.retitle || !parts.length) return r.topic.replace(/\s*\(([^)]*)\)/, ': $1') + ' (rewrite of the slide "' + slideHeading_(plan.slides[r.i]) + '": keep its content, name the topic in the title)';
+    return r.topic.replace(/\s*\([^)]*\)/, '') + ': use exactly these parts, in this order, as the items: ' + parts.join(', ');
   }).concat(gaps.missing.map(function (t) { return t.replace(/\s*\(([^)]*)\)/, ': $1'); }));
   if (topicJobs.length > dupIdx.length) {
     const covering = {};
@@ -4772,7 +4914,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_57';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_58';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
