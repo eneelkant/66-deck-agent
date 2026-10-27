@@ -13,14 +13,11 @@
   function lh_(size) { return K.lineHeight('sans', size); }
   function strs_(a, max) { return K.arr(a, max).map(K.str).filter(Boolean); }
   // bullet list at a fixed size (dot colour optional)
+  // V.1_65: one text box with Slides bullets (even spacing whatever the wrapping)
   function bullets_(els, x, y, w, points, size, gap, dot) {
-    var cy = y;
-    points.forEach(function (p) {
-      K.ellipse(els, x + 1, cy + lh_(size) / 2 - 2.25, 4.5, 4.5, dot || T.ink);
-      var r = K.text(els, x + 14, cy, w - 14, K.textH(p, w - 14, size) + 1, p, { weight: 400, max: size, min: size, color: T.ink });
-      cy += r.height + gap;
-    });
-    return cy - y - (points.length ? gap : 0);
+    if (!points.length) return 0;
+    var need = bulletsNeed_(points, w + 2, size, gap);
+    return K.bulletList(els, x, y, w, need + 4, points, { max: size, min: size, gap: gap, color: T.ink, bullet: dot || T.ink }) - gap;
   }
   function bulletsNeed_(points, w, size, gap) {
     if (!points.length) return 0;

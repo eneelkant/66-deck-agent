@@ -133,8 +133,9 @@ test("engine: one background in a proposal (comparison), bullets spread down the
   assert.equal(render(Object.assign({ deckLibrary: "proposal", cobrand: true }, cmp)).bg, render({ type: "cards", deckLibrary: "proposal", cobrand: true, title: "x", items: [{ title: "a", text: "b" }, { title: "c", text: "d" }, { title: "e", text: "f" }] }).bg);
   assert.notEqual(render(cmp).bg, render(Object.assign({ deckLibrary: "proposal" }, cmp)).bg, "General decks keep their grey comparison");
   const b = render({ type: "bullets", title: "Challenges", points: ["One: a short point about the first thing.", "Two: a short point about the second thing.", "Three: a short point.", "Four: a short point."], callout: { title: "Why", text: "Because it matters to the client and the team." } });
-  const dots = b.els.filter((e) => e.t === "ellipse").map((e) => e.y);
-  assert.ok(dots[dots.length - 1] - dots[0] > 100, "the four points use the height of the slide (was about 75pt)");
+  // (V.1_65: the points are one list with Slides bullets; its gap spreads them)
+  const list = b.els.find((e) => e.t === "text" && e.list);
+  assert.ok(list && list.vh > 100 && list.list.gap > 12, "the four points use the height of the slide (was about 75pt)");
   const five = render({ type: "cards", title: "x", items: ["a", "b", "c", "d", "e"].map((t) => ({ title: t, text: "text", icon: "ai" })) });
   const boxes = five.els.filter((e) => (e.t === "rect" || e.t === "roundrect") && e.h > 60 && e.w > 100);
   const lastRow = boxes.filter((e) => e.y === Math.max.apply(null, boxes.map((x) => x.y)));

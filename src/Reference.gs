@@ -345,7 +345,7 @@ function referenceForTag_(lib, tag) {
 
 // Designs whose look carries a meaning: only used when the slide is about that (e.g. the "!" warning badges = risks)
 // designs that never show some content, even when Gemini picks them (risks on a pyramid or a stack of layers)
-const HARD_TOPIC_GATES_ = { P66_PYRAMID: true, P66_ISO_CALLOUTS: true, P66_PHASE_COLUMNS: true, P66_CURVE: true };   // V.1_51: the rising curve only for a journey   // V.1_47: phase columns only for a plan
+const HARD_TOPIC_GATES_ = { P66_PYRAMID: true, P66_ISO_CALLOUTS: true, P66_PHASE_COLUMNS: true, P66_CURVE: true, P66_TIERS: true };   // V.1_65: the tiers only for service / support levels   // V.1_51: the rising curve only for a journey   // V.1_47: phase columns only for a plan
 const DESIGN_TOPICS_ = {
   '66D_LAYOUT_CARDS_024': /\b(risks?|challenges?|issues?|barriers?|pitfalls?|concerns?|threats?|problems?|obstacles?|gaps?|blockers?|hurdles?|warnings?)\b/i,
   // V.1_42 Proposal Deck designs whose look says what the slide is about
@@ -355,6 +355,8 @@ const DESIGN_TOPICS_ = {
   P66_STORIES: /success|stor(y|ies)|customers|clients|references?|proof|results/i,
   P66_PRICING: /pric|cost|commercial|rate card|fees?\b|invest|estimate|budget|effort/i,
   P66_PACKAGES: /package|options?\b|tiers?\b|plans?\b|pricing|offer/i,
+  // V.1_65 (deck 37 Proposal slide 35: a readiness radar was drawn as support tiers)
+  P66_TIERS: /\btiers?\b|\blevels?\b|\bL[0-3]\b|support|service levels?|\bSLA|escalat|hypercare|managed service/i,
   P66_INVESTMENT: /invest|pric|cost|commercial|budget|estimate|fees?\b/i,
   P66_IMPACT_MITIGATION: /risk|impact|mitigat|issues?|concerns?|challenges?/i,
   P66_PERSONAS: /persona|champion|users?\b|audience|stakeholder|roles?\b/i,

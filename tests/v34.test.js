@@ -139,15 +139,16 @@ test("writer rules: Google Cloud terms, FinOps phases in order, metric names and
   assert.match(code, /Never put a figure or a\s+range in a card or step heading/);
 });
 
-test("agenda runs from 01 Introduction to Thank you, numbered in order (V.1_35)", () => {
+// V.1_65: the agenda lists the content only (no Introduction / Thank you rows), numbered in order
+test("agenda lists the content sections, numbered in order (V.1_35, V.1_65)", () => {
   const g = loadCode();
   const slides = [{ type: "cover", title: "c", subtitle: "Why it matters" }, { type: "agenda", title: "Agenda", items: ["Introduction", "First topic", "Second topic"] }, { type: "cards", title: "First topic" }, { type: "stats", title: "Second topic" }, { type: "closing", title: "Thank You!" }];
   g.syncAgendaToSlides_(slides);
-  assert.deepEqual(Array.from(slides[1].items.map((i) => i.title)), ["Introduction", "First topic", "Second topic", "Thank you"]);
-  assert.deepEqual(Array.from(slides[1].items.map((i) => i.no)), [1, 2, 3, 4]);
+  assert.deepEqual(Array.from(slides[1].items.map((i) => i.title)), ["First topic", "Second topic"]);
+  assert.deepEqual(Array.from(slides[1].items.map((i) => i.no)), [1, 2]);
   const out = g.ENGINE.render({ slides: [slides[1]] }, { dateLabel: "x" })[0];
   const nums = out.els.filter((e) => e.t === "text" && /^0\d$/.test(e.text)).map((e) => e.text);
-  assert.deepEqual(Array.from(nums), ["01", "02", "03", "04"]);
+  assert.deepEqual(Array.from(nums), ["01", "02"]);
 });
 
 test("design fixes: four-part donut has no near-white quarter; tags are not forced to capitals; titles on dark picture slides stay left", () => {

@@ -178,8 +178,15 @@ var ENGINE = (function () {
       rot: spec.rot || 0
     };
     // styled runs inside one text box (e.g. a blue headline that continues into a normal sentence)
+    // V.1_65 (deck 37 slides 13, 18: the "Engine:" lead-ins vanished on Night Blue): a dark run inside a light text (text on
+    // a dark panel) takes the text's own colour; a light run inside a dark text takes it too
     if (spec.runs) el.runs = spec.runs.filter(function (r) { return r.start < f.text.length; })
-      .map(function (r) { return { start: r.start, end: Math.min(r.end, f.text.length), color: r.color, weight: r.weight }; });
+      .map(function (r) {
+        var c = r.color;
+        if (c && el.color && isLight(el.color) !== isLight(c) && !/^#?0052FF$/i.test(String(c))) c = el.color;
+        return { start: r.start, end: Math.min(r.end, f.text.length), color: c, weight: r.weight };
+      });
+    if (spec.list) { el.list = spec.list; el.vh = h + INSET * 2; el.h = Math.max(el.h, h + INSET * 2); }   // V.1_65: one text box with real bullets (its height is the list's)
     els.push(el);
     var widest = 0;
     f.lines.forEach(function (l) { widest = Math.max(widest, textWidth(l, spec.font || 'sans', spec.weight || 400, f.size)); });
@@ -779,14 +786,21 @@ var ENGINE = (function () {
     }
     var savedAudit = AUDIT;
     AUDIT = null;                                   // single bullets are not measured on their own
-    points.forEach(function (p) {
-      if (cy - y > h + 2) return;                   // nothing is drawn below the area
-      ellipse(els, x + 1, cy + lineHeight('sans', size) / 2 - 2.5, 5, 5, spec.bullet || T.ink);
+    // V.1_65 (deck 37 slides 31, 34: uneven gaps between bullets): the list is ONE text box with Slides' own bullets, so
+    // Slides spaces the lines itself - a line that wraps differently from the estimate can no longer leave a gap or an
+    // overlap. "Lead-in: text" keeps its Medium lead-in.
+    var shownPts = [], acc = 0;
+    points.forEach(function (p) { var hp = textH(p, w - 16, size) + gap; if (acc + hp - gap <= h + 2 || !shownPts.length) { shownPts.push(p); acc += hp; } });
+    var joined = shownPts.join('\n'), runs = [], off = 0, col = spec.color || T.body;
+    shownPts.forEach(function (p) {
       var ci = p.indexOf(': '), lead = ci > 2 && ci < 48 ? ci + 1 : 0;
-      var r = text(els, x + 16, cy, w - 16, Math.max(lineHeight('sans', size), y + h - cy), p, { weight: 400, max: size, min: size, color: spec.color || T.body,
-        runs: lead ? [{ start: 0, end: lead, color: T.ink, weight: 500 }] : null });
-      cy += r.height + gap;
+      if (lead) runs.push({ start: off, end: off + lead, color: isLight(col) ? col : T.ink, weight: 500 });
+      off += p.length + 1;
     });
+    var listH = Math.max(lineHeight('sans', size), acc - gap);
+    text(els, x, y, w, listH + 4, joined, { weight: 400, max: size, min: size, color: col, runs: runs.length ? runs : null,
+      list: { gap: gap, bullet: spec.bullet || (isLight(col) ? col : T.ink), indent: 16 } });
+    cy = y + listH + gap;
     AUDIT = savedAudit;
     return cy - y;
   }
@@ -4117,9 +4131,27 @@ var ENGINE = (function () {
     };
     Object.keys(s).forEach(function (k) { if (!SKIP[k] && k !== 'columns') walk(s[k]); });
     if (Array.isArray(s.columns) && s.columns.some(function (c) { return c && typeof c === 'object'; })) walk(s.columns);
-    var cutW = function (t, n) { var w = String(t || '').split(/\s+/); return w.length > n ? w.slice(0, n).join(' ').replace(/[,;:]$/, '') + '.' : String(t || ''); };
+    // V.1_65 (deck 37 Solution slide 6): never a cut sentence; whole sentences that fit, else the first whole sentence
+    var cutW = function (t, n) {
+      var str = String(t || '').trim(), w = str.split(/\s+/);
+      if (w.length <= n) return str;
+      var sents = str.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) || [str], keep = [], cnt = 0;
+      for (var k = 0; k < sents.length; k++) {
+        var c = sents[k].trim().split(/\s+/).length;
+        if (keep.length && cnt + c > n) break;
+        keep.push(sents[k].trim()); cnt += c;
+      }
+      var res = keep.join(' ');
+      if (cnt > Math.ceil(n * 1.5)) {
+        // one very long sentence: end it at its last clause break inside the room (", and" / "; " / " - "), else at a word
+        var head = res.split(/\s+/).slice(0, n).join(' ');
+        var br = Math.max(head.lastIndexOf(', '), head.lastIndexOf('; '), head.lastIndexOf(' - '), head.lastIndexOf(': '));
+        res = (br > head.length * 0.45 ? head.slice(0, br) : head).replace(/[,;:\s-]+$/, '').replace(/\s+(and|or|with|of|to|the|a|an|for|in|on|by|across)$/i, '');
+      }
+      return /[.!?]$/.test(res) ? res : res + '.';
+    };
     var full = groups.filter(function (g) { return g.title && g.points.length; }).slice(0, 5).map(function (g) { return { title: cutW(g.title, 8), points: g.points.slice(0, 4).map(function (p) { return cutW(p, 18); }) }; });
-    var flat = groups.map(function (g) { return g.points.length ? (g.title ? g.title + ': ' : '') + g.points.join(' ') : g.title; }).concat(looseTexts).filter(real).map(function (p) { return cutW(p, 22); });
+    var flat = groups.map(function (g) { return g.points.length ? (g.title ? g.title + ': ' : '') + g.points.map(function (p) { p = String(p).trim(); return /[.!?]$/.test(p) ? p : p + '.'; }).join(' ') : g.title; }).concat(looseTexts).filter(real).map(function (p) { return cutW(p, 22); });
     var spec = Object.assign({}, s, { reference: null });
     if (full.length >= 2) { spec.items = full; spec.points = []; SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, spec); }); }
     if (!out && flat.length) {
@@ -4396,6 +4428,8 @@ var ENGINE = (function () {
       // design that shows its content best, and what was found / corrected goes with the slide (the slide log)
       // (flowcharts - nodes and edges - are drawn by the diagram builder afterwards: not checked here)
       if (!s.diagram && !(Array.isArray(s.nodes) && s.nodes.length)) out = qualityGate_(out, s, type, lctx);
+      // V.1_65 (deck 37: cards stretched to the bottom with their text in the top third): boxes hug their content
+      if (!s.diagram && !QA_FRAME_[type] && ['table', 'chart', 'timeline'].indexOf(type) === -1) compactBoxes_(out);
       if (s.diagram && typeof applyDiagramIrToEngineOutput_ === 'function') {
         out = applyDiagramIrToEngineOutput_(out, s, ctx.tokens || null);
       }
@@ -4426,6 +4460,12 @@ var ENGINE = (function () {
     var first = RESHAPE_FIRST_[t] || [];
     var rest = (VARIANTS[t] || []).map(function (v) { return v.tag; }).filter(function (x) { return first.indexOf(x) === -1; });
     return first.concat(rest).filter(function (x) { return V[x] && inLib_(x, 'proposal'); });
+  }
+  // V.1_65: a design whose look says what the slide is about (tiers, pyramid, curve...) is only tried for that topic
+  function topicOk_(tag, spec) {
+    if (typeof DESIGN_TOPICS_ === 'undefined' || !DESIGN_TOPICS_[tag]) return true;
+    var words = specShortTexts_(spec).concat([spec.title, spec.lead, spec.statement, spec.subtitle]).join(' ');
+    return DESIGN_TOPICS_[tag].test(words);
   }
   var QA_WEIGHT_ = { empty: 100, 'lost-content': 50, 'headings-only': 40, 'plain-layout': 40, overlap: 30, cut: 20, 'joined-points': 10, 'streak-content': 60 };
   // keys that hold ids, kinds and styles, not words the reader sees
@@ -4471,6 +4511,72 @@ var ENGINE = (function () {
     })(s, 0);
     return out;
   }
+  /* V.1_65: a box (card, panel, column) whose content ends well above its bottom is made shorter, down to its content and a
+     margin; boxes side by side in one row stay the same height; things placed on the box's bottom edge (a coloured bar, a
+     chip) move up with it. Boxes whose content is centred, and nested boxes, are measured from the inside out. */
+  function elBox_(e) {
+    if (e.t === 'line') return { x: Math.min(e.x1, e.x2), y: Math.min(e.y1, e.y2), w: Math.abs(e.x2 - e.x1), h: Math.abs(e.y2 - e.y1) };
+    if (e.t === 'text' && String(e.text || '').trim() && e.size) { var b = inkBox_(e); return { x: e.x, y: b.y, w: e.w, h: b.h, ink: true }; }
+    return { x: e.x, y: e.y, w: e.w || 0, h: e.h || 0 };
+  }
+  function compactBoxes_(out) {
+    if (!out || !out.els) return;
+    var els = out.els;
+    var isBox = function (e) { return (e.t === 'rect' || e.t === 'roundrect') && e.fill && e.fill !== 'transparent' && !e.rot && e.w >= 80 && e.w < 700 && e.h >= 90 && e.y >= 60; };
+    var boxes = els.filter(isBox).sort(function (a, b) { return a.w * a.h - b.w * b.h; });
+    if (!boxes.length) return;
+    var plan = [];
+    boxes.forEach(function (B) {
+      var bottom = B.y + B.h, inside = [], textIn = false;
+      els.forEach(function (e) {
+        if (e === B || e.t === 'image' && e.w >= 700) return;
+        var b = e.t === 'text' ? { x: e.x + INSET, y: e.y + INSET, w: e.w - 2 * INSET, h: e.h - 2 * INSET } : elBox_(e);
+        if (b.x >= B.x - 1 && b.x + b.w <= B.x + B.w + 1 && b.y >= B.y - 1 && b.y + Math.max(b.h, 0) <= bottom + 1) {
+          inside.push(e);
+          if (e.t === 'text' && String(e.text || '').trim()) textIn = true;
+        }
+      });
+      if (!textIn) return;
+      var top = Infinity, low = B.y, anchored = [];
+      inside.forEach(function (e) {
+        var b = elBox_(e);
+        if (e.t !== 'text' && b.y >= bottom - 14) { anchored.push(e); return; }       // a bar or chip on the bottom edge
+        top = Math.min(top, b.y); low = Math.max(low, b.y + b.h);
+      });
+      if (top - B.y > B.h * 0.25) return;                                         // centred content: left as it is
+      var slack = bottom - low - 14;
+      // a bullet list that ends the box's content spreads down the box first (more room between its points)
+      var lists = inside.filter(function (e) { return e.list && e.t === 'text'; });
+      if (slack > 24 && lists.length === 1) {
+        var L0 = lists[0], lb = elBox_(L0), n = String(L0.text).split('\n').length;
+        if (n >= 2 && lb.y + lb.h >= low - 2) {
+          var add = Math.min(slack * 0.7 / (n - 1), lineHeight('sans', L0.size || 10) * 1.6);
+          L0.list = Object.assign({}, L0.list, { gap: (L0.list.gap || 6) + add });
+          L0.vh += add * (n - 1); L0.h += add * (n - 1);
+          low += add * (n - 1); slack -= add * (n - 1);
+        }
+      }
+      // a box that stays mostly empty (its text took less than half of it) is made shorter
+      if (slack > Math.max(120, B.h * 0.6)) plan.push({ B: B, newH: B.h - slack, anchored: anchored });
+    });
+    if (!plan.length) return;
+    // a row of boxes (same top, same height) keeps one height: the tallest content of the row
+    plan.forEach(function (p) {
+      var row = boxes.filter(function (o) { return Math.abs(o.y - p.B.y) < 2 && Math.abs(o.h - p.B.h) < 2; });
+      var need = p.newH;
+      row.forEach(function (o) {
+        var q = plan.filter(function (x) { return x.B === o; })[0];
+        need = Math.max(need, q ? q.newH : o.h);
+      });
+      p.rowH = need;
+    });
+    plan.forEach(function (p) {
+      var d = p.B.h - p.rowH;
+      if (d < 20) return;
+      p.B.h = p.rowH;
+      p.anchored.forEach(function (e) { if (e.t === 'line') { e.y1 -= d; e.y2 -= d; } else e.y -= d; });
+    });
+  }
   function qaScore_(iss) { return (iss || []).reduce(function (t, k) { return t + (QA_WEIGHT_[k] || 10); }, 0); }
   function layoutAllSteps_(s, type, lctx) {
     var o = null;
@@ -4501,14 +4607,14 @@ var ENGINE = (function () {
     var cur = String(out.drawnWith || '');
     // 1. the other designs of the slide's type in its library
     (VARIANTS[type] || []).forEach(function (v) {
-      if (v.tag !== cur && V[v.tag] && inLib_(v.tag, lib)) tryOne(Object.assign({}, s, { reference: { tag: v.tag } }), type);
+      if (v.tag !== cur && V[v.tag] && inLib_(v.tag, lib) && topicOk_(v.tag, s)) tryOne(Object.assign({}, s, { reference: { tag: v.tag } }), type);
     });
     // 2. the shapes its content really has (Proposal), the library's text designs (Solution), the plain cards (General)
     if (lib === 'proposal' && typeof proposalReshapes_ === 'function') {
       var rs = []; try { rs = proposalReshapes_(s) || []; } catch (e) { rs = []; }
       rs.forEach(function (c) {
         var ct = ALIASES[String(c.type).toLowerCase()] || String(c.type).toLowerCase();
-        reshapeVariants_(ct).forEach(function (tag) { tryOne(Object.assign({}, c, { reference: { tag: tag } }), ct); });
+        reshapeVariants_(ct).forEach(function (tag) { if (topicOk_(tag, c)) tryOne(Object.assign({}, c, { reference: { tag: tag } }), ct); });
       });
     }
     if (lib === 'solution') SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (V[t] && t !== cur) tryOne(Object.assign({}, flattenSpec_(s, type), { reference: { tag: t } }), type); });

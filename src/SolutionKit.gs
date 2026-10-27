@@ -488,8 +488,12 @@ function solutionResultsGuard_(slides, prompt, sources, ctx) {
     if (changed) { n++; sp.notes = String(sp.notes || '') + '\nResults not given in the request are shown as targets: add the measured figures before sharing.'; }
     // V.1_56 (deck 29 slide 6): figures that stay because they come from published research say so on the slide
     const shown = JSON.stringify([sp.items, sp.rows, sp.points]);
+    // V.1_65 (deck 37: the same sentence replaced the subtitle of four slides, also a rollout plan): the slide keeps its own
+    // subtitle; the note on the figures goes to the speaker notes
     if (figs(shown).some(function (f) { return /\d/.test(f) && !has(own, f) && has(research, f); }) && !/industry|benchmark|published|research/i.test(String(sp.lead || ''))) {
-      sp.lead = 'Industry figures from published research (sources in the notes), not measured results' + (client ? ' for ' + client : '') + '.';
+      const line = 'Industry figures from published research (sources in the notes), not measured results' + (client ? ' for ' + client : '') + '.';
+      if (!String(sp.lead || '').trim()) sp.lead = line;
+      else if (!/industry figures from published research/i.test(String(sp.notes || ''))) sp.notes = String(sp.notes || '').replace(/\s+$/, '') + '\n' + line;
     }
   });
   if (n && ctx && ctx.log) ctx.log.push(n + ' results slide(s): figures the request did not give are shown as targets (no invented results).');

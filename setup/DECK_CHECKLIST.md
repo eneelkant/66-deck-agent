@@ -1,4 +1,4 @@
-# 66° Deck Agent: the deck checklist (V.1_64)
+# 66° Deck Agent: the deck checklist (V.1_65)
 
 One list for every deck type. It is both the review list for people and the list of what the add-on checks by itself.
 **Auto** means the add-on checks it on every slide before the slide is drawn, draws the slide again with a better
@@ -21,6 +21,20 @@ design when the check fails, and writes the result to the slide log (`deck_agent
 | Sentence case for titles and headings; product names and real names keep their capitals; ordinary words in the request are not names | Test v59, v60, v63 |
 | Plus Jakarta Sans; brand colours | Test (quality gate) |
 | The same design is not repeated on nearby slides | Test v63 |
+| A box is as tall as its text needs; boxes in one row are the same height; a single list is spread over its box | Auto (every slide); Test v65 |
+| Bullets are real Slides bullets with the same space between points | Test v65 |
+| Every word can be read: a lead-in on a dark slide takes the text's colour | Test v65 |
+| Content in its real shape before drawing: a chart needs figures, notes are one text, targets are KPI tiles, a closing paragraph is the takeaway | Auto (shape check); Test v65 |
+| No sentence cut in the middle; points are never run together | Test v65 |
+| Nothing said twice: a caption, takeaway or callout never repeats the lead | Auto (shape check); Test v65 |
+| Designs whose look names a topic (tiers, pyramid, curve) only for that topic | Auto; Test v65 |
+| Thin lists get more points and short texts are lengthened before drawing | Auto (fit step); Test v65 |
+
+## Every deck: the agenda
+
+| Rule | How it is kept |
+|---|---|
+| The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 
 ## Proposal and Solution decks
 

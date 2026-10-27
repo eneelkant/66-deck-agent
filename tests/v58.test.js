@@ -144,7 +144,12 @@ test("quality gate: every design at 2-6 items and three text lengths - never tex
   const cut = own.filter((r) => r.cut && r.len <= 1);
   assert.ok(cut.length <= 21, "short texts cut: " + cut.length + " " + cut.slice(0, 3).map((r) => r.tag).join(", "));
   const gap = own.filter((r) => r.gap > 0.25 && !/AGENDA|SECTION|COVER|CLOSING/.test(r.tag));
-  assert.ok(gap.length <= 47, "slides with a quarter of the space empty: " + gap.length);
+  // V.1_65: a box that would stay mostly empty is made shorter (a nearly empty card is worse than a shorter slide), so with
+  // the deliberately short test texts more slides end above the bottom; real slides get their room filled first (fit step)
+  assert.ok(gap.length <= 85, "slides with a quarter of the space empty: " + gap.length);
+  // with full texts and 3 or more items the slide is filled
+  const full = gap.filter((r) => r.len >= 2 && r.n >= 3);
+  assert.ok(full.length <= 8, "full slides with empty space: " + full.map((r) => r.tag + ":" + r.n).join(", "));
 });
 
 test("deck 31 fill: step columns, text sections, tables and the scorecard reach the bottom of the slide", () => {

@@ -186,20 +186,21 @@ test("design fixes: donut centre keeps hyphenated words; the tree design takes p
 
 /* ---------- Agenda and the Presentation Type list ---------- */
 
-test("agenda: 01 Introduction ... Thank you, up to 20 rows", () => {
+// V.1_65: content sections only (no Introduction / Thank you rows), in every deck type and in long decks too
+test("agenda: the content sections, numbered, up to 20 rows", () => {
   const g = loadCode();
   const body = Array.from({ length: 17 }, (_, i) => ({ type: "cards", title: "Topic " + (i + 1) }));
   const slides = [{ type: "cover", title: "c" }, { type: "agenda", title: "Agenda", items: [] }].concat(body, [{ type: "closing", title: "Thank You!" }]);
   g.syncAgendaToSlides_(slides);
   const items = slides[1].items;
-  assert.equal(items.length, 19);
-  assert.equal(items[0].title, "Introduction");
-  assert.equal(items[18].title, "Thank you");
+  assert.equal(items.length, 17);
+  assert.equal(items[0].title, "Topic 1");
+  assert.equal(items[16].title, "Topic 17");
   const out = g.ENGINE.render({ slides: [slides[1]] }, { dateLabel: "x" })[0];
   const nums = out.els.filter((e) => e.t === "text" && /^\d\d$/.test(e.text)).map((e) => e.text);
   assert.equal(nums[0], "01");
-  assert.equal(nums[nums.length - 1], "19");
-  assert.match(read("src/Code.gs"), /agendaItems\.unshift\(\{ title: 'Introduction'/, "long decks too");
+  assert.equal(nums[nums.length - 1], "17");
+  assert.doesNotMatch(read("src/Code.gs"), /agendaItems\.unshift\(\{ title: 'Introduction'/, "long decks too");
 });
 
 test("Presentation Type: label, the five types in order, guidance for each", () => {

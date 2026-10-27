@@ -385,6 +385,17 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
           ps.setSpaceAbove(0);
           ps.setSpaceBelow(0);
         } catch (err) {}
+        // V.1_65: a bullet list is one text box with Slides' own bullets; Slides spaces the lines itself (no gaps between
+        // bullets when a line wraps differently from the estimate)
+        if (e.list) {
+          try { tr.getListStyle().applyListPreset(SlidesApp.ListPreset.DISC_CIRCLE_SQUARE); } catch (err) {}
+          try {
+            const lps = tr.getParagraphStyle();
+            lps.setSpaceBelow(finiteNumber_(e.list.gap, 6) * s);
+            lps.setIndentStart(finiteNumber_(e.list.indent, 16) * s);
+            lps.setIndentFirstLine(0);
+          } catch (err) {}
+        }
         try { box.setContentAlignment(VALIGN[e.valign] || VALIGN.top); } catch (err) {}
         try { box.getAutofit().disableAutofit(); } catch (err) {}
       }

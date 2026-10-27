@@ -2131,11 +2131,7 @@ function syncAgendaToSlides_(slides) {
     const text = (sameCount && given[i].text) || sp.lead || sp.subtitle || '';
     return { title: slideHeading_(sp), text: text };
   });
-  // V.1_35: the agenda runs from 01 Introduction (the cover) to the Thank-you slide, numbered 01, 02, 03... in order
-  const cover = slides.filter(function (sp) { return String(sp.type || '').toLowerCase() === 'cover'; })[0];
-  const closing = slides.filter(function (sp) { return String(sp.type || '').toLowerCase() === 'closing'; })[0];
-  if (cover) items.unshift({ title: 'Introduction', text: String(cover.subtitle || '').slice(0, 120) });
-  if (closing) items.push({ title: 'Thank you', text: '' });
+  // V.1_65: the agenda lists the content only, numbered 01, 02, 03... in order (no Introduction or Thank-you rows, every deck type)
   agenda.items = items.map(function (it, i) { it.no = i + 1; return it; });
 }
 
@@ -3043,10 +3039,23 @@ function fitContentToDesigns_(plan, ctx, started) {
         const path = o.isTitle ? ['title'] : findTextPath_(sp, o.text);
         if (path) issues.push({ slide: i, path: path, current: o.text, action: 'shorten', min_chars: Math.floor(o.maxChars * 0.7), max_chars: o.maxChars });
       });
+      // V.1_65 (deck 37: three short bullets in a tall box): a list of fewer than 5 points in a box with room gets new points
+      if (round === 0) {
+        const lists = {};
+        m.underfill.forEach(function (u) {
+          const path = findTextPath_(sp, u.text);
+          if (!path || path.length < 2 || path[path.length - 2] !== 'points') return;
+          const lp = path.slice(0, -1), arr0 = lp.reduce(function (o, k) { return o && o[k]; }, sp);
+          if (!Array.isArray(arr0) || arr0.length >= 5 || lists[lp.join('.')]) return;
+          lists[lp.join('.')] = true;
+          issues.push({ slide: i, path: lp, current: arr0.map(String).join(' | '), action: 'add_points', add: Math.min(5 - arr0.length, 3), list: arr0.map(String) });
+        });
+      }
       if (round === 0) m.underfill.forEach(function (u) {
         const path = findTextPath_(sp, u.text);
         if (!path) return;
-        let maxC = Math.min(u.maxChars, u.text.length + 180, 300), minC = Math.min(u.minChars, u.text.length + 120);
+        if (path.length >= 2 && path[path.length - 2] === 'points' && issues.some(function (x) { return x.slide === i && x.action === 'add_points' && x.path.join('.') === path.slice(0, -1).join('.'); })) return;
+        let maxC = Math.min(u.maxChars, u.text.length + 320, 420), minC = Math.min(u.minChars, u.text.length + 160);   // V.1_65: boxes are filled, not left two-thirds empty
         // Even boxes: a text grows to at most ~20% past its longest sibling (the other cards / stats / steps)
         const parent = path.length >= 3 ? path.slice(0, -2).reduce(function (o, k) { return o && o[k]; }, sp) : null;
         if (Array.isArray(parent)) {
@@ -3063,6 +3072,7 @@ function fitContentToDesigns_(plan, ctx, started) {
     });
     if (!issues.length) break;
     const list = issues.slice(0, 40).map(function (it, k) {
+      if (it.action === 'add_points') return { id: k, slide_title: slideHeading_(plan.slides[it.slide]), action: 'add_points', add: it.add, points: it.list };
       return { id: k, slide_title: slideHeading_(plan.slides[it.slide]), action: it.action, kind: it.bullet ? 'bullet' : (it.path[0] === 'title' ? 'slide title' : 'text'),
         min_chars: it.min_chars, max_chars: it.max_chars, text: it.current };
     });
@@ -3075,8 +3085,10 @@ function fitContentToDesigns_(plan, ctx, started) {
       '  the slide title or its words, never pad with filler, never add new numbers, clients, awards or claims about 66degrees.',
       '- kind "bullet": keep it ONE sentence (make it fuller, do not add a second sentence). Keep a "Label: " start if it has one.',
       '- kind "slide title" and short headings: keep a complete, specific phrase (never vague words like "Data view" or "Capabilities").',
+      '- action "add_points": write "add" NEW points for the list in "points" - same style and length as the points there, each one',
+      '  specific sentence about the slide\'s subject, never a repeat or rewording of a point already there, no new numbers or claims.',
       '- Plain text, one piece of text per item, no quotation marks, no reference markers like [1], no hype words.',
-      'Return ONLY JSON: {"fixes":[{"id":0,"text":"..."}]}',
+      'Return ONLY JSON: {"fixes":[{"id":0,"text":"..."},{"id":1,"points":["...","..."]}]}',
       '',
       'ITEMS:',
       JSON.stringify(list)
@@ -3085,6 +3097,16 @@ function fitContentToDesigns_(plan, ctx, started) {
     try { out = callGeminiJSON([{ text: prompt }], ctx.apiKey, 0.3); } catch (e) { ctx.log.push('Fit check skipped: ' + e.message); break; }
     ((out && out.fixes) || []).forEach(function (f) {
       const it = issues[f.id];
+      if (it && it.action === 'add_points' && Array.isArray(f.points)) {
+        const arr0 = it.path.reduce(function (o, k) { return o && o[k]; }, plan.slides[it.slide]);
+        if (!Array.isArray(arr0)) return;
+        const seen = {}; arr0.forEach(function (p) { seen[String(p).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()] = 1; });
+        f.points.slice(0, it.add).forEach(function (p) {
+          const t = ENGINE.cleanText(String(p || '')).trim(), k = t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+          if (t.length >= 12 && !seen[k]) { seen[k] = 1; arr0.push(t); res.fixed++; }
+        });
+        return;
+      }
       if (!it || !f.text) return;
       const txt = ENGINE.cleanText(String(f.text));
       // still too long: kept when it is shorter than before (the next round takes it from there), else tried again
@@ -4258,7 +4280,94 @@ function nameCaseClient_(sp, ctx) {
 
 // Slides that would look empty (one card, a statement with nothing next to it, two bullets, two KPIs) get their missing
 // content in one Gemini call, written to the slide's own topic. Nothing is invented beyond the slide's subject.
+// V.1_65: the shape Gemini wrote is checked before anything is filled or drawn (every deck type)
+//  - speaker notes written as a list become one text; when the slide itself has no points, the list is its points
+//  - a chart without real numbers becomes cards of its categories (deck 37 Proposal slide 36: only the two bar names were left)
+//  - items or points that each state a target figure ("Target: 55% ...") become KPI tiles (deck 37 Solution slide 37)
+//  - a long closing paragraph written as the last step becomes the slide's takeaway (deck 37 Proposal slide 38)
+function normalizeShapes_(plan, ctx) {
+  const words = function (t) { return String(t || '').split(/\s+/).filter(Boolean).length; };
+  const FIG_RE = /^(?:target:\s*)?([+\-−~]?\$?\d[\d.,]*\s*(?:%|x|pp|pts?|points?|ms|s|[kKmMbB])?)(?=[\s,;:)]|$)\s*(.*)$/i;
+  (plan.slides || []).forEach(function (sp) {
+    if (!sp || typeof sp !== 'object') return;
+    const t = String(sp.type || '').toLowerCase();
+    if (['cover', 'agenda', 'closing', 'section', 'template'].indexOf(t) !== -1) return;
+    const items = Array.isArray(sp.items) ? sp.items.filter(Boolean) : [];
+    const pts = Array.isArray(sp.points) ? sp.points.filter(Boolean) : [];
+    // 1. notes as a list
+    if (Array.isArray(sp.notes)) {
+      const list = sp.notes.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+      const hasContent = items.length >= 2 || pts.length >= 2 || (sp.left && sp.right) || (Array.isArray(sp.rows) && sp.rows.length >= 2) || (sp.chart && Array.isArray(sp.chart.categories) && sp.chart.categories.length >= 3);
+      if (!hasContent && list.length >= 2) { sp.points = list; sp.notes = ''; }
+      else sp.notes = list.map(function (x) { return /[.!?]$/.test(x) ? x : x + '.'; }).join(' ');
+    }
+    // 2. a chart without numbers
+    if (t === 'chart' && sp.chart) {
+      const cats = Array.isArray(sp.chart.categories) ? sp.chart.categories.map(String) : [];
+      const vals = sp.chart.series && sp.chart.series[0] && Array.isArray(sp.chart.series[0].values) ? sp.chart.series[0].values : [];
+      const numeric = vals.filter(function (v) { return v !== '' && v != null && isFinite(Number(v)); }).length;
+      if (cats.length >= 2 && (numeric < 2 || numeric < cats.length - 1)) {
+        const pp = Array.isArray(sp.points) ? sp.points.map(String) : [];
+        sp.type = 'cards';
+        sp.items = cats.slice(0, 6).map(function (c, k) {
+          const v = vals[k] != null && String(vals[k]).trim() && !isFinite(Number(vals[k])) ? String(vals[k]).trim() : '';
+          return { title: c, text: v ? v.charAt(0).toUpperCase() + v.slice(1) + (/[.!?]$/.test(v) ? '' : '.') : '' };
+        });
+        if (cats.length === 2 && pp.length) { sp.items[1].text = [sp.items[1].text].concat(pp).filter(Boolean).join(' '); sp.points = []; }
+        if (sp.insight && !sp.takeaway) sp.takeaway = String(sp.insight.text || sp.insight.title || '');
+        delete sp.chart; delete sp.design; sp.reference = null; sp.pair = cats.length === 2;
+        if (ctx && ctx.log) ctx.log.push('"' + String(sp.title || '').slice(0, 50) + '": a chart without figures is shown as cards.');
+      }
+    }
+    // 3. target figures written as text
+    const tt = String(sp.type || '').toLowerCase();
+    if (['cards', 'bullets', 'statement', 'process'].indexOf(tt) !== -1) {
+      const src = (Array.isArray(sp.items) && sp.items.length ? sp.items : (Array.isArray(sp.points) ? sp.points : [])).filter(Boolean);
+      if (src.length >= 2 && src.length <= 4) {
+        const kpis = src.map(function (it) {
+          const head = typeof it === 'object' ? String(it.title || it.label || '') : '';
+          const body = typeof it === 'object' ? String(it.text || it.description || '') : String(it);
+          const m = FIG_RE.exec(body.trim());
+          if (!m || !/\d/.test(m[1]) || !/^target:/i.test(body.trim()) && !/target|kpi|metric/i.test(String(sp.title || '') + ' ' + head)) return null;
+          const rest = m[2].replace(/^[\s·:–—-]+/, '');
+          return { value: m[1].replace(/\s+/g, ''), label: 'Target: ' + (head || rest.split(/[·.;]/)[0]).replace(/^target:\s*/i, '').replace(/^./, function (c) { return c.toLowerCase(); }), text: head ? rest.charAt(0).toUpperCase() + rest.slice(1) : '' };
+        });
+        if (kpis.every(Boolean)) {
+          sp.type = 'stats'; sp.items = kpis; sp.points = []; delete sp.design; sp.reference = null;
+          if (ctx && ctx.log) ctx.log.push('"' + String(sp.title || '').slice(0, 50) + '": target figures shown as KPI tiles.');
+        }
+      }
+    }
+    // 5. a caption, takeaway or callout that says the lead again (deck 37 Proposal slide 21) is dropped
+    const lead = String(sp.lead || sp.subtitle || '');
+    const bag = function (x) { return String(x || '').toLowerCase().match(/[a-z0-9%]{4,}/g) || []; };
+    const same = function (a) {
+      const A = bag(a), B = bag(lead); if (A.length < 4 || B.length < 4) return false;
+      const setB = {}; B.forEach(function (w) { setB[w] = 1; });
+      return A.filter(function (w) { return setB[w]; }).length / A.length >= 0.7;
+    };
+    if (lead) {
+      ['caption', 'takeaway', 'callout', 'note'].forEach(function (k) { if (typeof sp[k] === 'string' && same(sp[k])) sp[k] = ''; });
+      if (sp.insight && typeof sp.insight === 'object' && same(sp.insight.text)) sp.insight.text = '';
+      if (sp.image && typeof sp.image === 'object' && same(sp.image.caption)) sp.image.caption = '';
+    }
+    // 4. a closing paragraph as the last step
+    const its = Array.isArray(sp.items) ? sp.items : null;
+    if (its && its.length >= 3 && ['process', 'next_steps', 'cards', 'bullets'].indexOf(String(sp.type || '').toLowerCase()) !== -1) {
+      const textOf = function (it) { return typeof it === 'string' ? it : String((it && (it.text || it.description)) || ''); };
+      const headOf = function (it) { return typeof it === 'string' ? '' : String((it && (it.title || it.label)) || ''); };
+      const last = its[its.length - 1], others = its.slice(0, -1).map(function (it) { return words(textOf(it)) + words(headOf(it)); }).sort(function (a, b) { return a - b; });
+      const med = others[Math.floor(others.length / 2)] || 1;
+      if (!headOf(last) && words(textOf(last)) >= 25 && words(textOf(last)) > 1.8 * med) {
+        its.pop();
+        if (!String(sp.takeaway || '').trim()) sp.takeaway = textOf(last);
+        else sp.notes = String(sp.notes || '') + ' ' + textOf(last);
+      }
+    }
+  });
+}
 function fillThinSlides_(plan, ctx) {
+  try { normalizeShapes_(plan, ctx); } catch (e) { if (ctx && ctx.log) ctx.log.push('Shape check skipped: ' + e.message); }
   const thin = [];
   const proposalFill = typeof isProposalDeck_ === 'function' && isProposalDeck_(ctx);          // (V.1_52: not a Solution Deck)
   const libFill = isLibraryDeck_(ctx);
@@ -4269,12 +4378,14 @@ function fillThinSlides_(plan, ctx) {
     const pts = Array.isArray(sp.points) ? sp.points.filter(Boolean) : [];
     // V.1_54 (deck 25 slide 19): a Solution slide whose items have headings but no text gets one sentence per item;
     // its figures are never filled with invented targets, and a roadmap stays phases (no Gantt)
-    if (solutionFill) {
+    // V.1_65 (deck 37 Proposal slide 31: four cards with a heading each and nothing in them): in every deck type, items
+    // that have a heading but no text get one or two sentences each
+    {
       const bare = items.filter(function (it) { return typeof it === 'object' && (it.title || it.label) && !/[A-Za-z]{3}/.test(String(it.text || it.description || '') + (Array.isArray(it.points) ? it.points.join(' ') : '') + String(it.fix || '') + String(it.value || '')); });
       if (items.length >= 2 && bare.length >= Math.ceil(items.length / 2) && ['cards', 'diagram', 'process', 'bullets', 'statement', 'comparison'].indexOf(t) !== -1) { thin.push({ i: i, kind: 'itemtexts', want: items.length }); return; }
-      if (t === 'stats' || t === 'timeline') return;
     }
-    if (['cards', 'diagram', 'process'].indexOf(t) !== -1 && !sp.teams && !sp.org && !sp.tabs && !sp.layers && items.length < 3) thin.push({ i: i, kind: 'items', want: 3 - items.length });
+    if (solutionFill && (t === 'stats' || t === 'timeline')) return;
+    if (['cards', 'diagram', 'process'].indexOf(t) !== -1 && !sp.teams && !sp.org && !sp.tabs && !sp.layers && !sp.pair && items.length < 3) thin.push({ i: i, kind: 'items', want: 3 - items.length });
     else if (t === 'statement' && pts.length < 2) thin.push({ i: i, kind: 'points', want: 3 - pts.length });
     else if (t === 'bullets' && pts.length < 3) thin.push({ i: i, kind: 'bullets', want: 4 - pts.length });
     else if (t === 'stats' && items.length < 3) thin.push({ i: i, kind: 'kpis', want: 3 - items.length });
@@ -4949,7 +5060,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_64';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_65';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5320,9 +5431,8 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
     agendaItems.push({ title: sc.title, text: (sc.description ? sc.description + ' · ' : '') + 'slides ' + first + '–' + (slideNo - 1), points: topics, description: String(sc.description || '') });
   });
   slides.slice(pos).forEach(function (o) { withDividers.push(o); });
-  // V.1_35: 01 Introduction first and Thank you last, numbered in order
-  agendaItems.unshift({ title: 'Introduction', text: 'slide 1' });
-  agendaItems.push({ title: 'Thank you', text: 'slide ' + (slideNo + (slides.length - pos)) });
+  // V.1_65 (deck 37 Proposal slide 2): the agenda lists the sections only, in every deck type (no "Introduction" or
+  // "Thank you" rows), numbered in order
   agendaItems.forEach(function (it, i) { it.no = i + 1; });
   // V.1_48: a request for a roadmap gets a timeline slide (periods), not only phases without dates
   if (!solutionOutline && /\b(roadmap|timeline|gantt)\b/i.test(String(userPrompt || '')) && !withDividers.some(function (o) { return o.type === 'timeline'; })) {   // (V.1_54: a Solution roadmap stays phases with timing)
