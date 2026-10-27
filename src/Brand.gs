@@ -329,6 +329,7 @@ function callVertexGemini_(requestBody, opts) {
   if (code < 200 || code >= 300 || result.error) {
     throw new Error(describeVertexHttpError_(code, body, result));
   }
+  try { if (typeof recordModelUsage_ === 'function') recordModelUsage_(model, result.usageMetadata); } catch (eUsage) {}   // V.1_62: token counts for the usage log
   return { code: code, result: result, model: model };
 }
 

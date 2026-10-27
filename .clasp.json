@@ -43,6 +43,7 @@
     "Code.gs",
     "Generator.html",
     "appsscript.json",
-    "ModelTest.gs"
+    "ModelTest.gs",
+    "UsageLog.gs"
   ]
 }

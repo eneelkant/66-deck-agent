@@ -4904,8 +4904,17 @@ function getGeneratorBootstrap() {
   };
 }
 
+// V.1_62: a run part with its token usage written to BigQuery (UsageLog.gs); without that file the part just runs
+function withUsage_(info, fn) {
+  return typeof usageRun_ === 'function' ? usageRun_(info, fn) : fn();
+}
 function runDeckGeneration(data) {
-  return generatePresentation(data);
+  data = data || {};
+  // V.1_62: every run part writes its token usage to BigQuery (UsageLog.gs); the result is passed on unchanged
+  let category = '';
+  try { category = normalizePresentationType_(data.presentationType || data.type); } catch (e) {}
+  return withUsage_({ runId: data.runId, mode: String(data.mode || '').toLowerCase() === 'rebrand' ? 'Rebrand' : 'Create', category: category || 'General' },
+    function () { return generatePresentation(data); });
 }
 
 /* =========================
@@ -4914,7 +4923,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_61';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_62';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -4922,6 +4931,9 @@ const REBRAND_CHUNK_ = 10;          // slides rebranded together
 const RUN_BUDGET_MS_ = 270000;      // stop starting new parts after ~4.5 minutes
 
 function continueDeckGeneration(runId) {
+  return withUsage_({ runId: String(runId || '').slice(0, 60) }, function () { return continueDeckGeneration_(runId); });   // V.1_62
+}
+function continueDeckGeneration_(runId) {
   const t0 = Date.now();
   runId = String(runId || '').slice(0, 60);
   const st = loadRunState_(runId);
@@ -5924,6 +5936,9 @@ function rebrandStep_(ctx, target, st, t0) {
 ========================= */
 function runFlowchartGeneration(data) {
   data = data || {};
+  return withUsage_({ runId: data.runId, mode: 'Flowchart', category: 'Flowchart' }, function () { return runFlowchartGeneration_(data); });   // V.1_62
+}
+function runFlowchartGeneration_(data) {
   const t0 = Date.now();
   const ctx = { runId: data.runId ? String(data.runId).slice(0, 60) : null, progress: null, blobCache: {}, generatedIcons: 0, log: [] };
   try {
