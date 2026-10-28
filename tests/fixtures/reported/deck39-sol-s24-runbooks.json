@@ -1,0 +1,42 @@
+{
+ "reported": "deck 39 (V.1_66): Operational runbooks for",
+ "title": "Operational runbooks for failover and cluster recovery",
+ "spec": {
+  "title": "Operational runbooks for failover and cluster recovery",
+  "lead": "Pre-scripted T-SQL and PowerShell procedures eliminate manual guesswork during regional disasters and maintenance.",
+  "notes": "Industry benchmarks identify human error and configuration drift during manual failover runbooks as a primary driver of prolonged disaster recovery outages. When promoting an asynchronous secondary replica in Region 2 during a regional disaster, manual forced failover (FORCE_FAILOVER_ALLOW_DATA_LOSS) is required.\n\nSources:\n[2] Deploying Microsoft SQL Server for Multi-Regional Disaster Recovery (Google Cloud, 2024) https://cloud.google.com/solutions/sql-server-multi-regional-disaster-recovery\n[5] Cost of IT Downtime and Enterprise Availability Benchmarks (Gartner, 2021) https://www.gartner.com/en/information-technology",
+  "fact_tags": [],
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "type": "bullets",
+  "items": [
+   {
+    "title": "Four operational scenarios covered by runbooks",
+    "points": [
+     "Unplanned zone failure: verify automatic Zone B promotion and triage WSFC alerts",
+     "Regional disaster: run forced failover script on Region 2 asynchronous replica",
+     "Quorum exhaustion: stop cluster service and force quorum start on surviving node",
+     "Planned OS patching: drain secondary, patch, perform manual zero-loss failover, repeat"
+    ]
+   },
+   {
+    "title": "Deterministic recovery execution",
+    "points": [
+     "Scenario 1 validates automatic intra-region HA. Scenario 2 promotes the Region 2 node via FORCE_FAILOVER_ALLOW_DATA_LOSS when Region 1 is unreachable. Scenario 3 restores WSFC voting via FixQuorum. Scenario 4 sequences rolling Windows Server updates across zones without dropping clinical transactions."
+    ]
+   }
+  ],
+  "reference": {
+   "tag": "S66_TEXT_SECTIONS",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "clientLogo": false
+ }
+}

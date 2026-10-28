@@ -362,7 +362,7 @@
     var take = String(s.takeaway || s.banner || '').trim();
     var vSize = K.uniformSize(stats.map(function (st) { return st.value; }), iw, 50, { font: 'mono', weight: 500, max: 32, min: 20, maxLines: 1 });
     var lB = K.linesBlock(stats.map(function (st) { return st.label; }), iw, TSZ.heading, 500, 2);
-    var tB = K.linesBlock(stats.map(function (st) { return st.text; }), iw, TSZ.body, 400, 6);
+    var tB = K.linesBlock(stats.map(function (st) { return st.text; }), iw, TSZ.body, 400, 9);   // V.1_67: four tiles hold a full sentence (deck 39 Proposal 25)
     var need = 20 + K.lineHeight('mono', vSize) + 10 + lB + (tB ? 8 + tB : 0) + 20;
     var bottom = BOTTOM - (take ? 44 : 0);
     if (need > bottom - top) return null;
@@ -376,7 +376,7 @@
       y += K.lineHeight('mono', vSize) + 10;
       K.text(els, x + 16, y, iw, lB, st.label, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, color: T.ink });
       y += lB + 8;
-      if (st.text) K.text(els, x + 16, y, iw, tB, st.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 6, color: T.body });
+      if (st.text) K.text(els, x + 16, y, iw, tB, st.text, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 9, color: T.body });
     });
     if (take) {
       K.roundrect(els, CX, BOTTOM - 32, CW, 32, T.blue);

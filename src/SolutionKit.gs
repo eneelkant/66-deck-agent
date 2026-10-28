@@ -305,6 +305,8 @@ function solutionContentPrompt_(a) {
     '- Recovery, uptime and response targets (RTO, RPO, SLA) that the request does not give are labelled "Target" and kept realistic (never 100% uptime).',
     '- Nothing about ' + ctx.brand.name + '\'s own operating model (follow-the-sun, 24/7, team size, certifications) unless the approved facts say it.',
     '- Every sentence adds a fact: no closing sentences such as "This is crucial." or "This streamlines repair efforts."; acronyms keep their capitals (DR, HA, P1-P4).',
+    '- Texts are plain sentences: never records such as "Scope: ... · Purpose: ..." or "Metric: ... Threshold: ..." (V.1_67); product names keep their capitals (Always On, Cloud SQL).',
+    '- Google Cloud SLAs only as published (Compute Engine 99.99% across zones); never a 100% SLA or uptime; prices only from the request.',
     '- Only real Google Cloud product names; never invent products, clients, awards or claims about ' + ctx.brand.name + '.',
     '- Cards and steps carry an "icon": one concrete concept for that item (e.g. "shield", "database", "wrench"), each different on a slide.',
     '- Plain text only: no markdown, no asterisks, no emoji, no line breaks inside a text, no reference markers like [1] in slide text.',

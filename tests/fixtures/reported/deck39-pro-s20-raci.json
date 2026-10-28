@@ -1,0 +1,116 @@
+{
+ "reported": "deck 39 (V.1_66): RACI matrix across",
+ "title": "RACI matrix across platform workstreams",
+ "spec": {
+  "type": "diagram",
+  "design": "P66_ARCH_FLOW",
+  "title": "RACI matrix across platform workstreams",
+  "lead": "Clear accountability prevents decision bottlenecks across architecture, ingestion, governance, and BI.",
+  "items": [
+   {
+    "title": "Responsible delivery execution",
+    "text": "Our engineering pod builds the foundational cloud infrastructure, data pipelines, and semantic models while pairing with your technical staff.",
+    "icon": "gear-code"
+   },
+   {
+    "title": "Accountable business ownership",
+    "text": "Tailwind Traders domain leaders hold final sign-off authority on security policies, metric definitions, and production release readiness.",
+    "icon": "shield-user"
+   },
+   {
+    "title": "Consulted domain specialists",
+    "text": "Retail subject matter experts validate source system schemas, business logic, and reporting views during weekly sprint checkpoints.",
+    "icon": "team-network"
+   }
+  ],
+  "columns": [
+   {
+    "label": "Responsible delivery execution",
+    "items": [
+     {
+      "title": "66degrees engineering pod",
+      "text": "Builds foundational cloud infrastructure and pipelines"
+     },
+     {
+      "title": "Tailwind Traders technical staff",
+      "text": "Pairs on semantic models and ingestion"
+     }
+    ]
+   },
+   {
+    "label": "Consulted domain specialists",
+    "items": [
+     {
+      "title": "Retail subject matter experts",
+      "text": "Validate source system schemas and logic"
+     },
+     {
+      "title": "Weekly sprint checkpoints",
+      "text": "Review reporting views and platform governance"
+     }
+    ]
+   },
+   {
+    "label": "Accountable business ownership",
+    "items": [
+     {
+      "title": "Tailwind Traders domain leaders",
+      "text": "Hold final sign-off authority on releases"
+     },
+     {
+      "title": "Governance and BI standards",
+      "text": "Approve security policies and metric definitions"
+     }
+    ]
+   }
+  ],
+  "rows": [
+   [
+    "Platform foundation and IAM security setup",
+    "Responsible for Terraform build",
+    "Accountable for security sign-off",
+    "Informed on access tiers"
+   ],
+   [
+    "Pipeline engineering for POS and ERP",
+    "Responsible for ingestion code",
+    "Consulted on source extracts",
+    "Informed on load schedules"
+   ],
+   [
+    "Dataplex quality rules and data ownership",
+    "Responsible for rule configuration",
+    "Consulted on alert routing",
+    "Accountable for quality thresholds"
+   ],
+   [
+    "LookML modeling and user acceptance testing",
+    "Responsible for LookML views",
+    "Consulted on query tuning",
+    "Accountable for UAT sign-off"
+   ]
+  ],
+  "notes": "This RACI matrix defines clear responsibility across all four workstreams so decisions never stall during the sprint cycle. Our engineers handle the heavy technical build while Tailwind Traders IT and business stewards retain final accountability over security policies, quality thresholds, and UAT sign-off.",
+  "fact_tags": [],
+  "links": [
+   "Builds for validation",
+   "Validated for sign-off"
+  ],
+  "takeaway": "",
+  "reference": {
+   "tag": "P66_ISO_CALLOUTS",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "center": "RACI matrix",
+  "resolvedIcons": {},
+  "deckLibrary": "proposal",
+  "cobrand": true
+ }
+}

@@ -19,6 +19,9 @@
   // V.1_66: the spiral agenda (up to 6 sections) in every deck type
   ENGINE.shareDesign('P66_AGENDA_SPIRAL', 'solution');
   ENGINE.shareDesign('P66_AGENDA_SPIRAL', 'general');
+  // V.1_67: topic rows (a topic, its icon and its details) in every deck type
+  ENGINE.shareDesign('S66_TOPIC_ROWS', 'proposal');
+  ENGINE.shareDesign('S66_TOPIC_ROWS', 'general');
 
   /* ---------------- helpers ---------------- */
   function lh(size) { return K.lineHeight('sans', size); }

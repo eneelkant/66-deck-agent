@@ -1,0 +1,52 @@
+{
+ "reported": "deck 39 (V.1_66): HIPAA",
+ "title": "HIPAA security and encryption layers in deployment",
+ "spec": {
+  "title": "HIPAA security and encryption layers in deployment",
+  "lead": "Automated Terraform and Ansible layers enforce defense-in-depth encryption and network isolation for ePHI.",
+  "notes": "The four-layer deployment automation enforces HIPAA security requirements across storage, transport, network, and identity for Contoso Health's SQL Server Always On cluster on Compute Engine. Customer-managed encryption keys (CMEK) protect Persistent Disks, TLS 1.2 secures endpoints on ports 1433 and 5022, VPC firewall rules isolate traffic, and Secret Manager eliminates hardcoded credentials.\n\nSources:\n[1] Reference Architecture: High-Availability Microsoft SQL Server Databases Using Always On Availability Groups (Google Cloud, 2024) https://cloud.google.com/solutions/sql-server-always-on-availability-groups-compute-engine\n[2] Deploying Microsoft SQL Server for Multi-Regional Disaster Recovery (Google Cloud, 2024) https://cloud.google.com/solutions/sql-server-multi-regional-disaster-recovery",
+  "fact_tags": [],
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "type": "bullets",
+  "items": [
+   {
+    "title": "Storage encryption with CMEK",
+    "points": [
+     "Scope: all Compute Engine boot, data (pd-ssd), and log (pd-extreme) disks",
+     "Key management: Cloud KMS customer-managed encryption keys (CMEK)",
+     "Key rotation: automated periodic rotation schedule enforced in Cloud KMS",
+     "Access control: IAM least-privilege bindings for Compute Engine service agent"
+    ]
+   },
+   {
+    "title": "SQL Server TLS 1.2 transport",
+    "points": [
+     "Client connections: TLS 1.2 enforced on SQL Server database engine listeners",
+     "Replica traffic: certificate-authenticated encryption on mirroring endpoint port 5022",
+     "Cipher suites: legacy SSL and TLS 1.0/1.1 protocols disabled via OS registry",
+     "Certificate lifecycle: internal PKI certificates deployed across all three cluster nodes"
+    ]
+   },
+   {
+    "title": "VPC firewall port restriction",
+    "points": [
+     "Client SQL access: TCP port 1433 restricted to Tier-1 clinical app subnets",
+     "Always On replication: TCP port 5022 limited to the three SQL Server VM IPs",
+     "WSFC and health probes: UDP/TCP cluster ports and ILB probe port isolated by tag",
+     "Administration: zero public IPs on VMs; RDP access only via IAP TCP forwarding"
+    ]
+   },
+   {
+    "title": "Secret Manager credential hygiene",
+    "points": [
+     "Storage: SQL Server service account and AD join passwords in Secret Manager",
+     "Deployment retrieval: Ansible fetches secrets at runtime with zero cleartext in Git",
+     "Identity: dedicated least-privilege IAM service accounts per Compute Engine node",
+     "Audit trail: Cloud Audit Logs enabled for all Secret Manager and KMS reads"
+    ]
+   }
+  ],
+  "clientLogo": false
+ }
+}

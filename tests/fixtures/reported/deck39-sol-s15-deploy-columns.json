@@ -1,0 +1,73 @@
+{
+ "reported": "deck 39 (V.1_66): How the solution is deployed",
+ "title": "How the solution is deployed",
+ "spec": {
+  "type": "process",
+  "design": "S66_LABEL_ROWS",
+  "title": "How the solution is deployed",
+  "lead": "Automated infrastructure pipelines provision networking, compute, clustering and database replication in sequence.",
+  "items": [
+   {
+    "label": "Stage 1",
+    "title": "Network and identity",
+    "timing": "",
+    "points": [
+     "Deploy multi-region VPC and subnets via Terraform",
+     "Configure firewall rules for ports 1433 and 5022",
+     "Extend Active Directory domain controllers to both regions",
+     "Provision Cloud DNS private zones and witness share"
+    ]
+   },
+   {
+    "label": "Stage 2",
+    "title": "Compute and storage",
+    "timing": "",
+    "points": [
+     "Provision three n2-highmem-32 VMs across target zones",
+     "Attach and format pd-extreme and pd-ssd disks",
+     "Join SQL Server nodes to Contoso.com domain",
+     "Install Cloud Monitoring Ops Agent on all nodes"
+    ]
+   },
+   {
+    "label": "Stage 3",
+    "title": "Cluster and always on",
+    "timing": "",
+    "points": [
+     "Configure WSFC across the three domain-joined nodes",
+     "Enable Always On Availability Groups on SQL Server",
+     "Configure TCP 5022 endpoints and availability replicas",
+     "Deploy internal load balancers and TCP health probes"
+    ]
+   },
+   {
+    "label": "Stage 4",
+    "title": "Seeding and validation",
+    "timing": "",
+    "points": [
+     "Run automatic seeding to initialize secondary replicas",
+     "Verify synchronous commit status in Region 1",
+     "Verify asynchronous log shipping to Region 2",
+     "Execute pre-cutover zone failover test with DBAs"
+    ]
+   }
+  ],
+  "notes": "We deploy the environment in four sequential stages using Terraform for Google Cloud resources and PowerShell Desired State Configuration for Windows and SQL Server setup. No production clinical databases cut over until Stage 4 validates both synchronous local failover and asynchronous remote log shipping.\n\nSources:\n[1] Reference Architecture: High-Availability Microsoft SQL Server Databases Using Always On Availability Groups (Google Cloud, 2024) https://cloud.google.com/solutions/sql-server-always-on-availability-groups-compute-engine\n[2] Deploying Microsoft SQL Server for Multi-Regional Disaster Recovery (Google Cloud, 2024) https://cloud.google.com/solutions/sql-server-multi-regional-disaster-recovery",
+  "fact_tags": [],
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "S66_LIFECYCLE_COLUMNS",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "clientLogo": false
+ }
+}

@@ -75,7 +75,7 @@ test("option A: text on dark panels and bars is white, dark panels stay dark, Pl
   R.V.all().forEach(({ e }) => ((e.shape && e.shape.text && e.shape.text.textElements) || []).forEach((t) => { if (t.textRun && t.textRun.content.trim()) fonts.add(t.textRun.style.fontFamily); }));
   assert.deepEqual([...fonts], ["Plus Jakarta Sans"]);
   assert.ok(R.drawn.every((d) => d.sansOnly), "engine-drawn slides of a rebrand use Plus Jakarta Sans too");
-  assert.match(read("src/EngineRenderer.gs"), /mono = ctx\.sansOnly \? sans/);
+  assert.match(read("src/EngineRenderer.gs"), /mono = sans;/);   // V.1_67: Plus Jakarta Sans only, in every deck
 });
 
 test("texts that no longer fit in Plus Jakarta Sans are set smaller; the rebrand check finds no new overlaps", () => {

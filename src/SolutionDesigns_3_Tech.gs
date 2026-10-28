@@ -61,10 +61,14 @@
     var sz = Math.round(d * 0.56);
     icon(els, it, x + (d - sz) / 2, y + (d - sz) / 2, sz, true);
   }
-  function chip(els, x, y, str, fill, color, maxW) {
-    var w = Math.min(maxW || 200, K.textWidth(str, 'sans', 400, 9) + 14);
+  // V.1_67 (deck 39 Solution 12: tags of different lengths, the word a separate box on top): a tag is ONE shape with its
+  // word inside (edited, moved or resized as one piece); fixedW gives every tag of a column the same width
+  function chip(els, x, y, str, fill, color, maxW, fixedW) {
+    var w = fixedW || Math.min(maxW || 200, K.textWidth(str, 'sans', 400, 9) + 14);
     K.roundrect(els, x, y, w, 16, fill || T.bgLight);
-    K.text(els, x + 4, y, w - 8, 16, str, { weight: 400, max: 9, min: 8.5, maxLines: 1, align: 'center', valign: 'middle', color: color || T.ink });
+    var e = els[els.length - 1];
+    e.text = str;
+    e.textStyle = { font: 'Plus Jakarta Sans', size: 9, color: color || T.ink, align: 'center' };
     return w;
   }
   // a photo slide: the light page covers everything except the photo strip / band / half (PhotoStrips.gs cuts the photo)
@@ -493,9 +497,9 @@
       var h = hs[i] * k, warn = !/low|minor|info|grey|gray|ok/.test(r.status);
       K.roundrect(els, CX, y, CW, h, T.white, { color: LINE, width: 0.75 });
       if (hasStatus) {
-        // V.1_66 (deck 38 Solution slide 28: "!" and "i" typed into small dots looked broken): the row's own icon in a
-        // circle ringed in its status colour (amber = needs action, grey = minor)
-        K.ring(els, CX + 8, y + h / 2 - 12, 24, warn ? '#FDF0DC' : '#EEF1F4', warn ? '#F2A33A' : '#9AA6B2', 1.5);
+        // V.1_66 (deck 38 Solution slide 28: "!" and "i" typed into small dots looked broken): the row's own icon
+        // V.1_67 (deck 39 Solution 5: amber and grey rings were off-brand): in the brand's pale blue circle, as on every icon row
+        K.ellipse(els, CX + 8, y + h / 2 - 12, 24, 24, TINT);
         K.icon(els, (r.icon || r.material) ? { icon: r.icon, material: r.material } : { icon: (r.title + ' ' + r.fix).toLowerCase().slice(0, 160), title: r.title }, CX + 13, y + h / 2 - 7, 14, false);
       } else {
         K.ellipse(els, CX + 8, y + h / 2 - 12, 24, 24, TINT);
@@ -567,20 +571,22 @@
     if (rh * n + 2 * (n - 1) > avail) return null;
     rh = Math.min(34, Math.max(rh, (avail - 2 * (n - 1)) / n));
     var x1 = CX + w0 + 4, x2 = x1 + w1 + 4;
-    [[CX, w0, cols[0], T.blue], [x1, w1, cols[1], '#3D1E8F'], [x2, w2, cols[2], T.ink]].forEach(function (h) {
+    [[CX, w0, cols[0], T.blue], [x1, w1, cols[1], T.blue], [x2, w2, cols[2], T.ink]].forEach(function (h) {
       K.rect(els, h[0], top, h[1], headH, h[3]);
       K.text(els, h[0] + 6, top, h[1] - 12, headH, h[2], { weight: 500, max: 9, min: 8, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
     });
     var y = top + headH + 4;
+    // one width for every tag of the column: the longest tag (a row with two tags splits it)
+    var tagW = Math.min(w2 - 16, Math.max.apply(null, [60].concat([].concat.apply([], rows.map(function (r) { return r.tags.map(function (t) { return (K.textWidth(t, 'sans', 400, 9) + 16) * r.tags.length; }); })))));
     rows.forEach(function (r) {
       K.rect(els, CX, y, w0, rh, T.bgLight);
       icon(els, { icon: r.icon, title: r.need, text: r.solution }, CX + 8, y + (rh - 14) / 2, 14);
       K.text(els, CX + 28, y, w0 - 34, rh, r.need, { weight: 500, max: 9, min: 8.5, maxLines: 2, valign: 'middle', color: T.ink });
-      K.rect(els, x1, y, w1, rh, '#3D1E8F');
+      K.rect(els, x1, y, w1, rh, T.blue);                                  // V.1_67: brand blue (the purple was off-brand)
       K.text(els, x1 + 8, y, w1 - 16, rh, r.solution, { weight: 400, max: 8.5, min: 8, maxLines: 2, align: 'center', valign: 'middle', color: T.white });
       K.rect(els, x2, y, w2, rh, T.ink);
       var tx = x2 + 8;
-      r.tags.forEach(function (t) { var w = chip(els, tx, y + (rh - 16) / 2, t, T.blue, T.white, (w2 - 20) / Math.max(1, r.tags.length)); tx += w + 4; });
+      r.tags.forEach(function (t) { var w = chip(els, tx, y + (rh - 16) / 2, t, T.blue, T.white, (w2 - 20) / Math.max(1, r.tags.length), tagW / Math.max(1, r.tags.length) - (r.tags.length > 1 ? 2 : 0)); tx += w + 4; });
       y += rh + 2;
     });
     return { bg: T.white, els: els, noBalance: true };

@@ -401,6 +401,65 @@
   });
 
   /* ---------- 10. Headed text sections in one panel — Paradigm p6/p7/p8/p15, Showcase p21 ---------- */
+  /* ---------- V.1_67: topic rows (deck 39 Solution 22: four security topics with four details each as one wall of
+     bullets): one band per topic - its icon and name on the left, its details in two columns of short bullets ---------- */
+  add('S66_TOPIC_ROWS', 'bullets', { min: 2, max: 5, needs: 'items[{title,points[],icon}] (2-5 topics, 2-6 details each)',
+    desc: '2-5 full-width bands, one per topic: an icon and the topic name on the left, its 2-6 details as short bullets in two columns (security layers, controls, workstreams with their tasks)', words: '6-16 per detail' }, function (s) {
+    var items = itemsOf(s, 5), n = items.length;
+    if (n < 2 || n > 5 || items.some(function (it) { return it.points.filter(real).length < 2 || it.points.filter(real).length > 6; })) return null;
+    var els = [];
+    var top = K.header(els, s) + 2;
+    var gap = 8, lw = 150, pad = 10, cw2 = (CW - lw - 3 * pad) / 2, avail = BOTTOM - top - gap * (n - 1);
+    var half = function (it, k) { var p = it.points.filter(real), h = Math.ceil(p.length / 2); return k ? p.slice(h) : p.slice(0, h); };
+    var sz = TSZ.body;
+    var rowNeed = function (it, size) { return Math.max(ptsH(half(it, 0), cw2, size, 4), ptsH(half(it, 1), cw2, size, 4), 34) + 2 * pad; };
+    var total = function (size) { return items.reduce(function (a, it) { return a + rowNeed(it, size); }, 0); };
+    while (sz > 8 && total(sz) > avail) sz -= 0.5;
+    if (total(sz) > avail) {
+      // too many details for full-width bands: two columns of topic cards (icon, name, the details as bullets)
+      if (n !== 4 && n !== 2) return null;
+      var cw = (CW - 12) / 2, iw = cw - 2 * pad - 4, rowsN = n / 2, hT = lh(TSZ.heading) * 2;
+      var cardNeed = function (it, size) { return pad + 26 + 6 + Math.min(hT, K.textH(it.title, iw - 34, TSZ.heading, 500)) + 6 + ptsH(it.points.filter(real), iw, size, 3) + pad; };
+      var gsz = TSZ.body, gridH = function (size) { var hs = items.map(function (it) { return cardNeed(it, size); }); var t = 0; for (var r = 0; r < rowsN; r++) t += Math.max(hs[2 * r], hs[2 * r + 1]); return t + 12 * (rowsN - 1); };
+      while (gsz > 8 && gridH(gsz) > BOTTOM - top) gsz -= 0.5;
+      // up to a third too long: drawn at the slide's height and reported as too long, so the fit step shortens the details
+      // (each keeps its meaning); longer than that: another design
+      var over = gridH(gsz) / (BOTTOM - top);
+      if (over > 1.35) return null;
+      var squeeze = Math.min(1, 1 / over);
+      var yy = top;
+      for (var r = 0; r < rowsN; r++) {
+        var pair = [items[2 * r], items[2 * r + 1]], rh = Math.max(cardNeed(pair[0], gsz), cardNeed(pair[1], gsz)) * squeeze - (squeeze < 1 ? 6 : 0);
+        pair.forEach(function (it, k) {
+          var x = CX + k * (cw + 12);
+          K.rect(els, x, yy, cw, rh, T.white, { color: LINE, width: 0.75 });
+          K.rect(els, x, yy, 4, rh, T.blue);
+          K.ellipse(els, x + pad + 4, yy + pad, 26, 26, TINT);
+          K.icon(els, (it.icon || it.material) ? { icon: it.icon, material: it.material } : { icon: it.title.toLowerCase(), title: it.title }, x + pad + 10, yy + pad + 6, 14, false);
+          K.text(els, x + pad + 38, yy + pad, iw - 34, 26, it.title, { weight: 500, max: TSZ.heading, min: 9.5, maxLines: 2, valign: 'middle', color: T.ink });
+          K.bulletList(els, x + pad + 4, yy + pad + 32, iw, rh - pad * 2 - 32, it.points.filter(real), { max: gsz, min: gsz, gap: 3, color: T.ink });
+        });
+        yy += rh + 12;
+      }
+      return { bg: T.white, els: els, noBalance: true };
+    }
+    var y = top;
+    items.forEach(function (it) {
+      var h = rowNeed(it, sz);
+      K.rect(els, CX, y, CW, h, T.white, { color: LINE, width: 0.75 });
+      K.rect(els, CX, y, 4, h, T.blue);
+      K.ellipse(els, CX + 14, y + h / 2 - 13, 26, 26, TINT);
+      K.icon(els, (it.icon || it.material) ? { icon: it.icon, material: it.material } : { icon: it.title.toLowerCase(), title: it.title }, CX + 20, y + h / 2 - 7, 14, false);
+      K.text(els, CX + 46, y, lw - 46, h, it.title, { weight: 500, max: TSZ.heading, min: 9.5, maxLines: 3, valign: 'middle', color: T.ink });
+      [0, 1].forEach(function (k) {
+        var pts = half(it, k);
+        if (pts.length) K.bulletList(els, CX + lw + pad + k * (cw2 + pad), y + pad, cw2, h - 2 * pad, pts, { max: sz, min: sz, gap: 4, color: T.ink });
+      });
+      y += h + gap;
+    });
+    return { bg: T.white, els: els, noBalance: true };
+  });
+
   add('S66_TEXT_SECTIONS', 'bullets', { min: 2, max: 5, needs: 'items[{title,points[]}] (2-5)',
     desc: 'one white panel holding 2-5 short sections, each a blue heading with 1-3 bullets below (one or two columns): background, history, components, what we heard', words: '8-24 per bullet' }, function (s) {
     var items = itemsOf(s, 5), n = items.length;
@@ -417,11 +476,12 @@
     var colNeed = groups.map(function (g) { return pad * 2 + g.reduce(function (a, it) { return a + secH(it, colW) + 14; }, -14); });
     var need = Math.max.apply(null, colNeed);
     if (need > avail) return null;
-    var ph = boxH(need, avail);
+    // V.1_67 (deck 39 Solution 24: a wide empty band between the two sections): the panel ends under its sections and the
+    // sections keep one even gap (they are no longer spread down the panel)
+    var ph = need;
     K.rect(els, CX, top, CW, ph, T.white, { color: LINE, width: 0.75 });
     groups.forEach(function (g, c) {
-      // V.1_58 (deck 31 slide 19: half of the panel empty): the sections spread over the whole panel
-      var spare = Math.max(0, ph - colNeed[c]), sgap = 14 + Math.min(36, spare / Math.max(1, g.length));
+      var sgap = 14;
       var x = CX + pad + c * (colW + pad), y = top + pad;
       g.forEach(function (it) {
         heading(els, x, y, colW, it.title, T.blue, 1);

@@ -1,0 +1,62 @@
+{
+ "reported": "deck 39 (V.1_66): Compute and persistent disk",
+ "title": "Compute and persistent disk sizing for clinical IOPS",
+ "spec": {
+  "type": "table",
+  "design": "S66_NEED_MAPPING",
+  "title": "Compute and persistent disk sizing for clinical IOPS",
+  "lead": "N2 high-memory instances paired with Extreme Persistent Disks meet clinical latency requirements.",
+  "columns": [
+   "Clinical workload requirement",
+   "Google Cloud component and configuration",
+   "Architecture tier"
+  ],
+  "rows": [
+   {
+    "need": "Primary and HA compute",
+    "solution": "Machine type: n2-highmem-32 instances on primary and secondary nodes for buffer pool caching.",
+    "tags": [
+     "Compute Engine"
+    ]
+   },
+   {
+    "need": "Transaction log write latency",
+    "solution": "Log storage: pd-extreme volumes provisioned with dedicated IOPS for sub-millisecond transaction log hardening.",
+    "tags": [
+     "Persistent Disk"
+    ]
+   },
+   {
+    "need": "Data and tempdb throughput",
+    "solution": "Data storage: separate pd-ssd volumes for user database files and high-concurrency tempdb isolation.",
+    "tags": [
+     "Persistent Disk"
+    ]
+   },
+   {
+    "need": "Cross-zone and region sync",
+    "solution": "Network tier: dedicated egress bandwidth allocations on N2 instances to prevent replication queue buildup.",
+    "tags": [
+     "VPC network"
+    ]
+   }
+  ],
+  "notes": "Each SQL Server replica runs on an n2-highmem-32 Compute Engine VM to keep working clinical datasets in memory. We isolate transaction logs onto pd-extreme volumes for sub-millisecond write hardening while placing data files and tempdb on separate pd-ssd volumes with dedicated egress bandwidth.",
+  "fact_tags": [],
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "S66_NEED_MAPPING",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "clientLogo": false
+ }
+}

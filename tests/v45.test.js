@@ -48,17 +48,14 @@ const firstImage = (log) => {
   return [i[0], i[1], at("setLeft"), at("setTop"), at("setWidth"), at("setHeight")];
 };
 
-test("photo strip: the picture is exactly the visible strip (cut from the streak photo), not the whole slide", () => {
+// V.1_67 (deck 39): the streak picture is for transition slides only. A strip on a content slide gets a stock photo; with
+// no stock photo it stays the design's solid Night Blue - never the streak picture, cut or whole
+test("photo strip: never the streak picture on a content slide (no stock photo: the strip stays Night Blue)", () => {
   const g = load();
   const log = drawn(g, { type: "cards", deckLibrary: "proposal", title: "Understanding Marriott's needs", reference: { tag: "P66_COLUMNS_PHOTO" },
     items: [1, 2, 3, 4].map((i) => ({ title: "Need " + i, icon: "data", points: ["Create one profile of each guest", "Serve every guest the same way"] })) });
   const img = firstImage(log);
-  assert.ok(img, "a picture is placed");
-  assert.match(String(img[1].blob), /^streak-R\d+\.jpg$/);
-  assert.equal(img[2] + img[4], 720, "the strip runs to the right edge");
-  assert.ok(img[4] <= 240 && img[4] >= 60, "strip width " + img[4]);
-  assert.deepEqual([img[3], img[5]], [0, 405]);
-  assert.ok(log.some((c) => c[0] === "slide.insertImage.sendToBack"));
+  assert.ok(!img || !/streak|SECTION_BG/.test(String(img[1].blob)), "no streak picture: " + (img && img[1].blob));
 });
 
 test("full-slide photo designs (dark dividers) keep the full photo", () => {

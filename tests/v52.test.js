@@ -62,7 +62,7 @@ function loadAll(gemini, seed, clock) {
 const ev = (sb, code) => vm.runInContext(code, sb);
 
 const SAMPLES = JSON.parse(read("tests/fixtures/solution-samples.json"));
-const SHARED = ["P66_SECTION_DARK", "P66_SECTION_LIGHT", "P66_AGENDA_SPIRAL"];   // V.1_66: the spiral agenda (up to 6 sections) in every deck type
+const SHARED = ["P66_SECTION_DARK", "P66_SECTION_LIGHT", "P66_AGENDA_SPIRAL", "S66_TOPIC_ROWS"];   // V.1_67: topic rows in every deck type   // V.1_66: the spiral agenda (up to 6 sections) in every deck type
 
 // A Solution Deck run with Gemini mocked: the outline follows the asked sections; each slide takes the first design
 // offered for it, filled from the fixture sample of that design
@@ -148,7 +148,7 @@ test("every Solution design draws its sample in a Solution Deck and never in a P
   SAMPLES.forEach((s) => {
     const t = tagOf(s);
     assert.equal(E.canDraw(Object.assign({}, s, { deckLibrary: "solution" })), true, t + " draws in a Solution Deck");
-    if (/^S66_/.test(t)) assert.equal(E.canDraw(Object.assign({}, s, { deckLibrary: "proposal" })), false, t + " never draws in a Proposal Deck");
+    if (/^S66_/.test(t) && SHARED.indexOf(t) === -1) assert.equal(E.canDraw(Object.assign({}, s, { deckLibrary: "proposal" })), false, t + " never draws in a Proposal Deck");
   });
 });
 

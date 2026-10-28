@@ -248,15 +248,15 @@ test("deliverable bar: 'Deliverable' only for a deliverable; the title stops bef
   assert.ok(t2.els.some((e) => e.t === "text" && e.text === "Deliverable"));
 });
 
-// V.1_66 (deck 38 General 20: cards twice as tall as their text): a card ends a little under its text, but never more than
-// about a quarter of the content area above the footer, so the slide stays filled
-test("cards fill the slide: card grid, 2 x 2 cards and two cards + photo leave no empty bottom band", () => {
+// V.1_67 (deck 39 "fix down all the boxes"): a card ends just under its text; the cards then move down a little (never
+// stretched), so short texts give short cards that still sit well inside the slide
+test("cards fit their text: card grid, 2 x 2 cards and two cards + photo end just under their text", () => {
   const g = engine();
   const four = Array.from({ length: 4 }, (x, i) => ({ title: "Card " + i, text: "A short text for the card number " + i + "." }));
-  assert.ok(maxBottom(lay(g, { type: "cards", title: "Grid", items: four, reference: { tag: "P66_CARD_GRID" } })) > 290);
-  assert.ok(maxBottom(lay(g, { type: "cards", title: "Two by two", items: four, reference: { tag: "P66_CARDS_2X2" } })) > 290);
-  const two = four.slice(0, 2);
-  assert.ok(maxBottom(lay(g, { type: "cards", title: "From and to", items: two, reference: { tag: "P66_TWO_CARDS_PHOTO" } })) > 290);
+  [lay(g, { type: "cards", title: "Grid", items: four, reference: { tag: "P66_CARD_GRID" } }), lay(g, { type: "cards", title: "Two by two", items: four, reference: { tag: "P66_CARDS_2X2" } })].forEach((sl) => {
+    const b = maxBottom(sl);
+    assert.ok(b > 150 && b < 362, "inside the slide: " + b);
+  });
 });
 
 test("numbered rows: each row is tall enough for its text measured a little narrower (no spill in Slides)", () => {

@@ -1,0 +1,107 @@
+{
+ "reported": "deck 39 (V.1_66): Target RTO",
+ "title": "Target RTO, RPO, and replication lag KPIs",
+ "spec": {
+  "type": "stats",
+  "title": "Target RTO, RPO, and replication lag KPIs",
+  "lead": "The two-region Always On architecture enforces sub-minute local failover and bounded cross-region recovery.",
+  "items": [
+   {
+    "value": "<1 min",
+    "label": "Target: intra-region failover RTO",
+    "text": "Scope: Region 1 Zone A to Zone B automatic promotion · Mechanism: WSFC quorum vote and internal load balancer health probe shift."
+   },
+   {
+    "value": "0 s",
+    "label": "Target: local synchronous RPO",
+    "text": "Scope: Region 1 synchronous-commit pair · Mechanism: primary waits for Zone B transaction log harden before returning commit to clinical app."
+   },
+   {
+    "value": "<15 min",
+    "label": "Target: cross-region disaster RTO",
+    "text": "Scope: Region 1 to Region 2 manual promotion · Mechanism: DBA executes forced failover runbook and updates DNS routing for clinical apps."
+   },
+   {
+    "value": "<5 s",
+    "label": "Target: cross-region async RPO",
+    "text": "Scope: Region 2 Zone A DR replica · Mechanism: continuous asynchronous log shipping across regions without blocking primary clinical writes."
+   }
+  ],
+  "takeaway": "",
+  "notes": "Google Cloud reference architecture for Always On Availability Groups achieves an RTO of less than 1 minute and near-zero RPO for intra-region failovers across zones. For healthcare institutions, clinical system downtime requires strict RTO targets under 15 minutes for critical Tier-1 clinical database applications, while asynchronous cross-region replication targets under 5 seconds of RPO.\nThe times on this slide (1 min, 0 s, 15 min, 5 s) are proposals, not given in the request: confirm them before sharing.\n\nSources:\n[1] Reference Architecture: High-Availability Microsoft SQL Server Databases Using Always On Availability Groups (Google Cloud, 2024) https://cloud.google.com/solutions/sql-server-always-on-availability-groups-compute-engine\n[2] Deploying Microsoft SQL Server for Multi-Regional Disaster Recovery (Google Cloud, 2024) https://cloud.google.com/solutions/sql-server-multi-regional-disaster-recovery\n[5] Cost of IT Downtime and Enterprise Availability Benchmarks (Gartner, 2021) https://www.gartner.com/en/information-technology",
+  "fact_tags": [],
+  "columns": [
+   {
+    "label": "Primary access and control",
+    "items": [
+     {
+      "title": "Clinical applications",
+      "text": "Send primary writes and receive commit acknowledgments"
+     },
+     {
+      "title": "Internal load balancer",
+      "text": "Shifts traffic via automated health probe checks"
+     },
+     {
+      "title": "DNS routing",
+      "text": "Updates clinical application routing during regional disaster"
+     },
+     {
+      "title": "DBA forced failover runbook",
+      "text": "Executes manual cross-region disaster promotion in <15m"
+     }
+    ]
+   },
+   {
+    "label": "Region 1 high availability",
+    "items": [
+     {
+      "title": "WSFC quorum",
+      "text": "Votes to trigger automatic intra-region node promotion"
+     },
+     {
+      "title": "Region 1 zone A primary",
+      "text": "Waits for local log harden before returning commit"
+     },
+     {
+      "title": "Region 1 zone B replica",
+      "text": "Provides synchronous zero-data-loss failover in <1m"
+     }
+    ]
+   },
+   {
+    "label": "Region 2 disaster recovery",
+    "items": [
+     {
+      "title": "Region 2 zone A replica",
+      "text": "Receives continuous asynchronous transaction log shipping"
+     },
+     {
+      "title": "Cross-region DR target",
+      "text": "Maintains <5s RPO without blocking clinical writes"
+     }
+    ]
+   }
+  ],
+  "links": [
+   "Commits and health probes",
+   "Asynchronous log shipping"
+  ],
+  "reference": {
+   "tag": "S66_KPI_TEXT_TILES",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "center": "Target RTO, RPO,",
+  "resolvedIcons": {},
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "clientLogo": false
+ }
+}

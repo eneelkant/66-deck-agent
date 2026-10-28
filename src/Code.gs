@@ -445,6 +445,7 @@ function generatePresentationRun_(data, run) {
   // 1c-2. The design must suit the content: every design of the slide's type is tried with the real content and the
   //       one that fits best wins (no overflow, boxes well filled). Gemini's own choice and variety break ties.
   const swaps = chooseDesignsByContent_(plan, ctx);
+  try { fillThinSlides_(plan, ctx, { textsOnly: true }); } catch (eT) {}      // V.1_67: texts too short for the design chosen (pricing options)
   if (swaps) ctx.log.push('Designs matched to content: ' + swaps + ' slide(s) moved to a design that suits their content better.');
 
   // 1d. Fit check: every text is measured in its design at the standard type sizes. Texts that would not fit are
@@ -1039,6 +1040,8 @@ Use each design at most once and use many different designs: a proposal reads li
 - Data sources, systems or tools are never a pyramid or a stack of levels (they are not a hierarchy): use cards or the architecture flow.
 - Names in capitals only for acronyms (AI, KPI, ERP): phase and step names are in sentence case ("Define", not "DEFINE").
 - Only real product names (BigQuery, Vertex AI, Gemini...); never invent product or feature names.
+- Google Cloud SLAs only as Google publishes them (e.g. Compute Engine 99.99% across zones); never a 100% SLA, uptime or availability.
+- Texts are plain sentences, never records such as "Scope: ... · Purpose: ..." or "Metric: ... Threshold: ...".
 - Every slide says something new: a challenge, benefit or capability covered on one slide (e.g. "high false positives",
   "BigQuery scales to petabytes") is never explained again on another slide; the products are explained once.
 - A loop or continuous-improvement cycle is P66_CYCLE (4-6 stages), never a stack of layers.
@@ -2836,6 +2839,8 @@ function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
   // V.1_66: the slide log numbers a slide by its place in the deck (it counted 1-8 again in every part of a long deck)
   let noBase = 0;
   try { noBase = blankDeck ? 0 : Math.max(0, target.getSlides().length - specs.length); } catch (eNo) { noBase = 0; }
+  // V.1_67 (deck 39: the cover was logged as slide 2): the working copy of a long deck starts with its own empty slide
+  try { if (ctx && ctx.workId && typeof target.getId === 'function' && target.getId() === ctx.workId) noBase = Math.max(0, noBase - 1); } catch (eW) {}
 
   // V.1_54 (deck 25 slide 19): every slide of a Proposal or Solution Deck carries its library when it is drawn, also a
   // slide added after the frame was applied (otherwise it was drawn with a General layout)
@@ -3224,7 +3229,7 @@ function sentenceCase_(t, minWords) {
         return (k === 0 && first) || !lowerable(b) ? part : part.toLowerCase();
       }).join('-');
     } else if (!first && lowerable(bare)) out = w.toLowerCase();
-    first = /[:.!?]$/.test(w) ? false : false;
+    first = /:$/.test(w);                                                         // V.1_67: "Phase 4: Value checkpoint" (a capital after a colon)
     return out;
   }).join(' ').replace(/^./, function (c) { return c.toUpperCase(); });
   return keepNames_(cased);
@@ -3249,6 +3254,10 @@ const PRODUCT_NAMES_ = {};
  'Secret Manager', 'Cloud KMS', 'Memorystore', 'Bigtable', 'Firestore', 'Dataproc', 'Cloud Composer', 'Datastream', 'Dataform', 'Vertex AI Pipelines',
  'Model Registry', 'Cloud NAT', 'Cloud DNS', 'Cloud Interconnect', 'Cloud Load Balancing', 'Cloud VPN', 'Identity-Aware Proxy', 'Anthos', 'Terraform',
  'Ansible', 'Kubernetes', 'Cloud Scheduler', 'Cloud Tasks', 'Eventarc', 'Analytics Hub', 'Cloud Spanner', 'Cloud Storage', 'Vertex AI Search'].forEach(function (n) { PRODUCT_NAMES_[n.toLowerCase()] = n; });
+// V.1_67 (deck 39: "Cluster and always on", "North america's", "Persistent disk"): SQL Server, Windows and place names
+['Always On Availability Groups', 'Always On', 'Availability Groups', 'Windows Server Failover Clustering', 'Windows Server', 'Active Directory',
+ 'Persistent Disk', 'Hyperdisk', 'Local SSD', 'Cloud Witness', 'Cloud Interconnect', 'Partner Interconnect', 'Dedicated Interconnect',
+ 'North America', 'South America', 'Latin America', 'Europe', 'Asia', 'Asia Pacific', 'Middle East', 'Africa', 'India', 'United States'].forEach(function (n) { PRODUCT_NAMES_[n.toLowerCase()] = n; });
 const PRODUCT_NAMES_RE_ = new RegExp('\\b(' + Object.keys(PRODUCT_NAMES_).sort(function (a, b) { return b.length - a.length; })
   .map(function (n) { return n.replace(/[/]/g, '\\/').replace(/ /g, '\\s+'); }).join('|') + ')\\b', 'gi');
 
@@ -4350,6 +4359,49 @@ function normalizeShapes_(plan, ctx) {
         }
       }
     }
+    // 6. V.1_67 (deck 39 Solution 22): topics that each carry a list of details are drawn as topic rows / a topic grid with
+    //    icons, decided here so the fit step measures that design and shortens the details when they are too long
+    const grpT = Array.isArray(sp.items) ? sp.items.filter(function (it) { return it && typeof it === 'object' && (it.title || it.label) && Array.isArray(it.points) && it.points.length >= 2 && it.points.length <= 6; }) : [];
+    if (String(sp.type || '').toLowerCase() === 'bullets' && grpT.length >= 3 && grpT.length <= 5 && grpT.length === sp.items.length) { sp.lockTag = 'S66_TOPIC_ROWS'; delete sp.design; }
+    // 7. V.1_67 (deck 39 Proposal 23 "Scope": five bullets that were only headings): points of one to four words are
+    //    headings without their content - they become items, so the fill step writes what each one covers
+    if (['bullets', 'statement'].indexOf(String(sp.type || '').toLowerCase()) !== -1 && Array.isArray(sp.points) && sp.points.length >= 3 &&
+        !(Array.isArray(sp.items) && sp.items.length) && sp.points.every(function (p) { return typeof p === 'string' && p.trim().split(/\s+/).length <= 4; })) {
+      sp.type = 'cards'; sp.items = sp.points.map(function (p) { return { title: String(p).trim(), text: '' }; }); sp.points = []; delete sp.design; sp.reference = null;
+    }
+    // 8. V.1_67 (deck 39 General 26: "$285K fixed fee", "$85K / month" in a deck whose request gave no price): an amount
+    //    of money on a slide is kept only when the request or its sources give it; otherwise the options are shown without
+    //    amounts and the slide says how pricing is settled
+    {
+      const req = (String((ctx && ctx.userPrompt) || '') + ' ' + String((ctx && ctx.sources && ctx.sources.text) || '')).replace(/,/g, '');
+      const AMT = /(?:target\s*:\s*)?(?:[$€£₹]\s?\d[\d,.]*\s?(?:k|m|mn|bn|million|billion)?\b|\b\d[\d,.]*\s?(?:k|m)?\s?(?:usd|eur|gbp|inr|dollars)\b)(?:\s*(?:\/|per)\s*(?:month|mo|year|yr|hour|hr|week|sprint))?/gi;
+      const given = function (a) { const d = (String(a).match(/\d[\d,.]*/) || [''])[0].replace(/,/g, ''); return d && req.indexOf(d) !== -1; };
+      let removed = 0;
+      const strip = function (x) {
+        if (typeof x !== 'string') return x;
+        return x.replace(AMT, function (a) { if (given(a)) return a; removed++; return ''; })
+          .replace(/\(\s*\)/g, '').replace(/\s+([,.;:])/g, '$1').replace(/(^|[\s(])(for|at|of|from|about|around|roughly)\s*([.,;]|$)/gi, '$1$3').replace(/\s{2,}/g, ' ').trim();
+      };
+      const walk = function (v) {
+        if (typeof v === 'string') return strip(v);
+        if (Array.isArray(v)) return v.map(walk);
+        if (v && typeof v === 'object') { Object.keys(v).forEach(function (k) { if (k !== 'notes' && k !== 'reference') v[k] = walk(v[k]); }); return v; }
+        return v;
+      };
+      ['items', 'rows', 'points', 'prices', 'options', 'tiers', 'packages'].forEach(function (k) { if (sp[k]) sp[k] = walk(sp[k]); });
+      if (removed) {
+        if (Array.isArray(sp.prices)) sp.prices = sp.prices.map(function (p) { if (p && typeof p === 'object') delete p.price; return p; });
+        // a table column left empty by this goes
+        if (Array.isArray(sp.rows) && Array.isArray(sp.columns)) {
+          const R = sp.rows.filter(Array.isArray), drop = [];
+          // a price column ("Illustrative investment") whose amounts were left out goes with what is left of it ("fixed fee")
+          sp.columns.forEach(function (c, j) { if (j && R.length && (R.every(function (r) { return !String(r[j] || '').trim(); }) || (/pric|invest|cost|fee|budget|amount|rate/i.test(String(c && (c.label || c.title) || c)) && R.every(function (r) { return String(r[j] || '').trim().split(/\s+/).length <= 3; })))) drop.push(j); });
+          if (drop.length) { sp.columns = sp.columns.filter(function (c, j) { return drop.indexOf(j) === -1; }); sp.rows = sp.rows.map(function (r) { return Array.isArray(r) ? r.filter(function (c, j) { return drop.indexOf(j) === -1; }) : r; }); }
+        }
+        if (!String(sp.takeaway || '').trim()) sp.takeaway = 'Pricing is confirmed after the scoping workshop.';
+        if (ctx && ctx.log) ctx.log.push('"' + String(sp.title || '').slice(0, 50) + '": ' + removed + ' price(s) not given in the request left out.');
+      }
+    }
     // 5. a caption, takeaway or callout that says the lead again (deck 37 Proposal slide 21) is dropped
     const lead = String(sp.lead || sp.subtitle || '');
     const bag = function (x) { return String(x || '').toLowerCase().match(/[a-z0-9%]{4,}/g) || []; };
@@ -4426,8 +4478,9 @@ function matchOutline_(outline, got) {
   });
   return { byOutline: byOutline, ownTitle: ownTitle, log: log };
 }
-function fillThinSlides_(plan, ctx) {
-  try { normalizeShapes_(plan, ctx); } catch (e) { if (ctx && ctx.log) ctx.log.push('Shape check skipped: ' + e.message); }
+function fillThinSlides_(plan, ctx, opts) {
+  const textsOnly = !!(opts && opts.textsOnly);                                // V.1_67: second pass after the designs are chosen
+  if (!textsOnly) { try { normalizeShapes_(plan, ctx); } catch (e) { if (ctx && ctx.log) ctx.log.push('Shape check skipped: ' + e.message); } }
   const thin = [];
   const proposalFill = typeof isProposalDeck_ === 'function' && isProposalDeck_(ctx);          // (V.1_52: not a Solution Deck)
   const libFill = isLibraryDeck_(ctx);
@@ -4447,6 +4500,7 @@ function fillThinSlides_(plan, ctx) {
       const bare = items.filter(function (it) { return typeof it === 'object' && (it.title || it.label) && !String(it.value || '').trim() && !(Array.isArray(it.points) && it.points.length) && !String(it.fix || '').trim() && shortTxt(it); });
       if (items.length >= 2 && bare.length >= Math.ceil(items.length / 2) && ['cards', 'diagram', 'process', 'bullets', 'statement', 'comparison'].indexOf(t) !== -1) { thin.push({ i: i, kind: 'itemtexts', want: items.length }); return; }
     }
+    if (textsOnly) return;
     if (solutionFill && (t === 'stats' || t === 'timeline')) return;
     if (['cards', 'diagram', 'process'].indexOf(t) !== -1 && !sp.teams && !sp.org && !sp.tabs && !sp.layers && !sp.pair && items.length < 3) thin.push({ i: i, kind: 'items', want: 3 - items.length });
     else if (t === 'statement' && pts.length < 2) thin.push({ i: i, kind: 'points', want: 3 - pts.length });
@@ -5124,7 +5178,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_66';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_67';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -6007,6 +6061,7 @@ function assembleWorkDeck_(target, st, t0, ctx) {
 
 function prepareLongCtx_(ctx, st) {
   ctx.userPrompt = st.userPrompt;
+  if (st.workId) ctx.workId = st.workId;                              // V.1_67: every part knows the working copy (slide numbers)
   ctx.presentationType = st.presentationType;
   ctx.proposal = st.proposal || null;
   ctx.solutionTone = st.solutionTone || ctx.solutionTone || '';       // V.1_52: the same tone in every part
@@ -6052,6 +6107,7 @@ function longDeckStep_(ctx, target, st, t0) {
     if (st.usedNumbers.length > 200) st.usedNumbers = st.usedNumbers.slice(-200);
     selectReferences(plan, ctx);
     chooseDesignsByContent_(plan, ctx);
+    try { fillThinSlides_(plan, ctx, { textsOnly: true }); } catch (eT) {}    // V.1_67: texts too short for the design chosen (pricing options)
     fitContentToDesigns_(plan, ctx, b0);
     syncDividerPoints_(plan.slides, part, all, st);                     // V.1_47: a divider lists the titles its slides show
     // V.1_51: the record of what the deck has said so far goes with the next parts

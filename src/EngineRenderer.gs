@@ -262,12 +262,12 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   let stock = null, cut = null;
   if (partial) {
     // V.1_53: a Solution Deck keeps the 66degrees streak photo in every strip (like the solution decks it is built from)
-    const solutionSlide = !!spec && spec.deckLibrary === 'solution';
-    try { stock = !solutionSlide && typeof pickStockImage_ === 'function' ? pickStockImage_(region, spec, ctx) : null; } catch (e) { stock = null; }
-    if (!stock && typeof streakCropBlob_ === 'function') cut = streakCropBlob_(region, ENGINE.W, ENGINE.H);
+    // V.1_67 (deck 39 Solution 6, 7, 13, 29): the dark streak picture belongs to the transition slides only. A strip, band
+    // or panel on a content slide shows a stock photo (every deck type); without one it stays the design's solid Night Blue
+    try { stock = typeof pickStockImage_ === 'function' ? pickStockImage_(region, spec, ctx) : null; } catch (e) { stock = null; }
   }
   slide.getBackground().setSolidFill(partial && (stock || cut) ? ENGINE.TOKENS.white : out.bg);
-  const photo = stock || cut || bgInline || (bgId ? getBlobCached(bgId, ctx) : null);
+  const photo = partial ? (stock || null) : (bgInline || (bgId ? getBlobCached(bgId, ctx) : null));   // V.1_67: no streak picture behind a strip
   if (photo) {
     try {
       const box = (stock || cut) ? safeBox_(region[0] * s, region[1] * s, (region[2] - region[0]) * s, (region[3] - region[1]) * s)
@@ -296,7 +296,9 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   const ALIGN = { left: SlidesApp.ParagraphAlignment.START, center: SlidesApp.ParagraphAlignment.CENTER, right: SlidesApp.ParagraphAlignment.END };
   const VALIGN = { top: SlidesApp.ContentAlignment.TOP, middle: SlidesApp.ContentAlignment.MIDDLE, bottom: SlidesApp.ContentAlignment.BOTTOM };
   // V.1_59: a rebrand uses Plus Jakarta Sans only (dates, numbers and labels too)
-  const sans = ctx.brand.fonts.heading.slides, mono = ctx.sansOnly ? sans : ctx.brand.fonts.mono.slides;
+  // V.1_67 (deck 39: "<1 ms", "10 Gbps", "01" in IBM Plex Mono): Plus Jakarta Sans is the only typeface on every slide;
+  // figures and step numbers use its Medium weight (the brand file's second font is not used by the add-on)
+  const sans = ctx.brand.fonts.heading.slides, mono = sans;
 
   out.els.forEach(function (e) {
     try {

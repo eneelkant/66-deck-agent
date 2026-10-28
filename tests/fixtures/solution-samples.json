@@ -2116,5 +2116,38 @@
    }
   ],
   "takeaway": "All three targets are validated in pre-production game days before the cutover."
+ },
+ {
+  "reference": {
+   "tag": "S66_TOPIC_ROWS"
+  },
+  "type": "bullets",
+  "title": "Security layers in the deployment",
+  "items": [
+   {
+    "title": "Storage encryption",
+    "icon": "lock",
+    "points": [
+     "Customer-managed keys in Cloud KMS for every disk",
+     "Automatic key rotation every 90 days"
+    ]
+   },
+   {
+    "title": "Network isolation",
+    "icon": "network",
+    "points": [
+     "No public IPs on the database VMs",
+     "Firewall rules limit traffic to the app subnets"
+    ]
+   },
+   {
+    "title": "Secrets",
+    "icon": "key",
+    "points": [
+     "Service account passwords kept in Secret Manager",
+     "Every read written to Cloud Audit Logs"
+    ]
+   }
+  ]
  }
 ]

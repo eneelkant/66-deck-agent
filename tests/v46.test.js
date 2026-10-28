@@ -81,8 +81,9 @@ test("the slide's words pick the image (robot hand for a human + AI slide)", () 
   assert.equal(img.id, "L2");
 });
 
-test("about 5 strips in 100 keep the streak pattern; no folder or folder off -> pattern", () => {
-  assert.equal(load({ random: () => 0.97 }).pickStockImage_([560, 0, 720, 405], { title: "x" }, { log: [] }), null);
+// V.1_67: every strip gets a stock photo (the streak pattern is for transition slides only); no folder or folder off -> none
+test("every strip gets a stock photo; no folder or folder off -> none (the strip stays Night Blue)", () => {
+  assert.notEqual(load({ random: () => 0.97 }).pickStockImage_([560, 0, 720, 405], { title: "x" }, { log: [] }), null);
   assert.equal(load({ folder: "off" }).pickStockImage_([560, 0, 720, 405], { title: "x" }, { log: [] }), null);
   assert.equal(load({ files: [] }).pickStockImage_([560, 0, 720, 405], { title: "x" }, { log: [] }), null);
 });

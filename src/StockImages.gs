@@ -12,7 +12,7 @@
 // V.1_49: the "Stock Images" folder (it replaces "Stock Images Testing", 1hlpJeCwfLMNTfYjw97vJjj-Ug5se4rIL)
 var STOCK_IMAGES_DEFAULT_FOLDER_ = '1DVsF7jnyWonnKW7z6GlUgDUvR8UA68_T';
 var STOCK_IMAGES_OLD_TEST_FOLDER_ = '1hlpJeCwfLMNTfYjw97vJjj-Ug5se4rIL';
-var STOCK_IMAGE_SHARE_ = 0.95;              // share of photo strips that get a stock image (the rest: the streak pattern)
+var STOCK_IMAGE_SHARE_ = 1;                 // V.1_67: every photo strip gets a stock image (the streak picture is for transition slides only)
 
 function stockImagesFolderId_() {
   let id = STOCK_IMAGES_DEFAULT_FOLDER_;
@@ -104,7 +104,7 @@ function pickStockImage_(region, spec, ctx) {
   const what = '"' + String((spec && spec.title) || '').slice(0, 40) + '"';
   if (Math.random() >= STOCK_IMAGE_SHARE_) { if (ctx.log) ctx.log.push('Photo strip on ' + what + ': the streak pattern (about 1 slide in 20 keeps it).'); return null; }
   const list = stockImagesList_(ctx);
-  if (!list.length) { if (ctx.log) ctx.log.push('Photo strip on ' + what + ': no stock images found in the folder, the streak pattern is used.'); return null; }
+  if (!list.length) { if (ctx.log) ctx.log.push('Photo strip on ' + what + ': no stock images found in the folder, the strip stays Night Blue.'); return null; }
   const used = ctx.stockUsed || (ctx.stockUsed = {});
   const words = {};
   stockWords_([spec.title, spec.lead, spec.statement, ctx.userPrompt].join(' ')).forEach(function (w) { words[w] = true; });

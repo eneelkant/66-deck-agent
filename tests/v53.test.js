@@ -301,10 +301,13 @@ test("deck 24: designs only for what they are for", () => {
   assert.notEqual(render1(sb, tint).drawnWith, "S66_TINT_PANELS", "figures are not panel headings");
 });
 
-test("deck 24: Solution photo strips use the 66degrees streak photo, never a stock photo", () => {
+// V.1_67 (deck 39 Solution 6, 7, 13, 29): the streak picture is for transition slides only - a Solution strip or band gets a
+// stock photo like every other deck type, or stays solid Night Blue
+test("Solution photo strips: a stock photo, never the streak picture behind a strip or band", () => {
   const src = read("src/EngineRenderer.gs");
-  assert.match(src, /solutionSlide = !!spec && spec\.deckLibrary === 'solution'/);
-  assert.match(src, /stock = !solutionSlide && typeof pickStockImage_/);
+  assert.match(src, /stock = typeof pickStockImage_ === 'function' \? pickStockImage_\(region, spec, ctx\)/);
+  assert.match(src, /const photo = partial \? \(stock \|\| null\)/);
+  assert.doesNotMatch(src, /streakCropBlob_\(region/);
 });
 
 test("deck 24 replayed: the Meridian Cold Chain deck comes out clean", () => {

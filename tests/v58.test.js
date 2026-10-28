@@ -143,13 +143,18 @@ test("quality gate: every design at 2-6 items and three text lengths - never tex
   assert.equal(ov.length, 0, "texts on top of each other: " + ov.slice(0, 3).map((r) => r.drawnWith + " " + JSON.stringify(r.ovs)).join(" | "));
   const cut = own.filter((r) => r.cut && r.len <= 1);
   assert.ok(cut.length <= 21, "short texts cut: " + cut.length + " " + cut.slice(0, 3).map((r) => r.tag).join(", "));
+  // V.1_67 (deck 39 "fix down all the boxes"): a box ends just under its text and the group moves down a little instead of
+  // stretching, so the deliberately short test texts leave space under the boxes (real slides are filled by the fit step).
+  // What is checked now is the inside of the boxes: few boxes keep more than a third of themselves empty.
   const gap = own.filter((r) => r.gap > 0.25 && !/AGENDA|SECTION|COVER|CLOSING/.test(r.tag));
-  // V.1_65: a box that would stay mostly empty is made shorter (a nearly empty card is worse than a shorter slide), so with
-  // the deliberately short test texts more slides end above the bottom; real slides get their room filled first (fit step)
-  assert.ok(gap.length <= 85, "slides with a quarter of the space empty: " + gap.length);
-  // with full texts and 3 or more items the slide is filled
-  const full = gap.filter((r) => r.len >= 2 && r.n >= 3);
-  assert.ok(full.length <= 8, "full slides with empty space: " + full.map((r) => r.tag + ":" + r.n).join(", "));
+  assert.ok(gap.length <= 300, "slides with a quarter of the space empty: " + gap.length);
+  const slackOf = (o) => { let worst = 0; const els = o.els || [];
+    els.forEach((B) => { if (!((B.t === "rect" || B.t === "roundrect") && B.h >= 90 && B.w >= 80 && B.w < 700 && B.y >= 60)) return; let low = null;
+      els.forEach((e) => { if (e === B || e.t !== "text") return; const y = e.y + 3.6, b = e.y + (e.vh || e.h) - 3.6; if (e.x + 3.6 >= B.x - 1 && e.x + e.w - 3.6 <= B.x + B.w + 1 && y >= B.y - 1 && y < B.y + B.h) low = Math.max(low || 0, b); });
+      if (low != null) worst = Math.max(worst, (B.y + B.h - low) / B.h); });
+    return worst; };
+  const hollow = own.filter((r) => slackOf(r.o) > 0.35);
+  assert.ok(hollow.length <= 40, "boxes more than a third empty: " + hollow.length);
 });
 
 test("deck 31 fill: step columns, text sections, tables and the scorecard reach the bottom of the slide", () => {
@@ -157,13 +162,13 @@ test("deck 31 fill: step columns, text sections, tables and the scorecard reach 
   const check = (sp) => { const r = GATE.check(g, sp); return r; };
   const items = ["Decoupled telemetry buffering", "Asset ordering keys", "Ingestion schema validation", "Dead-letter topic isolation"].map((t) => ({ title: t, tag: "Pub/Sub", text: "Pub/Sub keeps the readings in order and isolates bad payloads." }));
   const a = check({ deckLibrary: "solution", type: "process", title: "Sensor readings streamed through Pub/Sub", items, reference: { tag: "S66_STEP_COLUMNS" } });
-  // V.1_66: boxes end a little under their text (deck 38), never more than a quarter of the content area above the footer
-  assert.equal(a.drawnWith, "S66_STEP_COLUMNS"); assert.ok(a.gap < 0.25, "step columns gap " + a.gap);
+  // V.1_67: boxes end just under their text (deck 39); the step columns hold their texts without an empty lower half
+  assert.equal(a.drawnWith, "S66_STEP_COLUMNS"); assert.ok(a.gap < 0.45, "step columns gap " + a.gap);
   const b = check({ deckLibrary: "solution", type: "stats", title: "Traction motor failure modes", items: [{ value: ">98%", label: "Share of failures that are mechanical" }, { value: "115", label: "Tracked AC motor failures" }],
     columns: ["Failure mechanism", "Subsystem", "Root cause"], rows: [["Mechanical", "Bearings and gears", "Bearing wear"], ["Thermal", "Stator windings", "Heat spikes"], ["Electrical", "Inverter", "Insulation"]], reference: { tag: "S66_SCORECARD" } });
-  assert.equal(b.drawnWith, "S66_SCORECARD"); assert.ok(b.gap < 0.12, "scorecard gap " + b.gap);
+  assert.equal(b.drawnWith, "S66_SCORECARD"); assert.ok(b.gap < 0.45, "scorecard gap " + b.gap);
   const c = check({ deckLibrary: "solution", type: "bullets", title: "Next step", items: [{ title: "Define", points: ["Clarify the pilot scope and the failure modes to predict first."] }, { title: "Design", points: ["Finalize the Terraform modules for both regions."] }], reference: { tag: "S66_TEXT_SECTIONS" } });
-  assert.equal(c.drawnWith, "S66_TEXT_SECTIONS"); assert.ok(c.gap < 0.25, "text sections gap " + c.gap);   // V.1_66 (as above)
+  assert.equal(c.drawnWith, "S66_TEXT_SECTIONS"); assert.ok(c.gap < 0.6, "text sections gap " + c.gap);   // V.1_67: the panel ends under its sections
 });
 
 test("Ulta roadmap: gates inside the phase lanes or written as one-period bars become milestones; the Gantt draws", () => {
@@ -257,8 +262,9 @@ test("Arcadia runbooks: rows without a status show the icon of their subject, no
   const withStatus = lay(g, { deckLibrary: "solution", type: "cards", title: "Known issues", items: items.map((it, i) => Object.assign({ status: i ? "high" : "low" }, it)), reference: { tag: "S66_ISSUE_ROWS" } });
   assert.ok(!texts(withStatus).some((t) => t === "!" || t === "i"));
   assert.ok(withStatus.els.filter((e) => e.t === "icon").length >= 4);
-  assert.ok(withStatus.els.some((e) => e.t === "ellipse" && e.line && e.line.color === "#F2A33A"), "amber ring for a high status");
-  assert.ok(withStatus.els.some((e) => e.t === "ellipse" && e.line && e.line.color === "#9AA6B2"), "grey ring for a low status");
+  // V.1_67 (deck 39 Solution 5): brand colours only - the pale blue circle of every icon row, no amber or grey rings
+  assert.ok(!withStatus.els.some((e) => e.line && /F2A33A|9AA6B2/i.test(String(e.line.color))), "no amber or grey rings");
+  assert.ok(withStatus.els.some((e) => e.t === "ellipse" && /E6EEFF/i.test(String(e.fill))), "pale blue icon circle");
 });
 
 test("Ulta risks: every risk row shows its mitigation", () => {

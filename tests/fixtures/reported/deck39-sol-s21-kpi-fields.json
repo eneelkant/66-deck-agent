@@ -1,0 +1,45 @@
+{
+ "reported": "deck 39 (V.1_66): Network throughput",
+ "title": "Network throughput and storage latency KPIs",
+ "spec": {
+  "type": "stats",
+  "design": "S66_KPI_TEXT_TILES",
+  "title": "Network throughput and storage latency KPIs",
+  "lead": "Sub-millisecond disk write latency and dedicated inter-region bandwidth prevent replication queue buildup.",
+  "items": [
+   {
+    "value": "<1 ms",
+    "label": "Target: local log write latency",
+    "text": "Storage: Persistent Disk Extreme (pd-extreme) for SQL Server transaction logs · Purpose: prevents synchronous commit delays between Zone A and Zone B."
+   },
+   {
+    "value": "10 Gbps",
+    "label": "Target: minimum inter-region bandwidth",
+    "text": "Network: Google Cloud VPC cross-region egress allocation · Purpose: sustains continuous asynchronous log shipping to Region 2 during peak clinical batch loads."
+   },
+   {
+    "value": "<15 ms",
+    "label": "Target: cross-region round-trip time",
+    "text": "Topology: Region 1 to Region 2 VPC peering link · Purpose: keeps asynchronous send queues drained and within the cross-region RPO threshold."
+   }
+  ],
+  "takeaway": "Sizing rule: provision pd-extreme log disks and 10 Gbps egress headroom so storage and network layers never bottleneck Always On commit acknowledgement.",
+  "notes": "To maintain sub-minute intra-region RTO and near-zero RPO across zones, the underlying Persistent Disk storage and VPC network between Region 1 and Region 2 must prevent log send and redo queue bottlenecks. We set strict engineering targets of under 1ms local disk write latency, 10 Gbps inter-region bandwidth, under 15ms cross-region RTT, and zero packet drop tolerance.\n\nSources:\n[1] Reference Architecture: High-Availability Microsoft SQL Server Databases Using Always On Availability Groups (Google Cloud, 2024) https://cloud.google.com/solutions/sql-server-always-on-availability-groups-compute-engine\n[2] Deploying Microsoft SQL Server for Multi-Regional Disaster Recovery (Google Cloud, 2024) https://cloud.google.com/solutions/sql-server-multi-regional-disaster-recovery",
+  "fact_tags": [],
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "S66_KPI_TEXT_TILES",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "clientLogo": false
+ }
+}

@@ -1,4 +1,4 @@
-# 66° Deck Agent: the deck checklist (V.1_66)
+# 66° Deck Agent: the deck checklist (V.1_67)
 
 One list for every deck type. It is both the review list for people and the list of what the add-on checks by itself.
 **Auto** means the add-on checks it on every slide before the slide is drawn, draws the slide again with a better
@@ -37,8 +37,16 @@ design when the check fails, and writes the result to the slide log (`deck_agent
 | A why-66degrees slide states facts, not targets | Auto (shape check); Test v66 |
 | A levels slide (L1-L3) shows the levels only; a stack of layers keeps every point, in order | Auto; Test v66 |
 | Real icons, never "!" or "i" typed into a dot | Test v66 |
+| One typeface: Plus Jakarta Sans for every text, figures and step numbers too | Test v67 |
+| Texts are sentences, never records ("Scope: ... · Purpose: ..."); no "Target:" labels on a KPI slide | Auto (shape check); Test v67 |
+| Topics with lists of details: icon rows or an icon grid, never a wall of bullets | Auto; Test v67 |
+| Icons in brand colours; a tag is one shape with its word inside, all tags of a column the same width | Test v67 |
+| The streak picture only on transition slides (a strip or band gets a stock photo, or stays Night Blue) | Test v67 |
+| Everything Gemini wrote is shown: a headline figure becomes a tile, a RACI matrix a table, heading-only points get their content | Auto; Test v67 |
+| No invented prices (only amounts the request gives; otherwise "Pricing is confirmed after the scoping workshop."), no 100% SLA, no chart of unrelated measures | Auto; Test v67 |
+| Product and place names keep their capitals (Always On, North America); a capital after a colon | Test v67 |
 | Every text starts with a capital; option texts under six words are written out in full | Auto (shape check, fill step); Test v66 |
-| A box ends a little under its text, never more than about a quarter of the content area above the footer | Auto; Test v66 |
+| A box ends just under its text; the group of boxes moves down a little instead of stretching | Auto; Test v67 |
 
 ## Every deck: the agenda
 

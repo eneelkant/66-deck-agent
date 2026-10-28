@@ -1,0 +1,47 @@
+{
+ "reported": "deck 39 (V.1_66): Target success KPIs",
+ "title": "Target success KPIs for Tailwind Traders",
+ "spec": {
+  "type": "stats",
+  "design": "P66_INVESTMENT",
+  "title": "Target success KPIs for Tailwind Traders",
+  "lead": "Success is measured against three quantitative targets across reporting speed, quality, and run cost.",
+  "headline": {
+   "value": "50%",
+   "label": "Target: faster report build cycles",
+   "text": "Cutting cross-channel merchandising and inventory reporting turnaround in half",
+   "note": "Measured from business request to published Looker dashboard"
+  },
+  "items": [
+   {
+    "value": "95%",
+    "label": "Target: automated data quality pass rate"
+   },
+   {
+    "value": "30%",
+    "label": "Target: lower platform operational run cost"
+   },
+   {
+    "value": "95%",
+    "label": "Target: report generation time reduction",
+    "text": "Replaces two-week manual report preparation across 400 stores and online channels with automated daily insights on Google Cloud."
+   }
+  ],
+  "notes": "We anchor the engagement on three measurable target KPIs for Tailwind Traders. We aim to cut report build cycles by 50%, achieve a 95% automated data quality pass rate in Dataplex, and reduce platform operational run costs by 30% through BigQuery slot management and partition lifecycle controls.\nCheck before sharing: figures not found in the research sources (95%, 95%).",
+  "fact_tags": [],
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "P66_KPI_TILES",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "proposal",
+  "cobrand": true
+ }
+}
