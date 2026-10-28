@@ -1,0 +1,46 @@
+{
+ "reported": "deck 38 (V.1_65): Economic impact",
+ "title": "Economic impact of platform consolidation",
+ "spec": {
+  "type": "process",
+  "title": "Economic impact of platform consolidation",
+  "lead": "Enterprise benchmarks confirm rapid payback and multi-year ROI from Google Cloud analytics.",
+  "items": [
+   {
+    "value": "205%",
+    "label": "Industry benchmark: 3-year ROI",
+    "text": "Composite enterprises modernizing onto BigQuery and Looker realize strong multi-year returns with payback under six months.",
+    "title": "205% · Industry benchmark: 3-year ROI"
+   },
+   {
+    "value": "5,200",
+    "label": "Industry benchmark: hours saved",
+    "text": "Engineering and analytics teams eliminate thousands of annual hours spent on pipeline maintenance and ad hoc reporting.",
+    "title": "5,200 · Industry benchmark: hours saved"
+   },
+   {
+    "value": "15%–20%",
+    "label": "Industry benchmark: higher efficiency",
+    "text": "Organizations executing mature data governance and standardized master data pipelines achieve measurable operational efficiency gains.",
+    "title": "15%–20% · Industry benchmark: higher efficiency"
+   }
+  ],
+  "takeaway": "Industry benchmarks from Forrester and McKinsey validate the financial case for consolidating onto BigQuery and Looker.",
+  "notes": "Independent industry research confirms the financial return of consolidating onto Google Cloud. Forrester reports a 205% three-year ROI and 5,200 engineering hours saved annually on BigQuery and Looker, with payback in under six months. McKinsey further notes that mature data governance drives 15% to 20% higher operational efficiency.\n\nSources:\n[1] The Total Economic Impact™ Of Google Cloud's BigQuery And Looker (Forrester Consulting, 2023) https://cloud.google.com/resources/forrester-tei-looker-bigquery\n[2] The Total Economic Impact™ Of Google Cloud's BigQuery And BigLake Lakehouse (Forrester Consulting, 2025) https://www.forrester.com\n[4] Next-Generation Data Architecture: How to Scale Value from Data and AI (McKinsey & Company, 2024) https://www.mckinsey.com/capabilities/quantumblack/our-insights/next-generation-data-architecture",
+  "fact_tags": [],
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "P66_STEP_FLOW",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "proposal",
+  "cobrand": true
+ }
+}

@@ -946,7 +946,7 @@
       K.text(els, cx - 20, yn - 9, 40, 18, K.pad2(i + 1), { font: 'mono', weight: 500, max: 11, min: 11, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
       // left: level name with a rule to the pyramid
       var hT = th_(it.title, lwid, TSZ.heading, 500);
-      K.text(els, X0, ym - hT / 2, lwid, hT, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: 'right', color: T.blue });
+      K.text(els, X0, ym - hT / 2, lwid, hT, it.title, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: 'right', valign: 'middle', color: T.blue });
       K.line(els, X0 + lwid + 8, ym, cx - half - 8, ym, GREY, 0.75);
       // right: text or bullets
       var pts = pointsOf_(it.points, 5), hR;
@@ -959,7 +959,8 @@
       } else {
         hR = th_(it.text, rw, TSZ.body);
         if (hR > lvl + 6) bad = true;
-        K.text(els, rx, ym - hR / 2, rw, hR, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
+        // V.1_66 (deck 38 Proposal slide 23: the texts sat ~19pt above their levels): centred on its level, however Slides wraps it
+        K.text(els, rx, ym - hR / 2, rw, hR, it.text, { weight: 400, max: TSZ.body, min: TSZ.body, valign: 'middle', color: T.body });
       }
     });
     if (bad) return null;

@@ -1,0 +1,41 @@
+{
+ "reported": "deck 38 (V.1_65): KPI targets for Contoso",
+ "title": "KPI targets for Contoso Health SQL Server resilience",
+ "spec": {
+  "type": "cards",
+  "title": "KPI targets for Contoso Health SQL Server resilience",
+  "context": "Resilience targets for Contoso Health's multi-region SQL Server platform on Google Cloud",
+  "items": [
+   {
+    "label": "Availability target",
+    "value": "100%",
+    "title": "100% · Availability target",
+    "text": "Downtime ceiling: caps total unplanned database outage duration at 4 hours, 22 minutes, and 55 seconds per calendar year through synchronous multi-zone clustering. Health checks immediately detect node failures and direct connections to healthy replicas. This protects critical clinical applications from host disruptions."
+   },
+   {
+    "label": "Recovery speed target",
+    "value": "<15 min",
+    "title": "<15 min · Recovery speed target",
+    "text": "Failover window: automated health probes, Cloud DNS updates, and scripted promotion workflows reduce cross-region recovery time from hours to under 15 minutes. Standby instances maintain warm configurations to absorb production traffic immediately. This rapid cutover minimizes disruption to patient charting and billing operations."
+   }
+  ],
+  "takeaway": "Next step: validate all three resilience targets during pre-production game days before cutting over clinical EHR workloads.",
+  "notes": "These three KPI targets define success for Contoso Health's SQL Server modernization. Achieving a 99.95% availability SLA limits annual unplanned downtime to at most 4 hours, 22 minutes, and 55 seconds, while automated health probes and Cloud DNS workflows bring the Recovery Time Objective under 15 minutes.\nThe times on this slide (4 hours, 22 minutes, 55 seconds) are proposals, not given in the request: confirm them before sharing.\n\nSources:\n[4] The Cost of Downtime (Gartner, 2014) https://www.gartner.com\n[6] Best Practices for Achieving High Availability and Scalability in Cloud SQL (Google Cloud, 2024) https://cloud.google.com/blog/products/databases/cloud-sql-ha-and-dr-best-practices",
+  "fact_tags": [],
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "S66_HEADER_COLUMNS",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "clientLogo": false
+ }
+}

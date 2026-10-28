@@ -157,12 +157,13 @@ test("deck 31 fill: step columns, text sections, tables and the scorecard reach 
   const check = (sp) => { const r = GATE.check(g, sp); return r; };
   const items = ["Decoupled telemetry buffering", "Asset ordering keys", "Ingestion schema validation", "Dead-letter topic isolation"].map((t) => ({ title: t, tag: "Pub/Sub", text: "Pub/Sub keeps the readings in order and isolates bad payloads." }));
   const a = check({ deckLibrary: "solution", type: "process", title: "Sensor readings streamed through Pub/Sub", items, reference: { tag: "S66_STEP_COLUMNS" } });
-  assert.equal(a.drawnWith, "S66_STEP_COLUMNS"); assert.ok(a.gap < 0.12, "step columns gap " + a.gap);
+  // V.1_66: boxes end a little under their text (deck 38), never more than a quarter of the content area above the footer
+  assert.equal(a.drawnWith, "S66_STEP_COLUMNS"); assert.ok(a.gap < 0.25, "step columns gap " + a.gap);
   const b = check({ deckLibrary: "solution", type: "stats", title: "Traction motor failure modes", items: [{ value: ">98%", label: "Share of failures that are mechanical" }, { value: "115", label: "Tracked AC motor failures" }],
     columns: ["Failure mechanism", "Subsystem", "Root cause"], rows: [["Mechanical", "Bearings and gears", "Bearing wear"], ["Thermal", "Stator windings", "Heat spikes"], ["Electrical", "Inverter", "Insulation"]], reference: { tag: "S66_SCORECARD" } });
   assert.equal(b.drawnWith, "S66_SCORECARD"); assert.ok(b.gap < 0.12, "scorecard gap " + b.gap);
   const c = check({ deckLibrary: "solution", type: "bullets", title: "Next step", items: [{ title: "Define", points: ["Clarify the pilot scope and the failure modes to predict first."] }, { title: "Design", points: ["Finalize the Terraform modules for both regions."] }], reference: { tag: "S66_TEXT_SECTIONS" } });
-  assert.equal(c.drawnWith, "S66_TEXT_SECTIONS"); assert.ok(c.gap < 0.12, "text sections gap " + c.gap);
+  assert.equal(c.drawnWith, "S66_TEXT_SECTIONS"); assert.ok(c.gap < 0.25, "text sections gap " + c.gap);   // V.1_66 (as above)
 });
 
 test("Ulta roadmap: gates inside the phase lanes or written as one-period bars become milestones; the Gantt draws", () => {
@@ -252,8 +253,12 @@ test("Arcadia runbooks: rows without a status show the icon of their subject, no
   assert.equal(sl.drawnWith, "S66_ISSUE_ROWS");
   assert.ok(!texts(sl).some((t) => t === "!" || t === "i"));
   assert.ok(sl.els.filter((e) => e.t === "icon").length >= 4);
+  // V.1_66 (deck 38 Solution 28: "!" and "i" typed into dots looked broken): with a status, the row's icon in a ring of its status colour
   const withStatus = lay(g, { deckLibrary: "solution", type: "cards", title: "Known issues", items: items.map((it, i) => Object.assign({ status: i ? "high" : "low" }, it)), reference: { tag: "S66_ISSUE_ROWS" } });
-  assert.ok(texts(withStatus).includes("!"));
+  assert.ok(!texts(withStatus).some((t) => t === "!" || t === "i"));
+  assert.ok(withStatus.els.filter((e) => e.t === "icon").length >= 4);
+  assert.ok(withStatus.els.some((e) => e.t === "ellipse" && e.line && e.line.color === "#F2A33A"), "amber ring for a high status");
+  assert.ok(withStatus.els.some((e) => e.t === "ellipse" && e.line && e.line.color === "#9AA6B2"), "grey ring for a low status");
 });
 
 test("Ulta risks: every risk row shows its mitigation", () => {

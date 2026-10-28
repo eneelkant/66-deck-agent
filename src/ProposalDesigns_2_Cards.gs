@@ -522,7 +522,9 @@
     var d = 54, bw = 66, fills = [T.blue, BLUE_2, BLUE_3];
     var pos = [{ x: 466, y: cTop + 62 }, { x: 396, y: cTop + 132 }, { x: 326, y: cTop + 202 }];
     pos.forEach(function (p, i) {
-      var len = (cBot - p.y) * Math.SQRT2 + 60;
+      // V.1_66 (deck 38 Proposal slide 25: the bars ran past the slide's bottom edge): each bar ends just below the card,
+      // its corners inside the slide (the cover strip under the card hides the end)
+      var len = (Math.min(cBot + 24, H - 26) - p.y) * Math.SQRT2;
       K.rbox(els, p.x + Math.cos(Math.PI / 4) * len / 2, p.y + Math.sin(Math.PI / 4) * len / 2, len, bw, 45, fills[i]);
     });
     // clip the bars at the card's bottom edge

@@ -1,0 +1,41 @@
+{
+ "reported": "deck 38 (V.1_65): Recommended next steps",
+ "title": "Recommended next steps to initiate deployment",
+ "spec": {
+  "type": "statement",
+  "title": "Recommended next steps to initiate deployment",
+  "statement": "Recommended next steps to initiate deployment",
+  "text": "To initiate the engagement, we ask Contoso Health to finalize the primary and DR Google Cloud regions and approve the VPC subnet CIDR allocations . Once approved, 66degrees will provision the sandbox environment for Layer 1 and Layer 2 validation and conduct the joint failover criteria workshop.",
+  "notes": "To initiate the engagement, we ask Contoso Health to finalize the primary and DR Google Cloud regions and approve the VPC subnet CIDR allocations. Once approved, 66degrees will provision the sandbox environment for Layer 1 and Layer 2 validation and conduct the joint failover criteria workshop.\n\nSources:\n[1] Deploying Microsoft SQL Server for Multi-Regional Disaster Recovery (Google Cloud, 2024) https://cloud.google.com/architecture/sql-server-multi-regional-disaster-recovery",
+  "fact_tags": [],
+  "reference": {
+   "tag": "S66_DARK_STATEMENT",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "points": [
+   {
+    "title": "Conduct architecture workshops",
+    "text": "Finalize multi-region VPC routing, subnet allocations, and Active Directory domain services integration with Contoso Health's network engineering team."
+   },
+   {
+    "title": "Provision pilot environment",
+    "text": "Deploy Terraform infrastructure modules in non-production Google Cloud regions to validate SQL Server Always On availability groups."
+   },
+   {
+    "title": "Execute failover game day",
+    "text": "Simulate regional outages with Contoso Health DBAs to verify RTO and RPO metrics before scheduling the production cutover."
+   }
+  ],
+  "resolvedIcons": {},
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "clientLogo": false
+ }
+}

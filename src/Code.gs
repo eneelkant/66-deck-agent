@@ -1132,11 +1132,12 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
   if (batch) {
     // Long deck part: one slide per outline entry, with the outline's type and title (the agenda already lists them)
     const got = plan.slides.slice();
-    const norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+    const pairs = matchOutline_(batch.slides, got);
+    if (pairs.log.length && ctx && ctx.log) ctx.log.push(pairs.log.join(' '));
     plan.slides = batch.slides.map(function (o, k) {
-      const byTitle = got.filter(function (g) { return g && norm(g.title) === norm(o.title); })[0];
-      const sp = byTitle || got[k] || { type: o.type, title: o.title, items: [] };
-      sp.title = o.title;
+      const sp = pairs.byOutline[k] || { type: String(o.type || '').toLowerCase() === 'stats' ? 'stats' : 'cards', title: o.title, lead: '', items: [], missing: true };
+      // the outline's title is kept only when the slide Gemini wrote is about it; otherwise its own title stays
+      if (!pairs.ownTitle[k]) sp.title = o.title;
       if (!sp.type) sp.type = o.type;
       if (solutionDeck && /^(agenda|cover|closing|section|divider|title|template)$/i.test(String(sp.type)) && String(o.type || '').toLowerCase() !== 'section') {
         sp.type = /^(agenda|cover|closing|section|divider|title|template)$/i.test(String(o.type || '')) ? 'cards' : o.type;   // V.1_55 (deck 26 slide 27): a body slide is never a frame
@@ -1149,6 +1150,14 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
     stripUnaskedCredentials_(plan.slides, userPrompt);                                  // V.1_48: no 66degrees credentials unless asked
     if (clientNumbersOnCasesOnly_(plan.slides, ctx)) plan.slides = plan.slides.map(statsNeedNumbers_);
     fillThinSlides_(plan, ctx);
+    // V.1_66: a slide Gemini did not write and the fill step could not write either is left out (never an empty slide);
+    // it keeps its place in the part until then (the part's section slides go between the written slides by position)
+    plan.slides.forEach(function (sp) {
+      if (!sp || !sp.missing) return;
+      delete sp.missing;
+      const ok = (Array.isArray(sp.items) && sp.items.filter(Boolean).length >= 2) || (Array.isArray(sp.points) && sp.points.length >= 2);
+      if (!ok) { sp.leaveOut = true; if (ctx && ctx.log) ctx.log.push('"' + String(sp.title || '').slice(0, 50) + '" left out: no content was written for it.'); }
+    });
     architectureAsDiagram_(plan.slides, ctx);                                     // V.1_47: an architecture slide is a diagram
     riskSlidesWithMitigations_(plan.slides, ctx);                                 // V.1_48: every risk with its mitigation
     plan.slides.forEach(function (sp) { nameCaseClient_(sp, ctx); });
@@ -2824,6 +2833,9 @@ function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
       slidesToRender.push(target.appendSlide(SlidesApp.PredefinedLayout.BLANK));
     }
   }
+  // V.1_66: the slide log numbers a slide by its place in the deck (it counted 1-8 again in every part of a long deck)
+  let noBase = 0;
+  try { noBase = blankDeck ? 0 : Math.max(0, target.getSlides().length - specs.length); } catch (eNo) { noBase = 0; }
 
   // V.1_54 (deck 25 slide 19): every slide of a Proposal or Solution Deck carries its library when it is drawn, also a
   // slide added after the frame was applied (otherwise it was drawn with a General layout)
@@ -2846,14 +2858,14 @@ function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
         progressSlide_(ctx, i, 'done');
         return;
       }
-      renderEngineSlide(slide, specs[i], i + 1, ctx, pageW, pageH, dateLabel);
+      renderEngineSlide(slide, specs[i], noBase + i + 1, ctx, pageW, pageH, dateLabel);
       stats.redrawn++;
     } catch (e) {
       // V.1_55 (deck 26 slide 23 was left blank): the slide is drawn again as a plain list of its own text
       let saved = false;
       try {
         const safe = safeSlideSpec_(specs[i]);
-        if (safe) { slide.getPageElements().forEach(function (el) { try { el.remove(); } catch (err) {} }); renderEngineSlide(slide, safe, i + 1, ctx, pageW, pageH, dateLabel); saved = true; stats.redrawn++; }
+        if (safe) { slide.getPageElements().forEach(function (el) { try { el.remove(); } catch (err) {} }); renderEngineSlide(slide, safe, noBase + i + 1, ctx, pageW, pageH, dateLabel); saved = true; stats.redrawn++; }
       } catch (e2) {}
       if (!saved) stats.failed++;
       ctx.log.push('Slide ' + (i + 1) + (saved ? ' was redrawn as a simple list (' : ' could not be drawn (') + e.message + ').');
@@ -4366,6 +4378,54 @@ function normalizeShapes_(plan, ctx) {
     }
   });
 }
+/* V.1_66 (deck 38 General slides 15-16: "RACI matrix…" over the timeline, "12-week timeline…" over the KPIs): the slides
+   Gemini wrote for one part of a long deck are matched to the outline by what they are about, never by position alone.
+   Gemini had written the team structure and the RACI as one table, so every later slide of that part took the title of
+   the slide before it. Now:
+   - each outline entry takes the written slide most like it (same title, else shared title words, the brief and the type);
+   - position is used only when Gemini wrote exactly as many slides as asked and nothing better matches;
+   - a slide whose content matches no outline entry is not given a title it does not show; an outline entry with no
+     slide gets an empty slide of its type, which the fill step writes (fillThinSlides_).                              */
+function matchOutline_(outline, got) {
+  const words = function (t) { return (String(t || '').toLowerCase().match(/[a-z0-9]{4,}/g) || []).filter(function (w) { return !/^(with|from|into|that|this|across|their|your|over|between|both|sides?|slides?|plan|deck)$/.test(w); }); };
+  const norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+  const bag = function (sp) {
+    if (!sp) return [];
+    const t = []; (function walk(v, d) { if (d > 3 || v == null) return; if (typeof v === 'string') t.push(v); else if (Array.isArray(v)) v.forEach(function (x) { walk(x, d + 1); }); else if (typeof v === 'object') Object.keys(v).forEach(function (k) { if (!/^(notes|reference|icon|design|lockTag|fact_tags|resolvedIcons)$/.test(k)) walk(v[k], d + 1); }); })(sp, 0);
+    return words(t.join(' '));
+  };
+  const sim = function (a, b) { if (!a.length || !b.length) return 0; const B = {}; b.forEach(function (w) { B[w] = 1; }); let n = 0; const seen = {}; a.forEach(function (w) { if (B[w] && !seen[w]) { seen[w] = 1; n++; } }); return n / Math.min(new Set(a).size, new Set(b).size); };
+  const score = function (o, g) {
+    if (!g) return 0;
+    if (norm(g.title) === norm(o.title)) return 10;
+    const tt = sim(words(o.title), words(g.title));
+    const body = sim(words(o.title + ' ' + (o.brief || '')), bag(g));
+    const typeOk = String(g.type || '').toLowerCase() === String(o.type || '').toLowerCase() ? 0.15 : 0;
+    return tt * 1.2 + body * 0.8 + typeOk;
+  };
+  const n = outline.length, byOutline = new Array(n), ownTitle = new Array(n), used = {}, log = [];
+  const cand = [];
+  outline.forEach(function (o, k) { got.forEach(function (g, j) { if (g) cand.push({ k: k, j: j, s: score(o, g) }); }); });
+  cand.sort(function (a, b) { return b.s - a.s || Math.abs(a.k - a.j) - Math.abs(b.k - b.j); });
+  cand.forEach(function (c) {
+    if (byOutline[c.k] || used[c.j] || c.s < 0.45) return;
+    byOutline[c.k] = got[c.j]; used[c.j] = 1;
+  });
+  // position, only when Gemini wrote as many slides as asked and the slide at that place is free and not clearly another's
+  if (got.length === n) outline.forEach(function (o, k) {
+    if (!byOutline[k] && got[k] && !used[k]) { byOutline[k] = got[k]; used[k] = 1; }
+  });
+  outline.forEach(function (o, k) {
+    const g = byOutline[k];
+    if (!g) { log.push('"' + String(o.title).slice(0, 50) + '": Gemini did not write this slide; it is written again.'); return; }
+    // the content is about something else than the outline title (title words not in it): its own title stays
+    if (norm(g.title) !== norm(o.title) && g.title && sim(words(o.title), bag(g)) < 0.34 && sim(words(g.title), bag(g)) >= 0.5) {
+      ownTitle[k] = true;
+      log.push('"' + String(g.title).slice(0, 50) + '" keeps its own title (the outline said "' + String(o.title).slice(0, 50) + '").');
+    }
+  });
+  return { byOutline: byOutline, ownTitle: ownTitle, log: log };
+}
 function fillThinSlides_(plan, ctx) {
   try { normalizeShapes_(plan, ctx); } catch (e) { if (ctx && ctx.log) ctx.log.push('Shape check skipped: ' + e.message); }
   const thin = [];
@@ -4381,7 +4441,10 @@ function fillThinSlides_(plan, ctx) {
     // V.1_65 (deck 37 Proposal slide 31: four cards with a heading each and nothing in them): in every deck type, items
     // that have a heading but no text get one or two sentences each
     {
-      const bare = items.filter(function (it) { return typeof it === 'object' && (it.title || it.label) && !/[A-Za-z]{3}/.test(String(it.text || it.description || '') + (Array.isArray(it.points) ? it.points.join(' ') : '') + String(it.fix || '') + String(it.value || '')); });
+      // V.1_66 (deck 38 Proposal slide 25: "fixed-price 12-week outcome" was all an option said): a text of under six
+      // words counts as no text, so it gets its one or two sentences too (the short text is kept as the item's gist)
+      const shortTxt = function (it) { const tx = String(it.text || it.description || '').trim(); return !/[A-Za-z]{3}/.test(tx) || tx.split(/\s+/).length < 6; };
+      const bare = items.filter(function (it) { return typeof it === 'object' && (it.title || it.label) && !String(it.value || '').trim() && !(Array.isArray(it.points) && it.points.length) && !String(it.fix || '').trim() && shortTxt(it); });
       if (items.length >= 2 && bare.length >= Math.ceil(items.length / 2) && ['cards', 'diagram', 'process', 'bullets', 'statement', 'comparison'].indexOf(t) !== -1) { thin.push({ i: i, kind: 'itemtexts', want: items.length }); return; }
     }
     if (solutionFill && (t === 'stats' || t === 'timeline')) return;
@@ -4408,7 +4471,7 @@ function fillThinSlides_(plan, ctx) {
     const sp = plan.slides[x.i];
     if (x.kind === 'roadmap') return { id: k, kind: 'roadmap', add: 1, title: slideHeading_(sp), has: (sp.items || sp.points || []).map(function (it) { return typeof it === 'string' ? it : [it.title || it.label || '', it.text || ''].filter(Boolean).join(': '); }) };
     if (x.kind === 'kpivalues') return { id: k, kind: 'kpivalues', title: slideHeading_(sp), kpis: sp.items.map(function (it) { return { label: String(it.label || it.title || ''), value: String(it.value || '') }; }) };
-    if (x.kind === 'itemtexts') return { id: k, kind: 'itemtexts', add: x.want, title: slideHeading_(sp), has: sp.items.filter(Boolean).map(function (it) { return typeof it === 'string' ? it : String(it.title || it.label || ''); }) };
+    if (x.kind === 'itemtexts') return { id: k, kind: 'itemtexts', add: x.want, title: slideHeading_(sp), has: sp.items.filter(Boolean).map(function (it) { return typeof it === 'string' ? it : [String(it.title || it.label || ''), String(it.text || '').trim()].filter(Boolean).join(': '); }) };
     if (x.kind === 'lanes') return { id: k, kind: 'lanes', add: x.want, title: slideHeading_(sp), periods: sp.periods, has: sp.lanes.map(function (l) { return l && (l.name || l.title) || ''; }) };
     return { id: k, kind: x.kind, add: x.want, title: slideHeading_(sp), statement: sp.statement || '', has: (sp.items || sp.points || []).map(function (it) { return typeof it === 'string' ? it : (it.title || it.label || it.value || ''); }) };
   });
@@ -4420,7 +4483,7 @@ function fillThinSlides_(plan, ctx) {
       '- kind "bullets": strings "Short label: explanation" (12-22 words).',
       '- kind "kpis": {"value" (a target number, e.g. "25%"), "label" ("Target: " + what improves, words only), "text" (15-25 words)}.',
       '- kind "kpivalues": "add" = one value per entry of "kpis", in the same order: the value kept when it has a number, otherwise a realistic target (e.g. "+15%", "-20%", "2 days", "98%"); short, no words.',
-      '- kind "itemtexts": "add" = one text per entry of "has", in the same order: 12-25 words on what that item is or does, specific to the request (no figures).',
+      '- kind "itemtexts": "add" = one text per entry of "has", in the same order: 12-25 words on what that item is or does, specific to the request (no figures); when an entry already has a few words after its name ("Option A: fixed-price 12-week outcome"), the text says that in full.',
       '- kind "governance": one {"title" (2-5 words, e.g. "Joint steering committee"), "text" (8-16 words: who meets, how often, what they decide)}.',
       '- kind "roadmap": ONE object {"periods": [4-9 short labels, e.g. "Month 1" ... "Month 6" or "Q1" ... "Q4"], "lanes": [3-5 workstreams {"name" (2-4 words), "bars": [{"start", "end" (period numbers from 1), "label" (2-4 words)}] (1-3 bars)}]}, built from the phases in "has"; together the lanes cover the whole plan.',
       '- kind "lanes": roadmap workstreams {"name" (2-4 words), "bars": [{"start", "end" (period numbers from 1 to the number of "periods"), "label" (2-4 words)}] (1-3 bars)}; the lanes together cover the whole plan.',
@@ -4474,7 +4537,8 @@ function fillThinSlides_(plan, ctx) {
           if (!it || typeof it !== 'object') return;
           const v = add[j++];
           const txt = typeof v === 'string' ? v : (v && (v.text || v.title)) || '';
-          if (txt && !/[A-Za-z]{3}/.test(String(it.text || '') + (Array.isArray(it.points) ? it.points.join(' ') : ''))) { it.text = String(txt); delete it.points; }
+          const had = String(it.text || '').trim();
+          if (txt && (!/[A-Za-z]{3}/.test(had + (Array.isArray(it.points) ? it.points.join(' ') : '')) || (had.split(/\s+/).length < 6 && !(Array.isArray(it.points) && it.points.length)))) { it.text = String(txt); delete it.points; }
         });
       } else if (x.kind === 'items' || x.kind === 'kpis') sp.items = (sp.items || []).filter(Boolean).concat(add);
       else {
@@ -5060,7 +5124,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_65';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_66';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5428,7 +5492,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
     slideNo += (noDividers ? 0 : 1) + sc.count;
     own.forEach(function (o) { withDividers.push(o); });
     pos += sc.count;
-    agendaItems.push({ title: sc.title, text: (sc.description ? sc.description + ' · ' : '') + 'slides ' + first + '–' + (slideNo - 1), points: topics, description: String(sc.description || '') });
+    agendaItems.push({ title: sc.title, text: String(sc.description || '') /* V.1_66: no "slides 3–9" ranges */, points: topics, description: String(sc.description || '') });
   });
   slides.slice(pos).forEach(function (o) { withDividers.push(o); });
   // V.1_65 (deck 37 Proposal slide 2): the agenda lists the sections only, in every deck type (no "Introduction" or
@@ -5973,7 +6037,7 @@ function longDeckStep_(ctx, target, st, t0) {
     const plan = { slides: part.map(function (o) {
       if (o.type === 'section') return { type: 'section', title: o.title, number: o.number, lead: o.lead, level: o.level, points: o.points, notes: '' };
       return written.slides[wk++];
-    }).filter(Boolean) };
+    }).filter(function (sp) { return sp && !sp.leaveOut; }) };
     // Diagram uploads (rebuilt once, on the first diagram slide of the deck) and branded icons, as in a short deck
     // each uploaded diagram takes the slide whose topic matches it; anything left is placed in the last part
     if (typeof attachDiagramsToPlan_ === 'function' && ((st.sources && st.sources.diagrams) || []).some(function (d) { return !d.attached; })) {

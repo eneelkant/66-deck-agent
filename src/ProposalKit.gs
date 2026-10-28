@@ -512,7 +512,7 @@ function proposalAgenda_(agenda, rows, p) {
   rows = rows.map(function (r) { return { title: proposalShort_(r.title, 60), points: (r.points || []).map(function (x) { return proposalShort_(x, 56); }).filter(Boolean) }; })
     .filter(function (r) { return r.title; });
   agenda.title = 'Agenda';                             // V.1_42b: always "Agenda" (never Gemini's long agenda title)
-  if (rows.length <= 7) {
+  if (rows.length <= 6) {                              // V.1_66: the spiral for up to 6 sections, in every deck type
     agenda.items = rows.map(function (r) { return { title: r.title }; });
     agenda.lockTag = 'P66_AGENDA_SPIRAL';
     return null;

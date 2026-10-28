@@ -1,0 +1,68 @@
+{
+ "reported": "deck 38 (V.1_65): Deployment layers across",
+ "title": "Deployment layers across architecture stacks",
+ "spec": {
+  "type": "diagram",
+  "design": "S66_LAYER_STACK",
+  "title": "Deployment layers across architecture stacks",
+  "layers": [
+   {
+    "label": "Layer 4: monitoring",
+    "items": [
+     "Cloud Monitoring dashboards track infrastructure and system metrics.",
+     "Replication lag alerts flag delay across standby database replicas.",
+     "Replica sync state tracking confirms health across data nodes.",
+     "ILB health telemetry routes network traffic away from failed nodes."
+    ],
+    "icon": "activity"
+   },
+   {
+    "label": "Layer 3: database",
+    "items": [
+     "WSFC cluster manages quorum voting and automated instance failover.",
+     "SQL Server Enterprise hosts business databases with failover support.",
+     "Always On AG coordinates synchronous database standby replication.",
+     "Cloud Witness provides a lightweight quorum tie-breaker in storage."
+    ],
+    "icon": "database"
+   },
+   {
+    "label": "Layer 2: compute",
+    "items": [
+     "Multi-zone VMs distribute compute capacity across failure domains.",
+     "Persistent Disks deliver durable block storage for database files.",
+     "Local SSD tempdb delivers low latency scratch storage for queries.",
+     "Active Directory nodes provide domain authentication for clusters."
+    ],
+    "icon": "server"
+   },
+   {
+    "label": "Layer 1: network",
+    "items": [
+     "VPC and subnets isolate database environments across regional zones.",
+     "Internal load balancers route application traffic to primary nodes.",
+     "Cloud DNS zones resolve database listener names for client hosts.",
+     "IAP firewall rules restrict administrative network ingress points."
+    ],
+    "icon": "network"
+   }
+  ],
+  "notes": "66degrees structures the deployment into four sequential layers so foundational networking and DNS resolution are verified before Compute Engine instances and SQL Server clusters are provisioned. Layer 4 completes the stack by binding Cloud Monitoring alerts to replication lag and load balancer health probes.\n\nSources:\n[1] Deploying Microsoft SQL Server for Multi-Regional Disaster Recovery (Google Cloud, 2024) https://cloud.google.com/architecture/sql-server-multi-regional-disaster-recovery\n[6] Best Practices for Achieving High Availability and Scalability in Cloud SQL (Google Cloud, 2024) https://cloud.google.com/blog/products/databases/cloud-sql-ha-and-dr-best-practices",
+  "fact_tags": [],
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "S66_LAYER_STACK",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "clientLogo": false
+ }
+}

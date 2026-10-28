@@ -1,0 +1,52 @@
+{
+ "reported": "deck 38 (V.1_65): Operational readiness",
+ "title": "Operational readiness and DBA runbooks",
+ "spec": {
+  "type": "cards",
+  "design": "S66_ISSUE_ROWS",
+  "title": "Operational readiness and DBA runbooks",
+  "items": [
+   {
+    "title": "Unrouted Cloud Monitoring alerts delay critical incident triage",
+    "fix": "Route Cloud Monitoring log and replica state alerts directly to on-call engineering via PagerDuty webhook channels. Escalation policies ensure immediate acknowledgment, while automated triage notes speed incident resolution.",
+    "status": "Amber",
+    "icon": "cloud-signal"
+   },
+   {
+    "title": "Manual failover steps cause operator error under outage pressure",
+    "fix": "Execute pre-scripted PowerShell and gcloud regional failover runbooks to promote the DR replica and update Cloud DNS. Standardized cutover procedures ensure consistent recovery execution and prevent prolonged application outages.",
+    "status": "Amber",
+    "icon": "code-refresh"
+   },
+   {
+    "title": "Unverified database backups fail during point-in-time recovery",
+    "fix": "Schedule automated Cloud Scheduler jobs to restore Persistent Disk snapshots and Cloud Storage backups to an isolated test VM. Regular validation confirms archive integrity and maintains continuous recovery readiness over time.",
+    "status": "Grey",
+    "icon": "shield-database"
+   },
+   {
+    "title": "Unmonitored workload growth degrades Compute Engine IOPS and throughput",
+    "fix": "Conduct quarterly capacity and performance reviews of Persistent Disk queue depth, CPU utilization, and tempdb contention. These assessments uncover latent bottlenecks early to maintain steady system throughput across peak hours.",
+    "status": "Grey",
+    "icon": "gear-chart"
+   }
+  ],
+  "notes": "Operational readiness requires pairing automated Cloud Monitoring alerts with documented DBA runbooks. Standardizing alert routing, failover scripts, backup verification, and quarterly capacity reviews ensures the Contoso Health engineering team can execute recovery procedures under pressure.\n\nSources:\n[6] Best Practices for Achieving High Availability and Scalability in Cloud SQL (Google Cloud, 2024) https://cloud.google.com/blog/products/databases/cloud-sql-ha-and-dr-best-practices",
+  "fact_tags": [],
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "S66_ISSUE_ROWS",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "solution",
+  "cobrand": false,
+  "clientLogo": false
+ }
+}

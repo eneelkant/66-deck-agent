@@ -16,6 +16,9 @@
   // the 66degrees section dividers are shared frames: the same in every deck type
   ENGINE.shareDesign('P66_SECTION_DARK', 'solution');
   ENGINE.shareDesign('P66_SECTION_LIGHT', 'solution');
+  // V.1_66: the spiral agenda (up to 6 sections) in every deck type
+  ENGINE.shareDesign('P66_AGENDA_SPIRAL', 'solution');
+  ENGINE.shareDesign('P66_AGENDA_SPIRAL', 'general');
 
   /* ---------------- helpers ---------------- */
   function lh(size) { return K.lineHeight('sans', size); }
@@ -501,6 +504,43 @@
       K.line(els, CX, y + rowH[i], CX + CW, y + rowH[i], LINE, 0.5);
       y += rowH[i];
     });
+    return { bg: T.white, els: els, noBalance: true };
+  });
+
+  /* ---------- V.1_66: KPI tiles with their explanation (deck 38 Solution slide 18: the targets were drawn as text columns
+     with "100% · Availability target" as the heading) ---------- */
+  add('S66_KPI_TEXT_TILES', 'stats', { min: 2, max: 4, needs: 'items[{value,label,text}] (2-4), takeaway',
+    desc: '2-4 tall white tiles, each a big blue figure, its label and one or two sentences, with the takeaway on a pale bar underneath (KPI targets, success measures, results with what they mean)', words: 'label 2-6; text 10-35' }, function (s) {
+    var tiles = K.items(s, 5).map(function (it) { return { value: clean(it && it.value), label: clean(it && (it.label || it.title)), text: clean(it && (it.text || it.description)) }; })
+      .filter(function (t) { return t.value && /\d/.test(t.value) && t.label; });
+    var n = tiles.length;
+    if (n < 2 || n > 4 || n !== K.items(s, 5).length) return null;
+    var els = [];
+    var top = K.header(els, s) + 4;
+    var take = clean(s.takeaway), takeH = take ? th(take, CW - 24, 9.5, 400) + 14 : 0;
+    var gap = 12, tw = (CW - gap * (n - 1)) / n, iw = tw - 28;
+    var vSize = K.uniformSize(tiles.map(function (t) { return t.value; }), iw, 44, { font: 'mono', weight: 500, max: 30, min: 18, maxLines: 1 });
+    var lB = maxOf(tiles, function (t) { return th(t.label, iw, 10.5, 500); });
+    var tB = maxOf(tiles, function (t) { return th(t.text, iw, 9.5, 400); });
+    var need = 16 + K.lineHeight('mono', vSize) + 8 + lB + (tB ? 8 + tB : 0) + 18;
+    var room = BOTTOM - top - (take ? takeH + 10 : 0);
+    if (need > room) return null;
+    var tH = Math.min(room, need + 24);
+    tiles.forEach(function (t, i) {
+      var x = CX + i * (tw + gap), y = top;
+      K.rect(els, x, y, tw, tH, T.white, { color: LINE, width: 0.75 });
+      K.rect(els, x, y, tw, 3, T.blue);
+      y += 16;
+      K.text(els, x + 14, y, iw, K.lineHeight('mono', vSize), t.value, { font: 'mono', weight: 500, max: vSize, min: vSize, maxLines: 1, color: T.blue });
+      y += K.lineHeight('mono', vSize) + 8;
+      K.text(els, x + 14, y, iw, lB, t.label, { weight: 500, max: 10.5, min: 10.5, color: T.ink });
+      y += lB + 8;
+      if (t.text) K.text(els, x + 14, y, iw, tB, t.text, { weight: 400, max: 9.5, min: 9.5, color: T.ink });
+    });
+    if (take) {
+      K.rect(els, CX, top + tH + 10, CW, takeH, TINT);
+      K.text(els, CX + 12, top + tH + 10, CW - 24, takeH, take, { weight: 400, max: 9.5, min: 9.5, valign: 'middle', color: T.ink });
+    }
     return { bg: T.white, els: els, noBalance: true };
   });
 

@@ -806,17 +806,19 @@ var ENGINE = (function () {
   }
 
   function panel(els, x, y, w, h, headerFill, label, points, body) {
-    rect(els, x, y, w, 43, headerFill);
-    text(els, x + 10, y + 12, w - 20, 22, label, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: 'center', color: onFill(headerFill), valign: 'middle' });
-    rect(els, x, y + 43, w, h - 43, T.white, { color: T.cardLine, width: 0.75 });
-    var cy = y + 56;
+    // V.1_66 (deck 38 General slide 27: "Accelerating governed data…"): a two-line heading gets a taller header band
+    var hb = Math.max(43, linesBlock([String(label || '')], w - 20, TSZ.heading, 500, 2) + 20);
+    rect(els, x, y, w, hb, headerFill);
+    text(els, x + 10, y + 10, w - 20, hb - 20, label, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 2, align: 'center', color: onFill(headerFill), valign: 'middle' });
+    rect(els, x, y + hb, w, h - hb, T.white, { color: T.cardLine, width: 0.75 });
+    var cy = y + hb + 13;
     var pts = arr(points, 8).map(str).filter(function (p) { return p; });
     if (body) {
       // Reserve room for the bullets below; body uses whatever is left up to a generous cap so nothing gets truncated.
       var pointsSpace = pts.length ? Math.min(160, pts.length * 24) : 0;
       var bodyH = Math.max(40, y + h - cy - 10 - pointsSpace);
       var nl = String(body).indexOf('\n');
-      var b = text(els, x + 12, cy, w - 24, bodyH, body, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 10, color: T.body,
+      var b = text(els, x + 12, cy, w - 24, bodyH, body, { weight: 400, max: TSZ.body, min: TSZ.body - 1, maxLines: 16, color: T.body,
         runs: nl > 0 ? [{ start: 0, end: nl, color: T.ink, weight: 500 }] : null });
       cy += b.height + 8;
     }
@@ -904,7 +906,7 @@ var ENGINE = (function () {
     if (side) {
       var px = CX + 424, pw = CW - 424;
       var ptext = String(s.callout.text || '');
-      var need = 43 + 14 + textH(ptext, pw - 24, TSZ.body) + 18;
+      var need = Math.max(43, linesBlock([String(s.callout.title || s.callout.label || '')], pw - 20, TSZ.heading, 500, 2) + 20) + 14 + textH(ptext, pw - 24, TSZ.body) + 18;
       panel(els, px, top, pw, Math.min(BOTTOM - top, Math.max(need, listH, 120)), T.blue, s.callout.title || s.callout.label || 'Why it matters', [], ptext);
     }
     return { bg: T.white, els: els };
@@ -2614,6 +2616,9 @@ var ENGINE = (function () {
     var withText = rows.filter(function (r) { return r.text; }).length >= Math.ceil(rows.length / 2);
     var lw = withText ? 300 : 250, gapR = 8;
     var rowH = withText ? Math.min(70, (BOTTOM - top - 6) / pts.length) : Math.min(34, (BOTTOM - top) / pts.length);
+    // V.1_66 (deck 38 General slide 27: every explanation ended in "…"): the menu is for short topics; when an explanation
+    // does not fit its row in full, the slide goes to a design with room for whole sentences
+    if (withText && rows.some(function (r) { return r.text && textH(r.text, lw - 44, 9) > rowH - gapR - 8 - 18 + 1; })) return null;
     rows.forEach(function (r, i) {
       var y = top + 6 + i * rowH, on = i === 0, bh = rowH - gapR;
       rect(els, CX, y, lw, bh, on ? T.blue : T.white);
@@ -3969,7 +3974,7 @@ var ENGINE = (function () {
       if (x == null) return '';
       if (typeof x === 'string' || typeof x === 'number') return String(x).trim();
       var h = String(x.title || x.role || x.name || x.label || '').trim(), t = String(x.text || x.description || x.detail || '').trim();
-      return h && t ? h + ': ' + t : (h || t);
+      return h && t ? (h.indexOf(':') !== -1 ? h.replace(/:\s*/, ' – ') : h) + ': ' + t : (h || t);   // V.1_66: never "Layer 4: monitoring: ..."
     };
     var listOf = function (o) {
       if (!o || typeof o !== 'object') return [];
@@ -3977,6 +3982,11 @@ var ENGINE = (function () {
       for (var i = 0; i < keys.length; i++) if (Array.isArray(o[keys[i]]) && o[keys[i]].length) return o[keys[i]].map(strOf).filter(Boolean);
       return [];
     };
+    // V.1_66: a KPI tile drawn by a text design keeps its figure ("100% availability target"), never only the label
+    if (type === 'stats' && Array.isArray(s.items)) s.items = s.items.map(function (it) {
+      if (!it || typeof it !== 'object' || it.title || !String(it.value || '').trim()) return it;
+      return Object.assign({}, it, { title: String(it.value).trim() + ' ' + String(it.label || '').replace(/^./, function (c) { return /^[A-Z][a-z]/.test(String(it.label)) ? c.toLowerCase() : c; }) });
+    });
     if (Array.isArray(s.items)) s.items = s.items.map(function (it) {
       if (!it || typeof it !== 'object' || String(it.text || it.description || '').trim()) return it;
       var l = listOf(it);
@@ -4008,6 +4018,162 @@ var ENGINE = (function () {
     }
     if ((!Array.isArray(s.points) || !s.points.length) && type === 'bullets' && Array.isArray(s.items)) s.points = s.items.map(strOf).filter(Boolean);
     return s;
+  }
+  /* V.1_66 — the shape check at draw time (every deck type, also every slide replayed from the slide log): content that
+     Gemini wrote in a shape the slide's library cannot draw, or in the wrong shape for what it says, is put in the shape
+     that shows it (deck 38 Solution / Proposal / General). */
+  var LOWER_OK_ = /^(gcloud|gsutil|bq|kubectl|terraform|npm|pip|iOS|iPad|iPhone|eBay|e\.g\.|i\.e\.|x\d|vs\.?)$/;
+  function capFirst_(t) {
+    t = String(t == null ? '' : t);
+    var m = /^(\s*)([a-z][a-z-]*)/.exec(t);
+    if (!m || LOWER_OK_.test(m[2])) return t;
+    return m[1] + m[2].charAt(0).toUpperCase() + t.slice(m[1].length + 1);
+  }
+  var FIG_IN_TEXT_ = /(?:^|[\s(])((?:[+\-−~<>]\s?)?\$?\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|pp\b|[kKmMbB]\b|\+)|\$\d[\d,]*(?:\.\d+)?)/;
+  // the KPI tile design of each library (the gate still compares it with the others)
+  function statsRef_(lib, n) {
+    var pref = { proposal: ['P66_KPI_TILES'], solution: ['S66_KPI_TEXT_TILES', 'S66_SCORECARD'], general: ['66D_LAYOUT_STATS_001'] }[lib] || [];
+    if (lib === 'proposal' && (n < 3 || n > 4)) return null;
+    for (var i = 0; i < pref.length; i++) if (V[pref[i]] && inLib_(pref[i], lib)) return { tag: pref[i] };
+    return null;
+  }
+  function shapeSpec_(s0, type) {
+    var s = s0, t = type, lib = libOf_(s), log = [];
+    // 0. the agenda: up to 6 sections -> the spiral (every deck type); 7 or more -> the deck's list design
+    if (t === 'agenda' && !s.continued && V.P66_AGENDA_SPIRAL && inLib_('P66_AGENDA_SPIRAL', lib)) {
+      var an = (Array.isArray(s.items) ? s.items : []).filter(function (it) { return it && (typeof it === 'string' || it.title || it.text); }).length;
+      if (an >= 3 && an <= 6) { s = Object.assign({}, s, { reference: { tag: 'P66_AGENDA_SPIRAL' }, lockTag: 'P66_AGENDA_SPIRAL' }); log.push('agenda-spiral'); }
+      else if (an > 6 && s.reference && s.reference.tag === 'P66_AGENDA_SPIRAL') s = Object.assign({}, s, { reference: null, lockTag: '' });
+      return { s: log.length ? Object.assign(s, { shapeFixes: log }) : s, type: t };
+    }
+    var norm = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+    var items = Array.isArray(s.items) ? s.items.filter(function (it) { return it && typeof it === 'object'; }) : [];
+    // 1. a Gantt (workstreams x periods, or lanes of bars) where no Gantt design can draw it -> a table of workstreams x phases
+    var ws = Array.isArray(s.workstreams) ? s.workstreams.filter(function (w) { return w && Array.isArray(w.cells) && w.cells.length; }) : [];
+    var lanes = Array.isArray(s.lanes) ? s.lanes.filter(function (l) { return l && Array.isArray(l.bars) && l.bars.length; }) : [];
+    var ganttOk = lib === 'proposal' && V.P66_GANTT && lanes.length >= 3;
+    var thin = !(items.length >= 2) && !(Array.isArray(s.milestones) && s.milestones.length >= 2) && !(Array.isArray(s.rows) && s.rows.length >= 2);
+    if (thin && !ganttOk && (ws.length >= 2 || lanes.length >= 2)) {
+      var sent = function (list) { return (Array.isArray(list) ? list : [list]).map(function (x) { x = capFirst_(String(x && typeof x === 'object' ? (x.label || x.title || x.text || '') : x || '').trim()); return x && !/[.!?]$/.test(x) ? x + '.' : x; }).filter(Boolean).join(' '); };
+      var periods = (Array.isArray(s.periods) ? s.periods : []).map(String);
+      if (ws.length >= 2) {
+        var m = Math.max.apply(null, ws.map(function (w) { return w.cells.length; }));
+        var names = [];
+        for (var k = 0; k < m; k++) {
+          if (periods.length === m) names.push(periods[k]);
+          else if (periods.length && periods.length % m === 0) {
+            var g = periods.length / m, a = periods[k * g], b = periods[k * g + g - 1];
+            var pa = /^(.*?)(\d+)/.exec(a), pb = /(\d+)\D*$/.exec(b);
+            names.push(pa && pb ? pa[1] + pa[2] + '-' + pb[1] : 'Phase ' + (k + 1));
+          } else names.push('Phase ' + (k + 1));
+        }
+        s = Object.assign({}, s, { type: 'table', columns: ['Workstream'].concat(names),
+          // every workstream keeps its row: with 4 or more rows a cell shows its first two activities
+          rows: ws.slice(0, 6).map(function (w) { var r = [capFirst_(String(w.name || w.title || ''))]; for (var c = 0; c < m; c++) { var cell = Array.isArray(w.cells[c]) ? w.cells[c] : [w.cells[c]]; r.push(sent(ws.length >= 4 ? cell.slice(0, 2) : cell)); } return r; }) });
+      } else {
+        s = Object.assign({}, s, { type: 'table', columns: ['Track', 'Activities', periods.length ? 'When' : 'Periods'],
+          rows: lanes.slice(0, 7).map(function (l) {
+            var st = Math.min.apply(null, l.bars.map(function (b) { return Number(b.start) || 1; })), en = Math.max.apply(null, l.bars.map(function (b) { return Number(b.end || b.start) || 1; }));
+            return [capFirst_(String(l.name || l.title || '')), sent(l.bars.map(function (b) { return b.label || ''; })), periods.length ? (periods[st - 1] || '') + (en > st && periods[en - 1] ? ' to ' + periods[en - 1] : '') : st + '-' + en];
+          }) });
+      }
+      delete s.workstreams; delete s.lanes; delete s.periods; delete s.tasks; s.design = ''; s.reference = null; t = 'table';
+      log.push('gantt-as-table');
+    }
+    // 2. items that each carry a figure ("205%" + label) are KPI tiles, whatever type they were written as
+    items = Array.isArray(s.items) ? s.items.filter(function (it) { return it && typeof it === 'object'; }) : [];
+    var hasVal = function (it) { var v = String(it.value == null ? '' : it.value).trim(); return v && v.length <= 14 && /\d/.test(v) && !/^\d+\s*\/\s*\d+$/.test(v) && !/^\d$|^10$/.test(v); };   // "4/5" or "4" is a score, not a KPI
+    // a tile carries one sentence: the first sentence of a long text (the rest is in the notes already)
+    var tileText = function (x) { x = String(x || '').trim(); var w = x.split(/\s+/).length; if (w <= 24) return x; var f = (x.match(/^.+?[.!?](?=\s|$)/) || [x])[0]; return f.split(/\s+/).length <= 30 ? f : x; };
+    var glued = function (it) { var ti = String(it.title || '').trim(), v = String(it.value).trim(); return !ti || ti.indexOf(v) === 0; };
+    if (['cards', 'process', 'bullets'].indexOf(t) !== -1 && items.length >= 2 && items.length <= 6 && items.length === (s.items || []).length && items.every(hasVal) && items.every(glued)) {
+      s = Object.assign({}, s, { type: 'stats', items: items.map(function (it) {
+        var v = String(it.value).trim(), ti = String(it.title || '').trim(), lb = String(it.label || '').trim();
+        if (!lb) lb = ti.replace(new RegExp('^\\s*' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[·:\\-–—]?\\s*'), '');
+        var o = Object.assign({}, it, { value: v, label: capFirst_(lb) });
+        if (o.text) o.text = tileText(o.text);
+        delete o.title;
+        return o;
+      }) });
+      // a figure written at the top of the slide (value / label / text of the slide itself) is one more tile
+      if (hasVal(s) && s.items.length < 4) s.items = [{ value: String(s.value).trim(), label: capFirst_(String(s.label || '')), text: tileText(s.text || '') }].concat(s.items);
+      delete s.value; delete s.label; if (s.items.length > items.length) delete s.text;
+      s.design = ''; s.reference = statsRef_(lib, s.items.length); t = 'stats'; log.push('figures-as-tiles');
+    }
+    // 3. a KPI / target slide whose figures are inside the sentences ("Achieve a 99% pass rate...") -> KPI tiles
+    var topic = String(s.title || '') + ' ' + String(s.lead || '');
+    items = Array.isArray(s.items) ? s.items.filter(function (it) { return it && typeof it === 'object'; }) : [];
+    if (['cards', 'bullets', 'process'].indexOf(t) !== -1 && /\b(kpis?|targets?|metrics?|success measures?|outcomes? we commit)\b/i.test(topic) &&
+        items.length >= 2 && items.length <= 6 && !items.some(hasVal)) {
+      var figs = items.map(function (it) { var mm = FIG_IN_TEXT_.exec(String(it.text || it.description || '')) || FIG_IN_TEXT_.exec(String(it.title || '')); return mm ? mm[1].replace(/\s+/g, '') : ''; });
+      if (figs.every(Boolean)) {
+        s = Object.assign({}, s, { type: 'stats', items: items.map(function (it, k) {
+          return { value: figs[k], label: capFirst_(String(it.title || it.label || '')), text: tileText(capFirst_(String(it.text || it.description || ''))), icon: it.icon };
+        }) });
+        s.design = ''; s.reference = statsRef_(lib, s.items.length); t = 'stats'; log.push('target-figures-as-tiles');
+      }
+    }
+    // 4. a why-66degrees slide states facts about 66degrees, not targets ("100% · Target: Google Cloud focus" -> "Google Cloud focus")
+    if (t === 'stats' && /why\s+(66|us\b)|66\s?degrees|credential|partner/i.test(String(s.title || '')) && Array.isArray(s.items) &&
+        s.items.some(function (it) { return it && /^\s*target\s*:\s*/i.test(String(it.label || '')); })) {
+      s = Object.assign({}, s, { items: s.items.map(function (it) { return it && typeof it === 'object' ? Object.assign({}, it, { label: capFirst_(String(it.label || '').replace(/^\s*target\s*:\s*/i, '')) }) : it; }) });
+      log.push('no-target-on-credentials');
+    }
+    // 5. a statement that only says the title again goes; a statement slide that lists steps shows them as steps
+    if (s.statement && norm(s.statement) === norm(s.title)) {
+      // the statement becomes the first sentence of the slide's text (a design that needs a statement keeps one)
+      var tx = String(s.text || '').trim(), first = (tx.match(/^.+?[.!?](?=\s|$)/) || [''])[0];
+      if (first && first.split(/\s+/).length <= 30) { s = Object.assign({}, s, { statement: first, text: tx.slice(first.length).trim() }); log.push('statement-is-title'); }
+      else if (Array.isArray(s.points) && s.points.length >= 2) { s = Object.assign({}, s, { statement: '' }); log.push('statement-is-title'); }
+    }
+    var pts = Array.isArray(s.points) ? s.points.filter(function (p) { return p && typeof p === 'object' && (p.title || p.label); }) : [];
+    if (t === 'statement' && pts.length >= 2 && pts.length <= 6 && !(Array.isArray(s.items) && s.items.length) &&
+        /\b(next steps?|steps?|actions?|roadmap|plan|how we|to initiate|to start|getting started|call to action)\b/i.test(String(s.title || ''))) {
+      s = Object.assign({}, s, { type: 'process', items: pts.map(function (p) { return { title: String(p.title || p.label), text: capFirst_(String(p.text || p.description || '')), icon: p.icon }; }),
+        lead: s.lead || s.statement || '', takeaway: s.takeaway || '', points: [] });
+      if (!s.lead && s.text) { s.lead = s.text; s.text = ''; }
+      s.design = ''; s.reference = null; t = 'process'; log.push('statement-steps-as-process');
+    }
+    // 6. a support model of levels (L1, L2, L3): only the levels are levels; anything else becomes the slide's callout
+    items = Array.isArray(s.items) ? s.items : [];
+    var lvlRe = /^\s*(L\d|tier\s*\d|level\s*\d|P\d|sev(erity)?\s*\d)\b/i;
+    if (items.length >= 3 && /\bL[0-4]\b|\blevels?\b|\btiers?\b/i.test(topic)) {
+      var lv = items.filter(function (it) { return it && lvlRe.test(String(it.title || it.label || '')); });
+      if (lv.length >= 2 && lv.length < items.length) {
+        var rest = items.filter(function (it) { return lv.indexOf(it) === -1; }).map(function (it) { return String((it && (it.text || it.title)) || ''); }).join(' ');
+        s = Object.assign({}, s, { items: lv });
+        if (!(s.callout && (s.callout.text || s.callout.title))) s.callout = { text: rest };
+        else if (!s.takeaway) s.takeaway = rest;
+        log.push('levels-only');
+      }
+    }
+    // 7. texts start with a capital ("fixed-price 12-week outcome")
+    if (Array.isArray(s.items)) s = Object.assign({}, s, { items: s.items.map(function (it) {
+      if (!it || typeof it !== 'object') return typeof it === 'string' ? capFirst_(it) : it;
+      var o = Object.assign({}, it);
+      ['text', 'description', 'title', 'label', 'fix'].forEach(function (k) { if (typeof o[k] === 'string') o[k] = capFirst_(o[k]); });
+      return o;
+    }) });
+    if (Array.isArray(s.points)) s = Object.assign({}, s, { points: s.points.map(function (p) { return typeof p === 'string' ? capFirst_(p) : p; }) });
+    // 8. the speaker notes never give other figures than the slide (deck 38 Proposal slide 20: 55% / 90% / 30% in the
+    //    notes, 99% / 25% on the slide): a notes sentence with a figure the slide does not show is left out
+    if (typeof s.notes === 'string' && s.notes && t !== 'cover' && t !== 'section' && t !== 'agenda' && t !== 'closing') {
+      var shown = JSON.stringify(Object.assign({}, s, { notes: '' }));
+      var figRe = /[+\-−~]?\$?\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|pp\b)/g;
+      var parts = s.notes.split(/\n/), changed = false;
+      parts = parts.map(function (line) {
+        if (/^\s*(sources?|check before sharing|\[\d+\])/i.test(line)) return line;
+        return (line.match(/[^.!?]+[.!?]*(\s+|$)/g) || [line]).filter(function (sn) {
+          var f = sn.match(figRe) || [];
+          var foreign = f.filter(function (x) { return shown.indexOf(x.replace(/\s+/g, '').replace(/^[+\-−~]/, '')) === -1; });
+          if (foreign.length && foreign.length === f.length) { changed = true; return false; }
+          return true;
+        }).join('');
+      });
+      if (changed) { s = Object.assign({}, s, { notes: parts.join('\n').replace(/\n{3,}/g, '\n\n').trim() }); log.push('notes-figures'); }
+    }
+    if (log.length) s.shapeFixes = log;
+    return { s: s, type: t };
   }
   function contentCount_(out) {
     return ((out && out.els) || []).filter(function (e) {
@@ -4151,7 +4317,7 @@ var ENGINE = (function () {
       return /[.!?]$/.test(res) ? res : res + '.';
     };
     var full = groups.filter(function (g) { return g.title && g.points.length; }).slice(0, 5).map(function (g) { return { title: cutW(g.title, 8), points: g.points.slice(0, 4).map(function (p) { return cutW(p, 18); }) }; });
-    var flat = groups.map(function (g) { return g.points.length ? (g.title ? g.title + ': ' : '') + g.points.map(function (p) { p = String(p).trim(); return /[.!?]$/.test(p) ? p : p + '.'; }).join(' ') : g.title; }).concat(looseTexts).filter(real).map(function (p) { return cutW(p, 22); });
+    var flat = groups.map(function (g) { return g.points.length ? (g.title ? g.title.replace(/:\s*/, ' – ') + ': ' : '') + g.points.map(function (p) { p = String(p).trim(); return /[.!?]$/.test(p) ? p : p + '.'; }).join(' ') : g.title; }).concat(looseTexts).filter(real).map(function (p) { return cutW(p, 22); });
     var spec = Object.assign({}, s, { reference: null });
     if (full.length >= 2) { spec.items = full; spec.points = []; SOLUTION_FALLBACK_TAGS_.forEach(function (t) { if (!out) out = tryTag(t, spec); }); }
     if (!out && flat.length) {
@@ -4410,6 +4576,7 @@ var ENGINE = (function () {
       var type = String(s.type || 'bullets').toLowerCase();
       type = ALIASES[type] || type;
       if (!L[type]) type = 'bullets';
+      try { var shp = shapeSpec_(s, type); s = shp.s; type = ALIASES[shp.type] || shp.type; if (!L[type]) type = 'bullets'; } catch (eShape) {}
       if (type === 'section') sectionNo++;
       var lctx = { dateLabel: ctx.dateLabel, sectionNo: ctx.sectionNo || sectionNo };
       // Template design chosen for this slide (Reference.gs); falls back to the type's default layout.
@@ -4437,6 +4604,7 @@ var ENGINE = (function () {
       if (s.cobrand && libOf_(s) !== 'solution' && type !== 'cover' && type !== 'closing') clientCorner_(out, type, libOf_(s) !== 'general');
       out.type = type;
       out.notes = s.notes || '';
+      if (s.shapeFixes && s.shapeFixes.length) { out.qa = out.qa || { issues: [], fixed: [] }; out.qa.fixed = (out.qa.fixed || []).concat(s.shapeFixes); }   // V.1_66: in the slide log
       slides.push(out);
     });
     return slides;
@@ -4541,7 +4709,10 @@ var ENGINE = (function () {
       inside.forEach(function (e) {
         var b = elBox_(e);
         if (e.t !== 'text' && b.y >= bottom - 14) { anchored.push(e); return; }       // a bar or chip on the bottom edge
-        top = Math.min(top, b.y); low = Math.max(low, b.y + b.h);
+        // V.1_66: a long text wraps into fewer lines in Slides than the safe estimate (deck 38 General 20: 9 lines drawn,
+        // 11 estimated), so its box is fitted to 90% of the estimate; the text box keeps its own height (nothing is cut)
+        var bh = e.t === 'text' && !e.list && b.h > 60 ? b.h * 0.9 : b.h;
+        top = Math.min(top, b.y); low = Math.max(low, b.y + bh);
       });
       if (top - B.y > B.h * 0.25) return;                                         // centred content: left as it is
       var slack = bottom - low - 14;
@@ -4556,8 +4727,9 @@ var ENGINE = (function () {
           low += add * (n - 1); slack -= add * (n - 1);
         }
       }
-      // a box that stays mostly empty (its text took less than half of it) is made shorter
-      if (slack > Math.max(120, B.h * 0.6)) plan.push({ B: B, newH: B.h - slack, anchored: anchored });
+      // a box with a band of empty space under its text is made shorter
+      // V.1_66 (deck 38 General 20, Proposal 5/10/12/22/26/29: a third to half of each card empty): from 18% / 30pt of slack
+      if (slack > Math.max(30, B.h * 0.18)) plan.push({ B: B, newH: Math.max(B.h - slack, Math.min(B.h, BOTTOM - 65 - B.y)), anchored: anchored, inside: inside });   // never ending more than ~a quarter of the content area above the footer (the slide stays filled)
     });
     if (!plan.length) return;
     // a row of boxes (same top, same height) keeps one height: the tallest content of the row
@@ -4575,6 +4747,8 @@ var ENGINE = (function () {
       if (d < 20) return;
       p.B.h = p.rowH;
       p.anchored.forEach(function (e) { if (e.t === 'line') { e.y1 -= d; e.y2 -= d; } else e.y -= d; });
+      // its texts end with the box (top-aligned: the words stay where they are)
+      (p.inside || []).forEach(function (e) { if (e.t === 'text' && (!e.valign || e.valign === 'top') && e.y + e.h > p.B.y + p.B.h + INSET) e.h = Math.max(20, p.B.y + p.B.h + INSET - e.y); });
     });
   }
   function qaScore_(iss) { return (iss || []).reduce(function (t, k) { return t + (QA_WEIGHT_[k] || 10); }, 0); }

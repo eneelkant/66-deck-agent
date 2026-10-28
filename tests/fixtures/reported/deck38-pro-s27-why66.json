@@ -1,0 +1,50 @@
+{
+ "reported": "deck 38 (V.1_65): Why 66degrees: Google",
+ "title": "Why 66degrees: Google Cloud scale and specialization",
+ "spec": {
+  "type": "stats",
+  "design": "P66_KPI_TILES",
+  "title": "Why 66degrees: Google Cloud scale and specialization",
+  "lead": "As Google's preferred partner, we bring certified engineering depth across data and AI.",
+  "items": [
+   {
+    "value": "600+",
+    "label": "Google Cloud certifications",
+    "text": "Certified engineers across AI, machine learning, cloud engineering, DevOps, and data analytics."
+   },
+   {
+    "value": "350+",
+    "label": "Dedicated technical experts",
+    "text": "Specialists spanning data analytics, cloud engineering, solution consulting, and application development."
+   },
+   {
+    "value": "100%",
+    "label": "Target: Google Cloud focus",
+    "text": "Every engagement leverages native cloud services to accelerate your platform delivery and reduce technical debt across all data pipelines."
+   }
+  ],
+  "takeaway": "We are Google's Preferred Partner for Enterprise AI Transformation, delivering over a quarter of all Agentic AI work on Gemini Enterprise.",
+  "notes": "66degrees is Google's Preferred Partner for Enterprise AI Transformation, bringing over 600 Google Cloud certifications and 350+ technical experts to ZoomInfo's engagement. We have delivered more than 1,000 transformation projects and hold a major share of Gemini Enterprise Agentic AI implementations.",
+  "fact_tags": [
+   "66D_FACT_COMPANY_001",
+   "66D_FACT_COMPANY_002",
+   "66D_FACT_COMPANY_003",
+   "66D_FACT_COMPANY_004",
+   "66D_FACT_COMPANY_005"
+  ],
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "P66_KPI_TILES",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "proposal",
+  "cobrand": true
+ }
+}

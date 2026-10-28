@@ -2091,5 +2091,30 @@
     ]
    }
   ]
+ },
+ {
+  "reference": {
+   "tag": "S66_KPI_TEXT_TILES"
+  },
+  "type": "stats",
+  "title": "KPI targets for SQL Server resilience",
+  "items": [
+   {
+    "value": "99.95%",
+    "label": "Availability target",
+    "text": "Synchronous multi-zone clustering keeps unplanned downtime under four and a half hours a year."
+   },
+   {
+    "value": "<15 min",
+    "label": "Recovery time target",
+    "text": "Health probes, Cloud DNS updates and scripted promotion bring the DR replica online in under 15 minutes."
+   },
+   {
+    "value": "0",
+    "label": "Data loss in a zone failure",
+    "text": "Synchronous commit inside the primary region means no committed transaction is lost."
+   }
+  ],
+  "takeaway": "All three targets are validated in pre-production game days before the cutover."
  }
 ]

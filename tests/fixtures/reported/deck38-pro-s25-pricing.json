@@ -1,0 +1,39 @@
+{
+ "reported": "deck 38 (V.1_65): Pricing options tailored",
+ "title": "Pricing options tailored to Zoominfo's preferences",
+ "spec": {
+  "title": "Pricing options tailored to Zoominfo's preferences",
+  "lead": "Choose between a fixed-scope milestone build or flexible velocity engineering pods.",
+  "notes": "We offer three commercial models so ZoomInfo can balance budget certainty against backlog flexibility. Option A provides a fixed-price 12-week outcome delivery, Option B provides a flexible time-and-materials velocity pod, and Option C combines the platform build with our Cloud Evolve managed services.",
+  "deckLibrary": "proposal",
+  "cobrand": true,
+  "type": "cards",
+  "reference": {
+   "tag": "P66_DIAGONAL_OPTIONS",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "items": [
+   {
+    "title": "Option A",
+    "text": "fixed-price 12-week outcome"
+   },
+   {
+    "title": "Option B",
+    "text": "time-and-materials pod"
+   },
+   {
+    "title": "Option C",
+    "text": "build plus Cloud Evolve"
+   }
+  ],
+  "points": [],
+  "design": "P66_DIAGONAL_OPTIONS"
+ }
+}

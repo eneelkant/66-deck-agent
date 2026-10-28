@@ -100,12 +100,16 @@ test("structure: sections merged or split to the planned number; a workstream di
   assert.equal(ws[1].lockTag, "P66_SECTION_DARK");
 });
 
-test("agenda: up to 7 items spiral; more -> two columns (topics cut to fit) or table of contents up to 11; continued slide when too long", () => {
+// V.1_66: the spiral holds up to 6 sections (the user's rule, every deck type); 7 or more use the list designs
+test("agenda: up to 6 items spiral; more -> two columns (topics cut to fit) or table of contents up to 11; continued slide when too long", () => {
   const g = load();
   const rows = (n, pts) => Array.from({ length: n }, (_, i) => ({ title: "Topic " + (i + 1), points: Array.from({ length: pts }, (_, k) => "Point " + k) }));
   let a = { type: "agenda", title: "Agenda" };
-  assert.equal(g.proposalAgenda_(a, rows(7, 0), { agendaWide: "P66_AGENDA_TWO_COLUMNS" }), null);
+  assert.equal(g.proposalAgenda_(a, rows(6, 0), { agendaWide: "P66_AGENDA_TWO_COLUMNS" }), null);
   assert.equal(a.lockTag, "P66_AGENDA_SPIRAL");
+  a = { type: "agenda", title: "Agenda" };
+  g.proposalAgenda_(a, rows(7, 0), { agendaWide: "P66_AGENDA_TWO_COLUMNS" });
+  assert.notEqual(a.lockTag, "P66_AGENDA_SPIRAL");
   a = { type: "agenda", title: "Agenda" };
   g.proposalAgenda_(a, rows(9, 5), { agendaWide: "P66_AGENDA_TWO_COLUMNS" });
   assert.equal(a.lockTag, "P66_AGENDA_TWO_COLUMNS");

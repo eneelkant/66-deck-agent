@@ -1,4 +1,4 @@
-# 66° Deck Agent: the deck checklist (V.1_65)
+# 66° Deck Agent: the deck checklist (V.1_66)
 
 One list for every deck type. It is both the review list for people and the list of what the add-on checks by itself.
 **Auto** means the add-on checks it on every slide before the slide is drawn, draws the slide again with a better
@@ -29,12 +29,23 @@ design when the check fails, and writes the result to the slide log (`deck_agent
 | Nothing said twice: a caption, takeaway or callout never repeats the lead | Auto (shape check); Test v65 |
 | Designs whose look names a topic (tiers, pyramid, curve) only for that topic | Auto; Test v65 |
 | Thin lists get more points and short texts are lengthened before drawing | Auto (fit step); Test v65 |
+| Every slide's title belongs to its content (a long deck's parts are matched to the outline by content, not position) | Auto; Test v66 |
+| A slide Gemini did not write is written again, or left out - never an empty slide | Auto; Test v66 |
+| Content written in a shape the deck cannot draw (a Gantt in a General deck) is shown as a table | Auto (shape check); Test v66 |
+| Figures are KPI tiles, never inside a heading ("205% · ...") or buried in a sentence on a KPI slide | Auto (shape check); Test v66 |
+| The speaker notes never give other figures than the slide | Auto (shape check); Test v66 |
+| A why-66degrees slide states facts, not targets | Auto (shape check); Test v66 |
+| A levels slide (L1-L3) shows the levels only; a stack of layers keeps every point, in order | Auto; Test v66 |
+| Real icons, never "!" or "i" typed into a dot | Test v66 |
+| Every text starts with a capital; option texts under six words are written out in full | Auto (shape check, fill step); Test v66 |
+| A box ends a little under its text, never more than about a quarter of the content area above the footer | Auto; Test v66 |
 
 ## Every deck: the agenda
 
 | Rule | How it is kept |
 |---|---|
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
+| Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
 
 ## Proposal and Solution decks
 

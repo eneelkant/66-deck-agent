@@ -1,0 +1,54 @@
+{
+ "reported": "deck 38 (V.1_65): Support model with L1, L2, and L3 levels",
+ "title": "Support model with L1, L2, and L3 levels",
+ "spec": {
+  "type": "diagram",
+  "design": "P66_CARDS_2X2",
+  "title": "Support model with L1, L2, and L3 levels",
+  "lead": "A structured three-tier escalation model with follow-the-sun coverage keeps pipelines running.",
+  "items": [
+   {
+    "title": "L1: automated alerts and triage",
+    "text": "Cloud Monitoring alerts trigger 24/7 ticket routing, automated health checks, and initial severity classification across all data pipelines.",
+    "icon": "cloud-signal"
+   },
+   {
+    "title": "L2: pipeline recovery and access",
+    "text": "Operations engineers restart failed Dataflow jobs, resolve dead-letter queues, and administer routine BigQuery IAM role requests.",
+    "icon": "gear-database"
+   },
+   {
+    "title": "L3: deep architecture and tuning",
+    "text": "Senior cloud architects resolve complex BigQuery slot contention, refactor LookML models, and adjust Dataplex governance policies.",
+    "icon": "brain-circuit"
+   },
+   {
+    "title": "Immediate critical conference bridge",
+    "text": "Expert engineers open a live conference bridge immediately for critical incidents, using follow-the-sun handoffs until resolved.",
+    "icon": "users-cycle"
+   }
+  ],
+  "callout": {
+   "text": "Follow-the-sun engineering coverage ensures every production incident is worked continuously day or night."
+  },
+  "notes": "Our post-deployment support model separates incidents into L1 automated alerts and triage, L2 pipeline recovery and access administration, and L3 deep architecture and query tuning. All support requests are worked by expert engineers day or night using a follow-the-sun method, with an immediate conference bridge opened for critical issues.",
+  "fact_tags": [
+   "66D_FACT_COMPANY_039"
+  ],
+  "center": "Support model",
+  "resolvedIcons": {},
+  "reference": {
+   "tag": "P66_PYRAMID",
+   "slideNumber": null,
+   "subtype": null,
+   "layoutPattern": "",
+   "uiComponents": [],
+   "background": "light",
+   "cardStyle": "panel",
+   "score": 60,
+   "fallback": false
+  },
+  "deckLibrary": "proposal",
+  "cobrand": true
+ }
+}

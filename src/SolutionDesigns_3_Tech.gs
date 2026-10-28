@@ -303,7 +303,7 @@
       return { label: clean(l.label || l.title || l.name), items: K.arr(l.items || l.parts || l.points, 7).map(function (x) { return clean(typeof x === 'object' ? (x && (x.title || x.text)) : x); }).filter(real) };
     }).filter(function (l) { return l.label && l.items.length; });
     var n = layers.length;
-    if (n < 3 || n > 6 || layers.some(function (l) { return l.items.length < 2 || l.items.length > 6; })) return null;
+    if (n < 3 || n > 6 || layers.some(function (l) { return l.items.length < 1 || l.items.length > 6; })) return null;
     var els = [];
     var top = K.header(els, s) + 2;
     var lw = 150, gap = 8, bw = CW - lw - 12, avail = BOTTOM - top;
@@ -313,7 +313,29 @@
     var y0 = top + (avail - (h * n + gap * (n - 1))) / 2;
     // V.1_55 (deck 26 slide 23 was blank): every box is measured before anything is drawn
     var fits = layers.every(function (l) { var m = l.items.length, iw0 = (bw - 16 - 6 * (m - 1)) / m; return l.items.every(function (t) { return th(t, iw0 - 8, 9, 400) <= h - 14; }); });
-    if (!fits) return null;
+    // V.1_66 (deck 38 Solution slide 24: 4 layers x 4 sentences fell back to two bullet columns, half the points lost and
+    // the layers out of order): sentences instead of part names -> each layer is a band of bulleted sentences in two columns
+    if (!fits) {
+      var ch = (BOTTOM - top - gap * (n - 1)) / n, cw2 = (bw - 30) / 2;
+      var colsOf = function (l, k) { var half = Math.ceil(l.items.length / 2); return k ? l.items.slice(half) : l.items.slice(0, half); };
+      var sz = 9, needH = function (size) {
+        return Math.max.apply(null, layers.map(function (l) { return Math.max(ptsH(colsOf(l, 0), cw2, size, 3), ptsH(colsOf(l, 1), cw2, size, 3)) + 12; }));
+      };
+      while (sz > 8 && needH(sz) > ch) sz -= 0.5;
+      if (needH(sz) > ch) return null;
+      var bh = Math.min(ch, needH(sz) + 8), yb = top + (BOTTOM - top - (bh * n + gap * (n - 1))) / 2;
+      layers.forEach(function (l, i) {
+        var y = yb + i * (bh + gap);
+        K.rect(els, CX, y, bw, bh, i % 2 ? T.bgLight : '#E9EEF3', { color: LINE, width: 0.5 });
+        [0, 1].forEach(function (k) {
+          var pts = colsOf(l, k);
+          if (pts.length) K.bulletList(els, CX + 10 + k * (cw2 + 10), y + 6, cw2, bh - 12, pts, { max: sz, min: sz, gap: 3, color: T.ink });
+        });
+        K.rect(els, CX + bw + 12, y, lw, bh, T.blue);
+        K.text(els, CX + bw + 20, y, lw - 16, bh, l.label, { weight: 500, max: 10, min: 9, maxLines: 3, align: 'center', valign: 'middle', color: T.white });
+      });
+      return { bg: T.white, els: els, noBalance: true };
+    }
     layers.forEach(function (l, i) {
       var y = y0 + i * (h + gap), m = l.items.length, ig = 6;
       K.rect(els, CX, y, bw, h, i % 2 ? T.bgLight : '#E9EEF3', { color: LINE, width: 0.5 });
@@ -471,8 +493,10 @@
       var h = hs[i] * k, warn = !/low|minor|info|grey|gray|ok/.test(r.status);
       K.roundrect(els, CX, y, CW, h, T.white, { color: LINE, width: 0.75 });
       if (hasStatus) {
-        K.ellipse(els, CX + 12, y + h / 2 - 8, 16, 16, warn ? '#F2A33A' : '#9AA6B2');
-        K.text(els, CX + 12, y + h / 2 - 8, 16, 16, warn ? '!' : 'i', { weight: 500, max: 9, min: 9, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
+        // V.1_66 (deck 38 Solution slide 28: "!" and "i" typed into small dots looked broken): the row's own icon in a
+        // circle ringed in its status colour (amber = needs action, grey = minor)
+        K.ring(els, CX + 8, y + h / 2 - 12, 24, warn ? '#FDF0DC' : '#EEF1F4', warn ? '#F2A33A' : '#9AA6B2', 1.5);
+        K.icon(els, (r.icon || r.material) ? { icon: r.icon, material: r.material } : { icon: (r.title + ' ' + r.fix).toLowerCase().slice(0, 160), title: r.title }, CX + 13, y + h / 2 - 7, 14, false);
       } else {
         K.ellipse(els, CX + 8, y + h / 2 - 12, 24, 24, TINT);
         K.icon(els, (r.icon || r.material) ? { icon: r.icon, material: r.material } : { icon: (r.title + ' ' + r.fix).toLowerCase().slice(0, 160), title: r.title }, CX + 13, y + h / 2 - 7, 14, false);

@@ -91,9 +91,10 @@ test("designs: section divider shows its description, 4 dark-band cards are 2 x 
   assert.ok(R.caseH < 286, "case study boxes are not stretched to the bottom");
 });
 
-test("long decks: dividers per section, numbered agenda with slide ranges", () => {
+// V.1_66: the agenda rows no longer show "slides 3–9" ranges (deck 38 General slide 2)
+test("long decks: dividers per section, numbered agenda (no slide ranges)", () => {
   const code = read("src/Code.gs");
   assert.match(code, /withDividers\.push\(\{ type: 'section'/);
-  assert.match(code, /'slides ' \+ first \+ '–'/);
+  assert.doesNotMatch(code, /'slides ' \+ first \+ '–'/);
   assert.match(code, /referenceForTag_\(ctx\.lib, '66D_LAYOUT_AGENDA_002'\)/);
 });

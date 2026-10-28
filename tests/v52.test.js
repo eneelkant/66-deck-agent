@@ -62,7 +62,7 @@ function loadAll(gemini, seed, clock) {
 const ev = (sb, code) => vm.runInContext(code, sb);
 
 const SAMPLES = JSON.parse(read("tests/fixtures/solution-samples.json"));
-const SHARED = ["P66_SECTION_DARK", "P66_SECTION_LIGHT"];
+const SHARED = ["P66_SECTION_DARK", "P66_SECTION_LIGHT", "P66_AGENDA_SPIRAL"];   // V.1_66: the spiral agenda (up to 6 sections) in every deck type
 
 // A Solution Deck run with Gemini mocked: the outline follows the asked sections; each slide takes the first design
 // offered for it, filled from the fixture sample of that design
