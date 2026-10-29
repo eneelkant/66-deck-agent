@@ -651,7 +651,8 @@ function proposalAlternatives_(sp) {
   }
   // a step written as fields (goal, input, action...) keeps every field as its text: "Goal: ... · Action: ..."
   if (items.length >= 2 && items.every(function (it) { return it && typeof it === 'object' && !String(it.text || '').trim() && !(Array.isArray(it.points) && it.points.length); })) {
-    const SKIPK = { title: 1, label: 1, name: 1, icon: 1, material: 1, value: 1, tag: 1, number: 1, step: 1, points: 0 };
+    // (V.1_71, deck 42 Solution 23: "· Status: Amber" written into the text): a status, colour or icon is never text
+    const SKIPK = { title: 1, label: 1, name: 1, icon: 1, material: 1, value: 1, tag: 1, number: 1, step: 1, points: 0, status: 1, rag: 1, color: 1, colour: 1, tone: 1, highlight: 1 };
     const withText = items.map(function (it) {
       const parts = [];
       Object.keys(it).forEach(function (k) {

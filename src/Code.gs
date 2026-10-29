@@ -2755,7 +2755,10 @@ function agendaNotes_(sp) {
 // V.1_70: the figure check of Brief.gs on a set of slides (never stops a deck)
 function deckFigureCheck_(slides, ctx, sources) {
   if (typeof guardFigures_ !== 'function') return 0;
-  try { const n = guardFigures_(slides, ctx, sources); sameMeasureFigures_(slides, ctx); return n; }
+  try {
+    if (typeof canonicalCredentials_ === 'function') canonicalCredentials_(slides, ctx);   // V.1_71: one figure per 66degrees credential
+    const n = guardFigures_(slides, ctx, sources); sameMeasureFigures_(slides, ctx); return n;
+  }
   catch (e) { if (ctx && ctx.log) ctx.log.push('Figure check skipped: ' + e.message); return 0; }
 }
 function finalizeNotes_(plan, sources, ctx) {
@@ -4641,7 +4644,8 @@ function fillThinSlides_(plan, ctx, opts) {
     // V.1_70 (deck 41 Solution 5, General 5: two of three KPI tiles with a figure and no text): a tile with its figure
     // and no text gets one sentence on how the target is reached or measured (no new figures)
     // (only once every tile has its figure and the slide has its tiles: topping up and target values come first)
-    if (t === 'stats' && items.length >= 2 && (items.length >= 3 || textsOnly || solutionFill) && items.every(function (it) { return it && typeof it === 'object' && /\d/.test(String(it.value || '')); }) &&
+    // (V.1_71, deck 42 Proposal 19: figure tiles on a cards slide had no text): any slide whose items all carry figures
+    if ((t === 'stats' || items.length >= 2) && items.length >= 2 && (items.length >= 3 || textsOnly || solutionFill || t !== 'stats') && items.every(function (it) { return it && typeof it === 'object' && /\d/.test(String(it.value || '')); }) &&
         items.some(function (it) { return String(it.text || '').trim().split(/\s+/).filter(Boolean).length < 6; })) {
       thin.push({ i: i, kind: 'kpitexts', want: items.length }); return;
     }
@@ -5333,7 +5337,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_70';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_71';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5441,6 +5445,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
     'Each section has a "description": one line (max 70 characters) saying what the section shows, e.g. "Why manual FP&A can no longer keep up".',
     'Keep every slide in the section it belongs to (a data platform slide never sits in the results section).',
     topics.length ? 'The request lists these topics in this order - the sections follow this order: ' + topics.join('; ') + '.' : '',
+    'Section names are topics of the request (e.g. "Current state and target architecture"), never a target or a figure (never "99.9% availability" or "Query throughput acceleration"). Each topic of the request gets exactly one slide.',   // V.1_71
     'RULES:',
     '- Every slide has its own topic: never two slides about the same thing in different words, never one topic split into "part 1/part 2".',
     '- Slide types: cards, process, timeline, stats, chart, comparison, diagram, table, case_study, bullets, statement, team.',
@@ -5618,7 +5623,10 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
     const fam = topicFamily_({ title: m }, userPrompt);
     const std = OUTLINE_BACKLOG_.filter(function (b) { return fam && topicFamily_(b, userPrompt) === fam; })[0];
     const entry = solutionOutline && typeof solutionTopicEntry_ === 'function' && !(std && RISK_TITLE_RE_.test(std.title)) ? solutionTopicEntry_(m)   // V.1_54: its own slide, of the type its words call for
-      : std ? Object.assign({}, std) : { type: 'cards', title: sentenceCase_(m.charAt(0).toUpperCase() + m.slice(1), 1), brief: 'The requested topic: ' + m };
+      : std ? Object.assign({}, std) : { type: 'cards', title: richTopicTitle_(m), brief: 'The requested topic: ' + m };
+    // V.1_71: a requested topic the deck already shows once (in other words) is not added again
+    const ofE = onceTopicOfEntry_(entry);
+    if (ofE && flat().some(function (o) { return o && o.type !== 'section' && onceTopicOfEntry_(o) === ofE; })) return;
     if (seen[keyOf(entry.title)]) return;
     seen[keyOf(entry.title)] = true;
     if (flat().length < body) { placeInSection_(secs, entry, holes); return; }
@@ -5655,7 +5663,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
     secs.forEach(function (sc) {
       sc.list = sc.list.filter(function (o) {
         if (!o || o.type === 'section') return true;
-        const f = onceTopicOf_(o.title);
+        const f = onceTopicOfEntry_(o);
         if (!f) return true;
         if (onceSeen[f]) { ctx.log.push('Outline: "' + String(o.title).slice(0, 60) + '" left out (the deck already has "' + String(onceSeen[f]).slice(0, 50) + '").'); return false; }
         onceSeen[f] = o.title;
@@ -5725,6 +5733,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
     flat().forEach(function (o) {
       if (!o || o.type === 'section') return;
       onceTopicsOf_(o.title).forEach(function (f) { have[f] = true; });
+      const fe = onceTopicOfEntry_(o); if (fe) have[fe] = true;                // V.1_71: the brief counts too
       if (/\bnext steps?\b|getting started|first step|kick-?off|the ask\b|decision needed|workshop|launch the engagement/i.test(String(o.title || ''))) have.next = true;   // a next step in other words
     });
     const reqNames = requestedTopics_(userPrompt);
@@ -5762,8 +5771,35 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
         placeInSection_(secs, { type: 'cards', title: title, brief: 'How ' + pool[k] + ' works for this client, step by step' }, []);
       }
     }
+    // V.1_71: the last check - a topic shown once is never there twice, whatever step added it; a place freed here is
+    // filled from the backlog (never with a once-only topic the deck has) or with a requested topic's second angle
+    const onceLast = {};
+    secs.forEach(function (sc) {
+      sc.list = sc.list.filter(function (o) {
+        if (!o || o.type === 'section') return true;
+        const f = onceTopicOfEntry_(o);
+        if (!f) return true;
+        if (onceLast[f]) { ctx.log.push('Outline: "' + String(o.title).slice(0, 60) + '" left out (the deck already has "' + String(onceLast[f]).slice(0, 50) + '").'); return false; }
+        onceLast[f] = o.title;
+        return true;
+      });
+    });
+    if (flat().length < body) backlogFill_(secs, body, seen, keyOf, flat, userPrompt, [], backlog);
+    if (flat().length < body) {
+      const pool2 = reqNames.filter(function (t) { return !onceTopicOf_(t); });
+      for (let k = 0; flat().length < body && k < pool2.length * 2; k++) {
+        const t2 = pool2[k % pool2.length];
+        const title2 = sentenceCase_(String(t2).charAt(0).toUpperCase() + String(t2).slice(1) + (k < pool2.length ? ' in practice' : ': decisions and trade-offs'), 1);
+        if (seen[keyOf(title2)]) continue;
+        seen[keyOf(title2)] = true;
+        placeInSection_(secs, { type: 'cards', title: title2, brief: 'How ' + t2 + ' works for this client' }, []);
+      }
+    }
     if (flat().length !== body) ctx.log.push('Outline: ' + flat().length + ' body slides (asked for ' + body + ').');
   }
+  // V.1_71 (deck 42 General: sections "Pipeline availability", "Query throughput", "Infrastructure cost"): a section is
+  // named after the topics of its slides, never after a target of the request
+  renameTargetSections_(secs, ctx);
   secs.forEach(function (sc) { sc.count = sc.list.length; });
   const slides = flat();
   if (slides.length < body) ctx.log.push('The outline has ' + slides.length + ' body slides (asked for ' + body + ').');
@@ -6069,6 +6105,9 @@ function backlogFill_(secs, body, seen, keyOf, flat, prompt, holes, backlog) {
   const fresh = function (strict) {
     return (backlog || OUTLINE_BACKLOG_).filter(function (b) {
       if (seen[keyOf(b.title)] || flat().some(function (o) { return keyOf(o.title) === keyOf(b.title); })) return false;
+      // V.1_71: a topic the deck shows once is never added a second time from the backlog
+      const of = onceTopicOfEntry_(b);
+      if (of && flat().some(function (o) { return o && o.type !== 'section' && onceTopicOfEntry_(o) === of; })) return false;
       return !strict || !flat().some(function (o) { return fam(o) && fam(o) === fam(b); });
     });
   };
@@ -6212,12 +6251,30 @@ function syncDividerPoints_(slides, part, all, st) {
 /* V.1_68 — the deck check for repeated topics (deck 40 Proposal: two "Scope: what is in and what is out" slides, 13 and
    23). A topic a deck shows once (scope, RACI, KPIs, pricing, risks, support model, team, why 66degrees, next steps) keeps
    its first slide; a later slide of the same topic is left out of the outline (planOutline_), and its place filled. */
+// V.1_71 (deck 42: "Risks" and "Key risks and how we mitigate them", three "why 66degrees" slides, "Success KPIs" and
+// "Performance SLAs", "Sizing and configuration" and "Configuration and sizing"): one list of the topics a deck shows
+// once, used by every outline step (the check that adds a missing topic and the check that removes a repeat)
 const ONCE_TOPICS_ = [
-  ['scope', /\b(scope|in and out|what is in)\b/i], ['raci', /\braci\b|responsibility matrix/i], ['kpi', /\bkpis?\b|success (metrics|measures)|target (metrics|figures)/i],
-  ['pricing', /\bpricing\b|commercial (options|models)|investment options|engagement options/i], ['risks', /\brisks?\b.*\bmitigat|\bmitigat.*\brisks?\b|risk register/i],
-  ['support', /support model|\bL1\b.*\bL3\b|managed support|support tiers/i], ['team', /team structure|joint team|delivery team|operating structure/i],
-  ['why66', /why 66\s?degrees|why us\b/i], ['next', /next steps?/i], ['sizing', /\bsizing\b/i], ['timeline', /\b\d+[- ]week (timeline|plan|roadmap)|implementation timeline|delivery timeline/i]
+  ['scope', /\b(scope|in and out|what is in)\b/i], ['raci', /\braci\b|responsibility matrix/i],
+  ['pricing', /\bpricing\b|commercial (options|models|structures?)|investment options|engagement (options|models)/i],
+  ['risks', /\brisks\b|\bkey risks?\b|^risks?\b|risk (register|management|mitigation)|mitigation (plan|controls|strategies)/i],
+  ['support', /support model|\bL1\b.*\bL3\b|managed support|support tiers|follow-the-sun support/i], ['team', /team structure|joint team|delivery team|operating structure|team and governance/i],
+  ['why66', /why 66\s?degrees|why us\b|partnership differentiators|engineering scale and expertise|our (credentials|expertise)|proven (delivery|engineering|expertise)/i],
+  ['next', /next steps?/i], ['sizing', /\bsizing\b|configuration (and|&) (sizing|specifications)/i],
+  ['timeline', /\b\d+[- ]week (timeline|plan|roadmap)|implementation timeline|delivery timeline/i],
+  // (last: "Support model and SLA tiers" is the support slide, "Risks to the KPIs" the risk slide)
+  ['kpi', /\bkpis?\b|success (metrics|measures|criteria)|target (metrics|figures|kpis)|\bslas?\b|\bslos?\b|performance targets|measur(e|ing) success|key performance/i]
 ];
+// the once-only topic of an outline entry: its title first, its brief when the title says nothing (a KPI slide titled
+// "Measuring what matters" with the brief "target KPIs")
+function onceTopicOfEntry_(o) {
+  if (!o) return '';
+  const byTitle = onceTopicOf_(o.title);
+  if (byTitle) return byTitle;
+  const t = String(o.type || '').toLowerCase();
+  if (t === 'stats' && /\b(targets?|kpis?|slas?|measur)/i.test(String(o.title || '') + ' ' + String(o.brief || ''))) return 'kpi';
+  return '';
+}
 // every once-only topic a title (or the request) names, in the order of the list
 function onceTopicsOf_(title) {
   const t = String(title || '');
@@ -6246,6 +6303,44 @@ const ONCE_TOPIC_ENTRY_ = {
 function onceTopicOf_(title) {
   for (let i = 0; i < ONCE_TOPICS_.length; i++) if (ONCE_TOPICS_[i][1].test(String(title || ''))) return ONCE_TOPICS_[i][0];
   return '';
+}
+// V.1_71 (deck 42 Solution: slides titled "Risks", "Security", "Monitoring", "Deployment", "Runbooks"): a slide added for a
+// requested topic gets a real title, never only the topic's name
+const RICH_TOPIC_TITLES_ = [
+  [/^risks?$/i, 'Key risks and how we mitigate them'], [/^security$/i, 'Security controls and compliance'], [/^monitoring$/i, 'Monitoring and alerting across the platform'],
+  [/^deployment$/i, 'How the solution is deployed'], [/^runbooks?$/i, 'Operational runbooks for the platform'], [/^(sizing|configuration)( and (sizing|configuration))?$/i, 'Configuration and sizing'],
+  [/^scope$/i, 'Scope: what is in and what is out'], [/^next steps?$/i, 'Next steps'], [/^kpis?$/i, 'Success KPIs and target figures'], [/^pricing( options)?$/i, 'Pricing options'],
+  [/^raci$/i, 'RACI matrix across delivery workstreams'], [/^support( model)?$/i, 'Support model'], [/^team( structure)?$/i, 'Joint team structure'], [/^timeline$/i, 'Implementation timeline'],
+  [/^testing$/i, 'Testing and validation before go-live'], [/^governance$/i, 'Governance and decision rights'], [/^integration$/i, 'Integration with existing systems'],
+  [/^architecture$/i, 'Target architecture and its components'], [/^current state$/i, 'Current state and its limits'], [/^migration$/i, 'Migration approach and cutover']
+];
+function richTopicTitle_(topic) {
+  const t = String(topic || '').replace(/\s*\([^)]*\)/g, '').trim();
+  for (let i = 0; i < RICH_TOPIC_TITLES_.length; i++) if (RICH_TOPIC_TITLES_[i][0].test(t)) return RICH_TOPIC_TITLES_[i][1];
+  const T = t.charAt(0).toUpperCase() + t.slice(1);
+  // (a two-word topic is already a title: "Reference architecture", "Support priorities"; a lone word gets its angle)
+  return t.split(/\s+/).length <= 1 ? sentenceCase_(T + ': approach and key decisions', 1) : sentenceCase_(T, 1);
+}
+// A section named after a target ("Query throughput acceleration" for "3x faster query throughput") takes the topics of
+// its slides instead (the requested topics they cover, else its first two slide subjects)
+function renameTargetSections_(secs, ctx) {
+  const targets = typeof briefTargets_ === 'function' ? briefTargets_(ctx) : [];
+  if (!targets.length || !Array.isArray(secs)) return 0;
+  const targetLike = function (x) { return /\d\s?(%|x\b)/i.test(String(x)) || targets.some(function (f) { return sharedWords_(String(x), f.label) >= Math.min(2, String(f.label).split(/\s+/).length); }); };
+  const req = requestedTopics_((ctx && ctx.userPrompt) || '').filter(function (t) { return !targetLike(t); });
+  let n = 0;
+  secs.forEach(function (sc) {
+    const title = String(sc.title || '');
+    const isTarget = /\d\s?(%|x\b)/i.test(title) || targets.some(function (f) { return sharedWords_(title, f.label) >= Math.min(2, String(f.label).split(/\s+/).length); });
+    if (!isTarget) return;
+    const own = sc.list.filter(function (o) { return o && o.type !== 'section'; });
+    const covered = req.filter(function (t) { return slideForTopic_(own.map(function (o) { return { type: o.type, title: o.title, lead: o.brief }; }), t) !== -1; });
+    const names = (covered.length ? covered.slice(0, 2) : own.slice(0, 2).map(function (o) { return shortTitle_(o.title); })).filter(function (x) { return !targetLike(x); });
+    if (!names.length) return;
+    const nt = sentenceCase_(names.map(function (x, i) { return i ? String(x).replace(/^./, function (c) { return c.toLowerCase(); }) : String(x).charAt(0).toUpperCase() + String(x).slice(1); }).join(' and '), 1);
+    if (nt && nt !== title) { if (ctx && ctx.log) ctx.log.push('Outline: section "' + title + '" is named after its topics: "' + nt + '".'); sc.title = nt; n++; }
+  });
+  return n;
 }
 function startLongDeck_(ctx, target, p, started) {
   progressStage_(ctx, 'write', 'active', 'Gemini is planning the outline of ' + p.n + ' slides');

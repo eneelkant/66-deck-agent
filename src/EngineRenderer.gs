@@ -408,7 +408,9 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
     }
   });
 
-  if (spec.notes) setSpeakerNotesSafe_(slide, spec.notes);
+  // V.1_71: content the design could not show is added to the speaker notes
+  const notesAll = String(spec.notes || '') + String(out.notesExtra || '');
+  if (notesAll) setSpeakerNotesSafe_(slide, notesAll);
   // V.1_68: the checker on the real slide - what Google Slides holds after drawing, not the plan of it
   try {
     const real = checkDrawnSlide_(slide, pageW, pageH, ctx);

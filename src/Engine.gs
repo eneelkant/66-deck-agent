@@ -170,6 +170,14 @@ var ENGINE = (function () {
     // Brand Guidelines: Regular for body, Medium for titles, headings, labels and numbers; never SemiBold or Bold
     if ((spec.weight || 400) > 500) spec = Object.assign({}, spec, { weight: 500 });
     var f = fit(str, w, h, spec);
+    // V.1_71 (deck 42 Solution 22: "Maintenan / ce", "Configurati / on"): a word never breaks - when the longest word is
+    // wider than the box, the text is set smaller until it fits (never under 6 pt)
+    var longestW = 0;
+    str.split(/\s+/).forEach(function (wd) { longestW = Math.max(longestW, textWidth(wd, spec.font || 'sans', spec.weight || 400, f.size)); });
+    if (longestW > w - 1 && f.size > 6) {
+      var ns = Math.max(6, Math.floor(f.size * (w - 2) / longestW * 10) / 10);
+      f = fit(str, w, h, Object.assign({}, spec, { max: ns, min: Math.min(ns, spec.min || ns) }));
+    }
     if (AUDIT) auditText(raw, str, w, h, spec, f);
     var fixedBox = spec.valign && spec.valign !== 'top';
     var el = {
@@ -4041,6 +4049,26 @@ var ENGINE = (function () {
     for (var i = 0; i < pref.length; i++) if (V[pref[i]] && inLib_(pref[i], lib)) return { tag: pref[i] };
     return null;
   }
+  // V.1_71: design names (P66_..., S66_..., 66D_..., ENGINE_...) and sentences about the slide's own design are taken out
+  // of every text of a slide; a list point that was only such a sentence goes
+  var META_RE_ = /\b(?:P66|S66|66D|ENGINE)_[A-Z0-9_]{3,}\b|\b(?:this|the) (?:slide|overview|executive overview|layout|design)\s+(?:uses|is presented in|is shown in|follows)\b|\bpresented in the [A-Z0-9_ ]+ design\b/i;
+  var META_SKIP_ = { reference: 1, design: 1, lockTag: 1, tag: 1, agendaWide: 1, fact_tags: 1, resolvedIcons: 1, icon: 1, material: 1, deckLibrary: 1, drawnWith: 1, shapeFixes: 1 };
+  function stripMetaText_(spec) {
+    if (!spec || typeof spec !== 'object' || !META_RE_.test(JSON.stringify(Object.keys(spec).reduce(function (o, k) { if (!META_SKIP_[k]) o[k] = spec[k]; return o; }, {})))) return spec;
+    var cleanStr = function (x) {
+      if (!META_RE_.test(x)) return x;
+      return (x.match(/[^.!?]+[.!?]*(\s+|$)/g) || [x]).filter(function (sn) { return !META_RE_.test(sn); }).join('').trim();
+    };
+    var walk = function (v) {
+      if (typeof v === 'string') return cleanStr(v);
+      if (Array.isArray(v)) return v.map(walk).filter(function (x) { return !(typeof x === 'string' && !x) && !(x && typeof x === 'object' && !Array.isArray(x) && Object.keys(x).length && Object.keys(x).every(function (k) { return x[k] === '' || x[k] == null; })); });
+      if (v && typeof v === 'object') { var o = {}; Object.keys(v).forEach(function (k) { o[k] = META_SKIP_[k] ? v[k] : walk(v[k]); }); return o; }
+      return v;
+    };
+    var out = {};
+    Object.keys(spec).forEach(function (k) { out[k] = META_SKIP_[k] ? spec[k] : walk(spec[k]); });
+    return out;
+  }
   function shapeSpec_(s0, type) {
     var s = s0, t = type, lib = libOf_(s), log = [];
     // 0. the agenda: up to 6 sections -> the spiral (every deck type); 7 or more -> the deck's list design
@@ -4051,6 +4079,39 @@ var ENGINE = (function () {
       return { s: log.length ? Object.assign(s, { shapeFixes: log }) : s, type: t };
     }
     var norm = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+    // V.1_71 (deck 42 Proposal 4: "This executive overview uses P66_EXEC_TWO_COL to frame ..." drawn as a row): the names
+    // of designs and sentences about the slide itself never reach the slide (or its notes)
+    var metaFree = stripMetaText_(s);
+    if (metaFree !== s) { s = metaFree; log.push('no-design-names'); }
+    // V.1_71 (deck 42 Proposal 4: the speaker notes drawn as the slide's rows instead of its four cards): points that only
+    // say the notes again go when the slide has its own items
+    if (Array.isArray(s.points) && s.points.length && Array.isArray(s.items) && s.items.length >= 2 && typeof s.notes === 'string' && s.notes) {
+      var nn = norm(s.notes);
+      var ptxt = function (p) { return norm(typeof p === 'string' ? p : (p && (p.text || p.title)) || ''); };
+      if (s.points.every(function (p) { var k = ptxt(p); return !k || (k.length > 20 && nn.indexOf(k.slice(0, Math.min(60, k.length))) !== -1); })) {
+        s = Object.assign({}, s, { points: [] }); log.push('notes-not-points');
+      }
+    }
+    // V.1_71 (deck 42 Solution 20: "Industry study: silent quorum loss prevented" over a line "94%"): an item whose only
+    // content is a figure is a figure tile (value + label); a slide of such items is a KPI slide
+    if (Array.isArray(s.items) && s.items.length >= 2 && t !== 'stats') {
+      var FIGONLY = /^\s*[<>~≈]?\s*[+\-−]?\d[\d.,]*\s?(%|x|×|pp|ms|s|sec|min|mins|minutes|h|hrs|hours|days)?(\s?(–|-|to)\s?\d[\d.,]*\s?(%|x|ms|s|min|minutes|h|hours|days)?)?\s*$/i;
+      var figOf = function (it) {
+        if (!it || typeof it !== 'object' || String(it.value || '').trim()) return '';
+        var pts = Array.isArray(it.points) ? it.points.filter(Boolean) : [];
+        var only = pts.length === 1 && typeof pts[0] === 'string' ? pts[0] : '';   // (a figure written as an item's only point)
+        return FIGONLY.test(String(only)) ? String(only).trim() : '';
+      };
+      var figItems = s.items.filter(figOf);
+      if (figItems.length >= 2 && figItems.length >= s.items.length / 2) {
+        var rest = s.items.filter(function (it) { return figItems.indexOf(it) === -1; });
+        var tiles = figItems.map(function (it) { return { value: figOf(it), label: String(it.title || it.label || '').replace(/^\s*(industry (study|benchmark|figure)|benchmark|study)\s*:\s*/i, '').replace(/^./, function (c) { return c.toUpperCase(); }), text: '' }; });
+        var restTxt = rest.map(function (it) { return [it.title, (Array.isArray(it.points) ? it.points.join('; ') : it.text) || ''].filter(Boolean).join(': '); }).join(' ').replace(/\s+·\s+/g, ', ');
+        s = Object.assign({}, s, { type: 'stats', items: tiles, points: [] });
+        if (restTxt && !s.takeaway) s.takeaway = restTxt.split(/(?<=[.!?])\s/)[0].slice(0, 200);
+        delete s.design; s.reference = null; t = 'stats'; log.push('figure-items-as-tiles');
+      }
+    }
     var items = Array.isArray(s.items) ? s.items.filter(function (it) { return it && typeof it === 'object'; }) : [];
     // 1. a Gantt (workstreams x periods, or lanes of bars) where no Gantt design can draw it -> a table of workstreams x phases
     var ws = Array.isArray(s.workstreams) ? s.workstreams.filter(function (w) { return w && Array.isArray(w.cells) && w.cells.length; }) : [];
@@ -4271,12 +4332,24 @@ var ENGINE = (function () {
       }
     }
     // 14. "Field: value · Field: value" written as a text reads as sentences ("Storage: pd-extreme · Purpose: ...")
+    // V.1_71 (deck 42 Solution 23 and 26: "... delays. Amber.", "Status: Amber"): a status is a colour, never a word in
+    // the text - a "Status: ..." part and a status word left at the end go; (Proposal 8: "Siloed extracts · Live queries ·
+    // Real-time visibility") phrases joined with "·" read as sentences
+    var STATUS_RE = /^(status|rag|colou?r|state|health)\s*:/i;
+    var noStatus = function (x) {
+      return String(x || '').replace(/\s*[·|]?\s*\b(status|rag)\s*:\s*(amber|green|red|grey|gray|yellow|ok|at risk|on track)\.?\s*$/i, '')
+        .replace(/([.!?])\s+(amber|green|red|grey|gray)\.?\s*$/i, '$1').trim();
+    };
     var fieldText = function (x) {
-      x = String(x || '');
+      x = noStatus(x);
       if (x.indexOf(' · ') === -1) return x;
-      var parts = x.split(/\s+·\s+/);
-      if (parts.length < 2 || !parts.every(function (p) { return /^[A-Z][\w /&-]{1,24}:\s+\S/.test(p); })) return x;
-      return parts.map(function (p) { p = capFirst_(p.replace(/^[A-Z][\w /&-]{1,24}:\s+/, '').trim()); return /[.!?]$/.test(p) ? p : p + '.'; }).join(' ');
+      var parts = x.split(/\s+·\s+/).filter(function (p) { return !STATUS_RE.test(p.trim()); });
+      if (parts.length < 2) return noStatus(parts.join(''));
+      var sentence = function (p) { p = capFirst_(String(p).trim()); return /[.!?]$/.test(p) ? p : p + '.'; };
+      if (parts.every(function (p) { return /^[A-Z][\w /&-]{1,24}:\s+\S/.test(p); })) return parts.map(function (p) { return sentence(p.replace(/^[A-Z][\w /&-]{1,24}:\s+/, '')); }).join(' ');
+      // phrases of three words or more joined with "·" (not "205% · three-year ROI")
+      if (parts.every(function (p) { return p.trim().split(/\s+/).length >= 3; })) return parts.map(sentence).join(' ');
+      return x;
     };
     // 15. "Target:" in front of a label on a slide that already says it shows targets, and before any price or table cell
     var targetSlide = /\b(targets?|kpis?|goals?|success measures?|benchmarks?)\b/i.test(String(s.title || ''));
@@ -4291,7 +4364,11 @@ var ENGINE = (function () {
     }) });
     if (Array.isArray(s.rows)) s = Object.assign({}, s, { rows: s.rows.map(function (r) { return Array.isArray(r) ? r.map(function (c) { return typeof c === 'string' ? noTarget(fieldText(c), /^\s*target\s*:\s*(\$|€|£|₹|\d)/i.test(c)) : c; }) : r; }) });
     // 16. a table column that says the same thing in every row ("Supported" x 4) tells nothing: it goes (Solution 28)
-    if (t === 'table' && Array.isArray(s.rows) && Array.isArray(s.columns)) {
+    // (V.1_71, deck 42 Proposal 25: the 66degrees column of a RACI - "Responsible (R)" in every row - was dropped, so the
+    //  RACI showed one side only): a RACI or responsibility matrix keeps every party's column
+    var raciT = /\b(raci|responsibilit|accountabilit|who does what)\b/i.test(String(s.title || '')) ||
+      (Array.isArray(s.rows) && s.rows.some(function (r) { return Array.isArray(r) && r.some(function (c) { return /^\s*(responsible|accountable|consulted|informed)\b|^\s*\(?[RACI]\)?\s*$/i.test(String(c || '')); }); }));
+    if (t === 'table' && !raciT && Array.isArray(s.rows) && Array.isArray(s.columns)) {
       var R = s.rows.filter(Array.isArray);
       if (R.length >= 3 && s.columns.length >= 3) {
         var drop = [];
@@ -4326,6 +4403,12 @@ var ENGINE = (function () {
       if (!it || typeof it !== 'object') return typeof it === 'string' ? capFirst_(it) : it;
       var o = Object.assign({}, it);
       ['text', 'description', 'title', 'label', 'fix'].forEach(function (k) { if (typeof o[k] === 'string') o[k] = capFirst_(o[k]); });
+      // V.1_71 (deck 42 Solution 21: "Provision ...; Configure ...; Schedule ..."): actions joined with ";" read as sentences
+      ['text', 'fix'].forEach(function (k) {
+        if (typeof o[k] !== 'string' || (o[k].match(/;\s/g) || []).length < 2) return;
+        var segs = o[k].split(/;\s+/);
+        if (segs.every(function (x) { return x.trim().split(/\s+/).length >= 3; })) o[k] = segs.map(function (x) { x = capFirst_(x.trim()); return /[.!?]$/.test(x) ? x : x + '.'; }).join(' ');
+      });
       return o;
     }) });
     if (Array.isArray(s.points)) s = Object.assign({}, s, { points: s.points.map(function (p) { return typeof p === 'string' ? capFirst_(p) : p; }) });
@@ -4793,6 +4876,26 @@ var ENGINE = (function () {
       if (s.cobrand && libOf_(s) !== 'solution' && type !== 'cover' && type !== 'closing') clientCorner_(out, type, libOf_(s) !== 'general');
       out.type = type;
       out.notes = s.notes || '';
+      // V.1_71 (deck 42 Solution 4, 7, 9, 16: a diagram and, beside it, a second set of cards Gemini also wrote): what the
+      // design could not show goes to the speaker notes, so nothing written is lost; the slide is not reported as missing it
+      if (out.qa && (out.qa.issues || []).indexOf('lost-content') !== -1) {
+        var drawnTxt = (out.els || []).filter(function (e) { return e.text; }).map(function (e) { return String(e.text); }).join(' ').toLowerCase();
+        var seenIn = function (x) { x = String(x || '').toLowerCase().trim(); return !x || drawnTxt.indexOf(x.slice(0, 24)) !== -1; };
+        var extra = [];
+        ['items', 'tips', 'callouts', 'points'].forEach(function (k) {
+          (Array.isArray(s[k]) ? s[k] : []).forEach(function (it) {
+            var head = typeof it === 'string' ? '' : String((it && (it.title || it.label)) || '');
+            var body = typeof it === 'string' ? it : [it && it.text, it && it.fix, Array.isArray(it && it.points) ? it.points.join('; ') : ''].filter(Boolean).join(' ');
+            var tail = String(body).trim().split(/\s+/).slice(-5).join(' ').toLowerCase();
+            if (!seenIn(head) || (!head && !seenIn(body)) || (tail.length > 12 && drawnTxt.indexOf(tail) === -1)) extra.push((head ? head + ': ' : '') + body);
+          });
+        });
+        if (extra.length) {
+          out.notesExtra = '\nAlso on this topic (not shown on the slide): ' + extra.join(' ').slice(0, 1200);
+          out.qa.issues = out.qa.issues.filter(function (k) { return k !== 'lost-content'; });
+          out.qa.fixed = (out.qa.fixed || []).concat(['extra-to-notes']);
+        }
+      }
       if (s.shapeFixes && s.shapeFixes.length) { out.qa = out.qa || { issues: [], fixed: [] }; out.qa.fixed = (out.qa.fixed || []).concat(s.shapeFixes); }   // V.1_66: in the slide log
       slides.push(out);
     });
@@ -4824,7 +4927,7 @@ var ENGINE = (function () {
     var words = specShortTexts_(spec).concat([spec.title, spec.lead, spec.statement, spec.subtitle]).join(' ');
     return DESIGN_TOPICS_[tag].test(words);
   }
-  var QA_WEIGHT_ = { detached: 40, 'off-slide': 40, hollow: 15, 'record-text': 10, 'dot-heading': 10, 'repeat-title': 20, empty: 100, 'lost-content': 50, 'headings-only': 40, 'plain-layout': 40, overlap: 30, cut: 20, 'joined-points': 10, 'streak-content': 60 };
+  var QA_WEIGHT_ = { detached: 40, 'off-slide': 40, hollow: 15, 'record-text': 10, 'dot-heading': 10, 'repeat-title': 20, empty: 100, 'lost-content': 50, 'headings-only': 40, 'plain-layout': 40, overlap: 30, cut: 20, 'joined-points': 10, 'streak-content': 60, 'lost-figures': 120 };   // (V.1_71: lost-figures)
   // keys that hold ids, kinds and styles, not words the reader sees
   var QA_SKIP_KEYS_ = { icon: 1, material: 1, tag: 1, id: 1, kind: 1, group: 1, from: 1, to: 1, source: 1, target: 1, shape: 1, style: 1, color: 1,
     status: 1, unit: 1, align: 1, size: 1, lockTag: 1, cardStyle: 1, look: 1, sectionStyle: 1, chart: 0 };
@@ -4844,6 +4947,13 @@ var ENGINE = (function () {
         shownText.forEach(function (t) { qaWords_(t).forEach(function (w) { shown[w] = 1; }); });
         Object.keys(want).forEach(function (w) { if (shown[w]) got++; });
         if (got / n < 0.6) iss.push('lost-content');
+      }
+      // V.1_71 (deck 42 Proposal 7: KPI tiles drawn as columns without 50%, 95%, 30%): a design that leaves out the figures of
+      // the slide's tiles never wins
+      var figs = (Array.isArray(s.items) ? s.items : []).filter(function (it) { return it && typeof it === 'object' && /\d/.test(String(it.value || '')); }).map(function (it) { return String(it.value).replace(/\s+/g, ''); });
+      if (figs.length >= 2) {
+        var shownAll = shownText.join(' ').replace(/\s+/g, '');
+        if (figs.some(function (v) { return shownAll.indexOf(v) === -1; })) iss.push('lost-figures');
       }
       if (headingsOnly_(out, s)) iss.push('headings-only');
     }
@@ -4918,6 +5028,14 @@ var ENGINE = (function () {
         return !els.some(function (o) { return o !== B && (o.t === 'rect' || o.t === 'roundrect' || o.t === 'ellipse' || o.t === 'shape') && inside(tb, o, 2); });
       });
     })) iss.push('detached');
+    // V.1_71 (deck 42 Solution 22): a word wider than its box (text box or tag) breaks in the middle in Google Slides
+    if (els.some(function (e) {
+      var txt = e.t === 'text' ? e.text : ((e.t === 'roundrect' || e.t === 'rect') && e.text ? e.text : '');
+      if (!String(txt || '').trim()) return false;
+      var size = e.t === 'text' ? e.size : (e.textStyle && e.textStyle.size) || 9;
+      var room = e.t === 'text' ? e.w - 2 * INSET : e.w - 16;            // (a shape's own text keeps ~7 pt padding a side)
+      return String(txt).split(/\s+/).some(function (wd) { return wd.length > 2 && textWidth(wd, e.font || 'sans', e.weight || 400, size) > room + 1; });
+    })) iss.push('cut');
     // V.1_69: a shape without a real position (not a number) is drawn at the top of the slide by Google Slides
     var NUMS = ['x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'size'];
     if (els.some(function (e) { return NUMS.some(function (k) { return k in e && e[k] != null && !isFinite(Number(e[k])); }); })) iss.push('off-slide');
@@ -5093,6 +5211,12 @@ var ENGINE = (function () {
     TSZ.body = TYPE_STEPS[0].body; TSZ.heading = TYPE_STEPS[0].heading;
     return o;
   }
+  function lostFigures_(o, s0) {
+    var figs = (Array.isArray(s0 && s0.items) ? s0.items : []).filter(function (it) { return it && typeof it === 'object' && /\d/.test(String(it.value || '')); }).map(function (it) { return String(it.value).replace(/\s+/g, ''); });
+    if (figs.length < 2) return false;
+    var shown = (o.els || []).filter(function (e) { return e.text; }).map(function (e) { return String(e.text); }).join(' ').replace(/\s+/g, '');
+    return figs.some(function (v) { return shown.indexOf(v) === -1; });
+  }
   function qualityGate_(out, s, type, lctx) {
     var first = slideIssues_(out, s, type);
     if (!first.length) { out.qa = { issues: [], fixed: [] }; return out; }
@@ -5103,7 +5227,11 @@ var ENGINE = (function () {
       if (!L[t]) return;
       var o = layoutAllSteps_(spec, t, lctx);
       if (!o) return;
-      var iss = slideIssues_(o, spec, t), sc = qaScore_(iss);
+      var iss = slideIssues_(o, spec, t);
+      // V.1_71 (deck 42 Proposal 7): a reshaped slide (columns made from Gemini's extra groups) is measured against the
+      // figures of the slide as written - one that drops them never wins
+      if (iss.indexOf('lost-figures') === -1 && lostFigures_(o, s)) iss = iss.concat(['lost-figures']);
+      var sc = qaScore_(iss);
       if (sc < best.score) best = { out: o, iss: iss, score: sc, spec: spec };
     };
     var cur = String(out.drawnWith || '');

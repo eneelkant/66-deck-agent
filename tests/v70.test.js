@@ -135,7 +135,8 @@ test("3. 100% uptime / SLA never stays; stray status words go (Solution 4, 8, 27
   assert.ok(!/Amber/.test(all(s4)));
   const s27 = { type: "stats", title: "Chaos engineering and GameDay validation", items: [{ value: "30-120s", label: "Intra-region zone failover window" }, { value: "100%", label: "Compute Engine multi-zone SLA" }, { value: "99.95%", label: "Uptime target" }], notes: "" };
   G.guardFigures_([s27], ctxFor(SOL), { research: [] });
-  same(s27.items.map((i) => i.value), ["30-120s", "99.95%"]);
+  // (V.1_71: "30-120s" is a time the request and the sources do not give, so it goes too - see v71.test.js)
+  assert.ok(!all(s27).includes("100%") && all(s27).includes("99.95%"), all(s27));
   // "routing 100% of contact center logs" is not a service-level claim
   const ok = { type: "cards", title: "Customer care data", items: [{ title: "All logs", text: "Routing 100% of contact center logs into BigQuery." }], notes: "" };
   G.guardFigures_([ok], ctxFor("Route 100% of contact center logs into BigQuery."), { research: [] });

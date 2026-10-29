@@ -68,7 +68,9 @@
     K.roundrect(els, x, y, w, 16, fill || T.bgLight);
     var e = els[els.length - 1];
     e.text = str;
-    e.textStyle = { font: 'Plus Jakarta Sans', size: 9, color: color || T.ink, align: 'center' };
+    // V.1_71 (deck 42 Solution 22: tags broken mid-word): the tag text is set smaller until it fits on one line
+    var tsz = Math.max(6, Math.min(9, Math.floor(9 * (w - 18) / Math.max(1, K.textWidth(str, 'sans', 400, 9)) * 10) / 10));   // (a shape keeps about 7 pt of padding on each side)
+    e.textStyle = { font: 'Plus Jakarta Sans', size: tsz, color: color || T.ink, align: 'center' };
     return w;
   }
   // a photo slide: the light page covers everything except the photo strip / band / half (PhotoStrips.gs cuts the photo)
@@ -486,6 +488,7 @@
     var take = clean(s.takeaway), takeH = take ? 20 : 0;
     var gap = 7, lw = CW * 0.42, rw = CW - lw - 52, avail = BOTTOM - top - takeH;
     // V.1_54 (deck 25): a fix is one or two short sentences; a long paragraph keeps its first sentence
+    // (V.1_71, deck 42 Solution 21: what a shortened fix leaves out goes to the speaker notes - Engine render0_)
     rows.forEach(function (r) { if (th(r.fix, rw, 9, 400) > 3 * lh(9) + 1) r.fix = (r.fix.match(/^.+?[.;](?=\s|$)/) || [r.fix])[0].replace(/;$/, ''); });
     if (rows.some(function (r) { return th(r.fix, rw, 9, 400) > 3 * lh(9) + 1; })) return null;
     var hs = rows.map(function (r) { return Math.max(30, Math.max(th(r.title, lw - 12, 9.5, 500), th(r.fix, rw, 9, 400)) + 14); });

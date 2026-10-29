@@ -701,6 +701,8 @@ function solutionTopicEntry_(topic) {
     : /next step|decision|ask/i.test(words) ? 'statement'
     : /results?|metrics?|kpis?|figures/i.test(words) ? 'stats' : 'cards';
   let title = t.charAt(0).toUpperCase() + t.slice(1);
+  // V.1_71 (deck 42 Solution: slides titled "Risks", "Monitoring", "Runbooks"): a short topic gets a real title
+  if (t.split(/\s+/).length <= 2 && !/next step/i.test(t) && typeof richTopicTitle_ === 'function') title = richTopicTitle_(t);   // (the next step keeps its own title)
   if (/^(the )?next steps?$/i.test(t)) return { type: 'process', title: 'The next step', brief: 'The recommended next step: 3-4 steps, what happens first, who does it and by when (a workshop, a pilot, a decision)', message: 'What happens next, who does it and when' };   // V.1_56
   return { type: type, title: title.length > 58 ? title.slice(0, 58).replace(/\s+\S*$/, '') : title, brief: 'The requested topic: ' + t, message: 'Covers the requested topic: ' + t };
 }

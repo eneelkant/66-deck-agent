@@ -1,4 +1,4 @@
-# 66° Deck Agent: the deck checklist (V.1_70)
+# 66° Deck Agent: the deck checklist (V.1_71)
 
 One list for every deck type. It is both the review list for people and the list of what the add-on checks by itself.
 **Auto** means the add-on checks it on every slide before the slide is drawn, draws the slide again with a better
@@ -69,6 +69,24 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 |---|---|
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 | Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
+
+## Step 2 - the outline (V.1_71) and the deck-42 fixes: every deck type
+
+| Rule | How it is kept |
+|---|---|
+| A topic shown once (scope, RACI, KPIs, pricing, risks, support, team, why 66degrees, next steps, timeline, sizing) has exactly one slide | One shared topic list for every outline step; a last check removes any repeat. Test v68, v71 |
+| A slide added for a requested topic has a real title ("Key risks and how we mitigate them", never "Risks") | Test v71 |
+| Sections are named after topics, never after a target or a figure | Outline prompt + rename. Test v71 |
+| The KPI slide keeps its figures (no design that hides them) | Engine. Test v71 |
+| Speaker notes and design names (P66_, S66_, 66D_) never become slide text | Engine. Test v71 |
+| No status words ("Amber", "Status: Grey") in a text | Test v71 |
+| No word broken inside a tag or a text box | Text smaller until the longest word fits; the checker reports a broken word. Test v71 |
+| The figure check never breaks a sentence; ranges count as one figure; technical settings are not claims | Test v71 |
+| "Pricing is confirmed after the scoping workshop" only on the pricing slide | Test v71 |
+| The request's target beats a research figure for the same measure; targets only on the KPI slide; a time as a target needs a source | Test v71 |
+| A RACI keeps every party's column | Test v71 |
+| What a design cannot show goes to the speaker notes | Engine + renderer. Test v71 |
+| One figure per 66degrees credential (600+ certifications, 1000+ projects, from the approved facts) | Test v71 |
 
 ## Step 1 - the brief (V.1_70): every deck type
 
