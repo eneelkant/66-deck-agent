@@ -4366,7 +4366,7 @@ function normalizeShapes_(plan, ctx) {
     // 7. V.1_67 (deck 39 Proposal 23 "Scope": five bullets that were only headings): points of one to four words are
     //    headings without their content - they become items, so the fill step writes what each one covers
     if (['bullets', 'statement'].indexOf(String(sp.type || '').toLowerCase()) !== -1 && Array.isArray(sp.points) && sp.points.length >= 3 &&
-        !(Array.isArray(sp.items) && sp.items.length) && sp.points.every(function (p) { return typeof p === 'string' && p.trim().split(/\s+/).length <= 4; })) {
+        !(Array.isArray(sp.items) && sp.items.length) && sp.points.every(function (p) { return typeof p === 'string' && !/[.!?]$/.test(p.trim()) && p.trim().split(/\s+/).length <= (/scope|assumption|dependenc|deliverable|out of|in scope/i.test(String(sp.title || '')) ? 7 : 4); })) {   // V.1_68: "Out of scope (future phases)"
       sp.type = 'cards'; sp.items = sp.points.map(function (p) { return { title: String(p).trim(), text: '' }; }); sp.points = []; delete sp.design; sp.reference = null;
     }
     // 8. V.1_67 (deck 39 General 26: "$285K fixed fee", "$85K / month" in a deck whose request gave no price): an amount
@@ -5178,7 +5178,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_67';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_68';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5476,6 +5476,21 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
       }
     }
   });
+  // V.1_68 (deck 40 Proposal: two "Scope" slides): a topic a deck shows once keeps its first slide; the place of a later
+  // one is filled below like any other free place (the deck keeps its slide count)
+  {
+    const onceSeen = {};
+    secs.forEach(function (sc) {
+      sc.list = sc.list.filter(function (o) {
+        if (!o || o.type === 'section') return true;
+        const f = onceTopicOf_(o.title);
+        if (!f) return true;
+        if (onceSeen[f]) { ctx.log.push('Outline: "' + String(o.title).slice(0, 60) + '" left out (the deck already has "' + String(onceSeen[f]).slice(0, 50) + '").'); return false; }
+        onceSeen[f] = o.title;
+        return true;
+      });
+    });
+  }
   // Last resort (Gemini gave too few): standard proposal topics the deck does not have yet, so the deck has the slides asked for
   // V.1_54: a Solution Deck fills with solution topics of its tone, never the Proposal list (risks, KPIs, scope...)
   const backlog = solutionOutline && typeof solutionBacklog_ === 'function' ? solutionBacklog_(ctx.solutionTone || 'executive', userPrompt) : null;
@@ -5975,6 +5990,19 @@ function syncDividerPoints_(slides, part, all, st) {
   });
 }
 
+/* V.1_68 — the deck check for repeated topics (deck 40 Proposal: two "Scope: what is in and what is out" slides, 13 and
+   23). A topic a deck shows once (scope, RACI, KPIs, pricing, risks, support model, team, why 66degrees, next steps) keeps
+   its first slide; a later slide of the same topic is left out of the outline (planOutline_), and its place filled. */
+const ONCE_TOPICS_ = [
+  ['scope', /\b(scope|in and out|what is in)\b/i], ['raci', /\braci\b|responsibility matrix/i], ['kpi', /\bkpis?\b|success (metrics|measures)|target (metrics|figures)/i],
+  ['pricing', /\bpricing\b|commercial (options|models)|investment options|engagement options/i], ['risks', /\brisks?\b.*\bmitigat|\bmitigat.*\brisks?\b|risk register/i],
+  ['support', /support model|\bL1\b.*\bL3\b|managed support|support tiers/i], ['team', /team structure|joint team|delivery team|operating structure/i],
+  ['why66', /why 66\s?degrees|why us\b/i], ['next', /next steps?/i], ['timeline', /\b\d+[- ]week (timeline|plan|roadmap)|implementation timeline|delivery timeline/i]
+];
+function onceTopicOf_(title) {
+  for (let i = 0; i < ONCE_TOPICS_.length; i++) if (ONCE_TOPICS_[i][1].test(String(title || ''))) return ONCE_TOPICS_[i][0];
+  return '';
+}
 function startLongDeck_(ctx, target, p, started) {
   progressStage_(ctx, 'write', 'active', 'Gemini is planning the outline of ' + p.n + ' slides');
   const outline = planOutline_(p.userPrompt, p.presentationType, p.n, p.sources, ctx);

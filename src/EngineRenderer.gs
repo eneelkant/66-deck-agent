@@ -232,7 +232,9 @@ function getActivePresentationSafe_() {
 // V.1_64: the deck check's findings in words
 const QA_LABELS_ = { empty: 'nothing under the title', 'lost-content': 'part of its content missing', 'headings-only': 'only headings shown',
   'plain-layout': 'a plain layout', 'joined-points': 'points run together', cut: 'a text cut short', overlap: 'texts on top of each other',
-  'streak-content': 'the transition picture behind content' };
+  'streak-content': 'the transition picture behind content', detached: 'a text half outside its box', 'off-slide': 'a shape outside the slide',
+  hollow: 'a box much taller than its text', 'record-text': 'a text written as fields', 'dot-heading': 'a heading joined with a dot', 'repeat-title': 'the title written twice',
+  font: 'another typeface', 'fit-reverted': 'box fitting undone' };
 function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   const out = ENGINE.render({ slides: [spec] }, { dateLabel: dateLabel, sectionNo: spec.number || null, tokens: ctx.tokens || null })[0];
   try { if (typeof recordSlide_ === 'function') recordSlide_(spec, out, number); } catch (e) {}   // V.1_64: the slide log
@@ -407,6 +409,78 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
   });
 
   if (spec.notes) setSpeakerNotesSafe_(slide, spec.notes);
+  // V.1_68: the checker on the real slide - what Google Slides holds after drawing, not the plan of it
+  try {
+    const real = checkDrawnSlide_(slide, pageW, pageH, ctx);
+    if (real.issues.length || real.fixed.length) {
+      out.qa = out.qa || { issues: [], fixed: [] };
+      real.issues.forEach(function (k) { if (out.qa.issues.indexOf(k) === -1) out.qa.issues.push(k); });
+      real.fixed.forEach(function (k) { if (out.qa.fixed.indexOf(k) === -1) out.qa.fixed.push(k); });
+      if (typeof USAGE_ !== 'undefined' && USAGE_.slides && USAGE_.slides.length) {
+        const row = USAGE_.slides[USAGE_.slides.length - 1];
+        row.issues = out.qa.issues.join(','); row.fixed = out.qa.fixed.join(',');
+      }
+      if (real.issues.length && ctx.log && (ctx.qaNamed = (ctx.qaNamed || 0) + 1) <= 8) {
+        ctx.log.push('Deck check: slide ' + number + ' "' + String(spec.title || '').slice(0, 50) + '" has: ' + real.issues.map(function (k) { return QA_LABELS_[k] || k; }).join(', ') + '.');
+      }
+    }
+  } catch (eReal) { Logger.log('Real-slide check skipped: ' + eReal.message); }
+}
+
+/* V.1_68 — the checker on the drawn slide (every deck type). It reads back every shape of the slide from Google Slides:
+     off-slide   a shape or picture outside the page        -> moved back inside (corrected)
+     font        a text in another typeface                 -> set to Plus Jakarta Sans (corrected)
+     detached    a text box half across the edge of a filled box it mostly covers (reported)
+   Returns { issues: [...], fixed: [...] }. Never throws, never removes anything. */
+function checkDrawnSlide_(slide, pageW, pageH, ctx) {
+  const res = { issues: [], fixed: [] };
+  const add = function (list, k) { if (list.indexOf(k) === -1) list.push(k); };
+  let els = [];
+  try { els = slide.getPageElements(); } catch (e) { return res; }
+  const font = (ctx && ctx.brand && ctx.brand.fonts && ctx.brand.fonts.heading && ctx.brand.fonts.heading.slides) || 'Plus Jakarta Sans';
+  const boxes = [], texts = [];
+  els.forEach(function (el) {
+    let b;
+    try { b = { x: el.getLeft(), y: el.getTop(), w: el.getWidth(), h: el.getHeight() }; } catch (e) { return; }
+    if (!(b.w > 0 && b.h > 0)) return;
+    try {
+      if (b.w < pageW - 1 && b.h < pageH - 1 && (b.x < -2 || b.y < -2 || b.x + b.w > pageW + 2 || b.y + b.h > pageH + 2)) {
+        const nx = Math.max(0, Math.min(b.x, pageW - b.w)), ny = Math.max(0, Math.min(b.y, pageH - b.h));
+        el.setLeft(nx); el.setTop(ny); b.x = nx; b.y = ny;
+        add(res.fixed, 'off-slide');
+      }
+    } catch (e) { add(res.issues, 'off-slide'); }
+    let shape = null, txt = '';
+    try { if (el.getPageElementType && el.getPageElementType() === SlidesApp.PageElementType.SHAPE) shape = el.asShape(); } catch (e) {}
+    if (!shape) return;
+    try { txt = shape.getText().asString().trim(); } catch (e) { txt = ''; }
+    if (txt) {
+      texts.push({ b: b, t: txt });
+      try {
+        let wrong = false;
+        shape.getText().getRuns().forEach(function (r) { const f = r.getTextStyle().getFontFamily(); if (f && f !== font && r.asString().trim()) wrong = true; });
+        if (wrong) { shape.getText().getTextStyle().setFontFamily(font); add(res.fixed, 'font'); }
+      } catch (e) {}
+    }
+    try {
+      const fill = shape.getFill();
+      if (fill && fill.getType && fill.getType() === SlidesApp.FillType.SOLID && b.h >= 24 && b.w >= 40 && b.w < pageW - 2 && b.h < pageH - 2) boxes.push(b);
+    } catch (e) {}
+  });
+  texts.forEach(function (T) {
+    const tb = T.b;
+    boxes.forEach(function (B) {
+      if (B === tb) return;
+      const ox = Math.min(tb.x + tb.w, B.x + B.w) - Math.max(tb.x, B.x);
+      if (ox < Math.min(tb.w, B.w) * 0.6) return;
+      const inner = 6;                                                            // text boxes carry an inner margin
+      const top = tb.y + inner, bot = tb.y + tb.h - inner;
+      const crossTop = top < B.y - 3 && bot > B.y + 8, crossBot = top < B.y + B.h - 8 && bot > B.y + B.h + 3;
+      const onChip = boxes.some(function (C) { return C !== B && tb.x >= C.x - 2 && tb.x + tb.w <= C.x + C.w + 2 && tb.y >= C.y - 2 && tb.y + tb.h <= C.y + C.h + 2; });
+      if ((crossTop || crossBot) && !onChip && tb.h < B.h * 1.5) add(res.issues, 'detached');
+    });
+  });
+  return res;
 }
 
 function setSpeakerNotesSafe_(slide, notes) {

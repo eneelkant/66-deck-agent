@@ -89,10 +89,12 @@
   // the slide title and lead: the engine header on light slides, the same place in white on a dark slide
   function hdr(els, s, P, opts) {
     if (!P || !P.dark) return K.header(els, s, opts);
+    var n0 = els.length;
     var tw = (opts && opts.maxW) || (W - 2 * X0);
     var t = K.text(els, X0, 24, tw, 50, s.title || '', { weight: 500, max: 20, min: 15, maxLines: 2, color: T.white });
     var y = 24 + t.height + 5, lead = s.lead || s.subtitle;
     if (lead) { var l = K.text(els, X0, y, Math.min(tw, W - 2 * X0 - 40), 30, lead, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, color: DARK_BODY }); y += l.height; }
+    for (var hk = n0; hk < els.length; hk++) els[hk].hdr = true;      // V.1_68: the header
     return Math.max(y + 16, 68);
   }
   function done(els, P) { var o = { bg: P.bg, els: els, noBalance: true }; if (P.dark) o.dark = true; return o; }
@@ -585,7 +587,8 @@
       K.rect(els, x1, y, w1, rh, T.blue);                                  // V.1_67: brand blue (the purple was off-brand)
       K.text(els, x1 + 8, y, w1 - 16, rh, r.solution, { weight: 400, max: 8.5, min: 8, maxLines: 2, align: 'center', valign: 'middle', color: T.white });
       K.rect(els, x2, y, w2, rh, T.ink);
-      var tx = x2 + 8;
+      // V.1_68 (deck 40 Solution 28: the tags sat at the left of their column): the tags are centred in the column
+      var nT = Math.max(1, r.tags.length), each = tagW / nT - (nT > 1 ? 2 : 0), tx = x2 + (w2 - (each * nT + 4 * (nT - 1))) / 2;
       r.tags.forEach(function (t) { var w = chip(els, tx, y + (rh - 16) / 2, t, T.blue, T.white, (w2 - 20) / Math.max(1, r.tags.length), tagW / Math.max(1, r.tags.length) - (r.tags.length > 1 ? 2 : 0)); tx += w + 4; });
       y += rh + 2;
     });

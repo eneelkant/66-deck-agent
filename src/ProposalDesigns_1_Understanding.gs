@@ -343,7 +343,8 @@
     rp.forEach(function (p, i) {
       var h = rn[i];
       K.rect(els, rx + 14, y + h / 2 - 13, 26, 26, T.bgLight);
-      K.icon(els, { icon: 'decision question' }, rx + 19, y + h / 2 - 8, 16, false);
+      // V.1_68 (deck 40 Proposal 19, 22: a "?" on every row): the icon of what the decision is about
+      K.icon(els, { icon: String(p).toLowerCase().slice(0, 120), title: String(p).split(/[:.,]/)[0] }, rx + 19, y + h / 2 - 8, 16, false);
       K.text(els, rx + 52, y, rw - 66, h, p, { weight: 400, max: rsz, min: rsz, color: T.ink, valign: 'middle' });
       y += h + rgap;
     });

@@ -345,7 +345,7 @@ function referenceForTag_(lib, tag) {
 
 // Designs whose look carries a meaning: only used when the slide is about that (e.g. the "!" warning badges = risks)
 // designs that never show some content, even when Gemini picks them (risks on a pyramid or a stack of layers)
-const HARD_TOPIC_GATES_ = { P66_PYRAMID: true, P66_ISO_CALLOUTS: true, P66_PHASE_COLUMNS: true, P66_CURVE: true, P66_TIERS: true };   // V.1_65: the tiers only for service / support levels   // V.1_51: the rising curve only for a journey   // V.1_47: phase columns only for a plan
+const HARD_TOPIC_GATES_ = { P66_CHECKLIST_DECISIONS: true, P66_PYRAMID: true, P66_ISO_CALLOUTS: true, P66_PHASE_COLUMNS: true, P66_CURVE: true, P66_TIERS: true };   // V.1_65: the tiers only for service / support levels   // V.1_51: the rising curve only for a journey   // V.1_47: phase columns only for a plan
 const DESIGN_TOPICS_ = {
   '66D_LAYOUT_CARDS_024': /\b(risks?|challenges?|issues?|barriers?|pitfalls?|concerns?|threats?|problems?|obstacles?|gaps?|blockers?|hurdles?|warnings?)\b/i,
   // V.1_42 Proposal Deck designs whose look says what the slide is about
@@ -363,7 +363,7 @@ const DESIGN_TOPICS_ = {
   P66_PROS_CONS: /options?\b|pros|cons\b|trade-?offs?|advantages|alternatives?/i,
   P66_DIAGONAL_OPTIONS: /options?\b|choices?|alternatives?|paths?\b/i,
   P66_CHECK_MATRIX: /options?\b|compar|versus|\bvs\b|alternatives?|tools?\b|capabilit|criteria|not\b/i,
-  P66_CHECKLIST_DECISIONS: /checklist|decisions?|cutover|readiness|go-?live/i,
+  P66_CHECKLIST_DECISIONS: /checklist|open decisions?|key decisions?|decisions? to make|cutover|readiness|go-?live/i,   // V.1_68: not "decision rights" (deck 40: a RACI drawn as a checklist)
   P66_RADAR: /scores?|maturity|readiness|assessment|strengths?|ratings?/i,
   P66_PITCH: /pitch|message|story|narrative/i,
   P66_GOV_COLUMNS: /governance|standards?|operating model|raci|oversight/i,

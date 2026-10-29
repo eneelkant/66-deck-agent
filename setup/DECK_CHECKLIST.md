@@ -1,9 +1,24 @@
-# 66° Deck Agent: the deck checklist (V.1_67)
+# 66° Deck Agent: the deck checklist (V.1_68)
 
 One list for every deck type. It is both the review list for people and the list of what the add-on checks by itself.
 **Auto** means the add-on checks it on every slide before the slide is drawn, draws the slide again with a better
 design when the check fails, and writes the result to the slide log (`deck_agent.deck_slides`).
 **Test** means `npm test` checks it on every release.
+
+## The checker (V.1_68): every slide of every deck type, including new types (HR...)
+
+| Check | When | What happens |
+|---|---|---|
+| A text, heading or icon half outside its box (top, bottom or side) | before drawing | the slide is drawn again in another design |
+| Fitting boxes to their text would leave a heading, text or icon behind | before drawing | the fitting is undone for that slide (`fit-reverted` in the slide log) |
+| A shape or text outside the slide | before and after drawing | another design; on the real slide the shape is moved back inside |
+| Another typeface than Plus Jakarta Sans | after drawing | set to Plus Jakarta Sans |
+| A box much taller than its text | before drawing | reported (`hollow`) |
+| "Field: x · Field: y" texts, "·" headings, the title written twice | before drawing | another design; reported |
+| A topic shown twice (scope, RACI, KPIs, pricing, risks, support, team, why 66degrees, next steps) | outline | the later slide's place gets another topic |
+| Release gate | every release | every design of every library and every logged / reported slide must pass; old tests are never loosened |
+
+Everything the checker finds or corrects is in the slide log (`issues`, `fixed`) and, for a slide still wrong, in the result message.
 
 ## Every deck (General, Proposal, Solution, Rebrand redraws)
 
