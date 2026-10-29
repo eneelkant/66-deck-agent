@@ -1,4 +1,4 @@
-# 66° Deck Agent: the deck checklist (V.1_68)
+# 66° Deck Agent: the deck checklist (V.1_69)
 
 One list for every deck type. It is both the review list for people and the list of what the add-on checks by itself.
 **Auto** means the add-on checks it on every slide before the slide is drawn, draws the slide again with a better
@@ -69,6 +69,22 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 |---|---|
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 | Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
+
+## The request is the source (V.1_69): every deck type
+
+| Rule | How it is kept |
+|---|---|
+| No shape is placed at a position that is not a number (designs with circles or arcs) | Auto: `off-slide` and the safety net; Test v69 |
+| Agenda: the spiral for up to 6 sections, also when the sections have descriptions; the list design for 7 or more | Test v69 |
+| KPI tiles are the figures the request wrote, in its order; never 100% SLA, never the same figure twice | Auto (plan and draw); Test v69 |
+| A RACI is a table: Workstream, then Responsible / Accountable / Consulted / Informed; team structure and RACI are two slides | Auto; Test v69 |
+| No unnumbered workstream dividers in a Proposal Deck | Test v69 |
+| Notes beside numbered groups are bullets, not a second set of numbers | Test v69 |
+| Scope, RACI, KPIs, pricing, risks, support, team, why 66degrees, next steps, timeline, sizing: one slide each | Auto (outline); Test v68, v69 |
+| Every topic the request names has a slide, and the deck has exactly the slide count asked | Auto (outline); Test v69 |
+| Pricing tables are left-aligned; no amount the request did not give | Test v67, v69 |
+| "Target:" only on a KPI slide; one target among facts reads "(target)" | Auto; Test v69 |
+| A slide is called "benchmarks" only when it shows figures | Auto; Test v69 |
 
 ## Proposal and Solution decks
 

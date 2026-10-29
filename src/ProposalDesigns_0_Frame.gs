@@ -25,8 +25,10 @@
   add('P66_AGENDA_SPIRAL', 'agenda', { min: 3, max: 7, desc: 'proposal agenda: spiral graphic with the sections as tags on a dotted arc (3-7 sections)' }, function (s) {
     var rows = agendaRows_(s), n = rows.length;
     if (n < 3 || n > 7) return null;
+    // V.1_69: a section name that would be cut short in its tag (more than two lines) gives the agenda to the list design
+    if (rows.some(function (r) { return K.textH(String(r.title), (168 - 16) * 0.9, 9.5, 500) > 2 * K.lineHeight('sans', 9.5) + 1; })) return null;   // (measured 10% narrower, as Slides wraps)
     var els = [];
-    K.text(els, X0, 24, 400, 30, agendaTitle_(s), { weight: 500, max: 20, min: 18, maxLines: 1, color: T.ink });
+    K.text(els, X0, 24, W - 2 * X0, 30, agendaTitle_(s), { weight: 500, max: 20, min: 15, maxLines: 2, color: T.ink });   // V.1_69: a long agenda title is never cut
     // spiral of short dashes (three turns, getting smaller towards the centre)
     var cx = 236, cy = 214;
     // dashes along a spiral: each dash lies along the curve (tangent), the curve winds inwards over ~2.6 turns

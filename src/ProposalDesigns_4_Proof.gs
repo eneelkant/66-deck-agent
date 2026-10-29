@@ -407,7 +407,7 @@
   /* ---------- Pricing / rate card table — proposals pages 130, 53, 219, 310 ---------- */
   function cell_(c) { return c == null ? '' : (typeof c === 'object' ? String(c.value || c.text || c.label || c.title || '') : String(c)); }
   add('P66_PRICING', 'table', { min: 2, max: 8, needs: 'rows',
-    desc: 'pricing / rate card: blue header row (columns[], 2-4), 2-8 rows (rows[][]) with right-aligned prices, a highlighted total row (total = [label, value]) and an optional note box top right (note)',
+    desc: 'pricing / rate card: blue header row (columns[], 2-4), 2-8 rows (rows[][]) with left-aligned cells, a highlighted total row (total = [label, value]) and an optional note box top right (note)',
     words: '3-10' }, function (s) {
     var cols = K.arr(s.columns, 4).map(cell_);
     var rows = (Array.isArray(s.rows) ? s.rows : []).slice(0, 9).map(function (r) {
@@ -451,14 +451,14 @@
     var y = top + Math.min(20, (avail - tableH) / 2);
     K.rect(els, CX, y, CW, hh, T.blue);
     cols.forEach(function (c, j) {
-      K.text(els, colX[j] + pad, y, colW(j) - 2 * pad, hh, c, { weight: 500, max: TSZ.body, min: 9, maxLines: 1, align: j ? 'right' : 'left', valign: 'middle', color: T.white });
+      K.text(els, colX[j] + pad, y, colW(j) - 2 * pad, hh, c, { weight: 500, max: TSZ.body, min: 9, maxLines: 1, align: 'left', valign: 'middle', color: T.white });   // V.1_69: every column left-aligned
     });
     y += hh;
     rows.forEach(function (r, i) {
       var h = rowHs[i];
       K.rect(els, CX, y, CW, h, i % 2 ? T.bgLight : T.white);
       r.forEach(function (c, j) {
-        K.text(els, colX[j] + pad, y, colW(j) - 2 * pad, h, c, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3, align: j ? 'right' : 'left', valign: 'middle', color: T.ink });
+        K.text(els, colX[j] + pad, y, colW(j) - 2 * pad, h, c, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3, align: 'left', valign: 'middle', color: T.ink });
       });
       K.line(els, CX, y + h, CX + CW, y + h, T.cardLine, 0.5);
       y += h;
@@ -467,7 +467,7 @@
       K.rect(els, CX, y, CW, totH, T.bgLight);
       K.line(els, CX, y, CX + CW, y, T.blue, 1.5);
       K.text(els, CX + pad, y, fw - 2 * pad, totH, total[0] || 'Total', { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: 1, valign: 'middle', color: T.blue });
-      K.text(els, colX[nc - 1] + pad, y, vw - 2 * pad, totH, total[total.length - 1], { weight: 500, max: 12, min: TSZ.heading, maxLines: 1, align: 'right', valign: 'middle', color: T.blue });
+      K.text(els, colX[nc - 1] + pad, y, vw - 2 * pad, totH, total[total.length - 1], { weight: 500, max: 12, min: TSZ.heading, maxLines: 1, align: 'left', valign: 'middle', color: T.blue });
     }
     for (j = 1; j < nc; j++) K.line(els, colX[j], top + Math.min(20, (avail - tableH) / 2) + hh, colX[j], y + totH, T.cardLine, 0.5);
     return { bg: T.white, els: els, noBalance: true };

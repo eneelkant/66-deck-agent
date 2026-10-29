@@ -4156,12 +4156,22 @@ var ENGINE = (function () {
     if (s.headline && typeof s.headline === 'object' && String(s.headline.value || '').trim() && Array.isArray(s.items) &&
         s.items.length && s.items.length < 4 && s.items.every(function (it) { return it && typeof it === 'object' && String(it.value || '').trim(); })) {
       var hl = s.headline;
-      if (!s.items.some(function (it) { return String(it.value).trim() === String(hl.value).trim() && norm(it.label) === norm(hl.label); })) {
+      // V.1_69 (deck 41 Proposal 19: 50% headline beside a 50% tile): the same figure is never shown twice, whatever its label
+      var vk = function (v) { return String(v || '').toLowerCase().replace(/\s+/g, ''); };
+      if (!s.items.some(function (it) { return vk(it.value) === vk(hl.value); })) {
         s = Object.assign({}, s, { items: [{ value: String(hl.value).trim(), label: String(hl.label || hl.title || ''), text: String(hl.text || '') }].concat(s.items) });
         log.push('headline-as-tile');
         if (t === 'stats') s.reference = statsRef_(lib, s.items.length);
       }
       s = Object.assign({}, s); delete s.headline;
+    }
+    // 9b. V.1_69: two KPI tiles with the same figure - the second goes (its label was the first one said again)
+    if (t === 'stats' && Array.isArray(s.items) && s.items.length > 2) {
+      var seenV = {}, uniq = s.items.filter(function (it) {
+        if (!it || typeof it !== 'object' || !String(it.value || '').trim()) return true;
+        var k = String(it.value).toLowerCase().replace(/\s+/g, ''); if (seenV[k]) return false; seenV[k] = 1; return true;
+      });
+      if (uniq.length < s.items.length) { s = Object.assign({}, s, { items: uniq }); log.push('no-repeated-figure'); }
     }
     // 10. a KPI tile of 100% uptime / availability / SLA is not a real Google Cloud figure: it goes (Solution 19)
     if (Array.isArray(s.items) && s.items.length > 2) {
@@ -4186,6 +4196,39 @@ var ENGINE = (function () {
       if (parsed.length >= 3 && parties.length >= 2 && parties.length <= 4) {
         s = Object.assign({}, s, { type: 'table', columns: ['Workstream'].concat(parties), rows: parsed.map(function (r) { return [r.ws].concat(parties.map(function (p) { return r.cells[p] || ''; })); }) });
         delete s.items; delete s.points; delete s.left; delete s.right; s.design = ''; s.reference = null; t = 'table'; log.push('raci-sentences-as-table');
+      }
+    }
+    // 11b. V.1_69 (deck 41 General 17): a RACI drawn as two columns whose second cell holds the whole assignment
+    //      ("Responsible: X | Accountable: Y | Consulted: Z | Informed: W") is opened out into one column per role
+    if (Array.isArray(s.rows) && s.rows.length >= 2) {
+      var ROLES4 = ['Responsible', 'Accountable', 'Consulted', 'Informed'];
+      var splitRoles = function (cell) {
+        var out = {}, n = 0;
+        String(cell || '').split(/\s*[|;]\s*/).forEach(function (part) {
+          var m = part.match(/^\s*(Responsible|Accountable|Consulted|Informed)\s*(?:\([RACI]\))?\s*[:\-\u2013]\s*(.+)$/i);
+          if (m) { out[capFirst_(m[1].toLowerCase())] = m[2].trim(); n++; }
+        });
+        return n >= 2 ? out : null;
+      };
+      var pipeRows = s.rows.filter(Array.isArray);
+      var roleCol = -1;
+      if (pipeRows.length >= 2) {
+        var ncols = Math.max.apply(null, pipeRows.map(function (r) { return r.length; }));
+        for (var rc = 1; rc < ncols && roleCol < 0; rc++) {
+          if (pipeRows.filter(function (r) { return splitRoles(r[rc]); }).length >= Math.ceil(pipeRows.length * 0.6)) roleCol = rc;
+        }
+      }
+      if (roleCol > 0) {
+        var used = ROLES4.filter(function (role) { return pipeRows.some(function (r) { var o = splitRoles(r[roleCol]); return o && o[role]; }); });
+        var keep = []; for (var kc = 0; kc < roleCol; kc++) keep.push(kc);
+        var given0 = Array.isArray(s.columns) ? s.columns : [];
+        var heads = keep.map(function (kc2) { var g = given0[kc2]; return typeof g === 'string' && g.trim() && g.length <= 24 ? g : (kc2 === 0 ? 'Workstream' : 'Item'); });
+        if (keep.length === 1) heads = ['Workstream'];
+        s = Object.assign({}, s, { type: 'table', columns: heads.concat(used), rows: pipeRows.map(function (r) {
+          var o = splitRoles(r[roleCol]) || {};
+          return keep.map(function (kc3) { return String(r[kc3] || ''); }).concat(used.map(function (role) { return o[role] || ''; }));
+        }) });
+        s.design = ''; s.reference = null; t = 'table'; log.push('raci-roles-as-columns');
       }
     }
     // 11. a RACI / responsibility matrix is a table of its rows (Proposal 20 was three stacked layers)
@@ -4509,7 +4552,7 @@ var ENGINE = (function () {
     if (out && lib === 'solution' && !FRAME_TYPES_[type] && cutCount_(out)) { var cut = out; out = solutionFallback_(s, type, tag, lctx) || cut; }
     if (!out && lib === 'solution' && !FRAME_TYPES_[type]) out = solutionFallback_(s, type, tag, lctx);
     // V.1_58: a design that shows only headings while the slide has texts gives way too
-    if (out && !FRAME_TYPES_[type] && headingsOnly_(out, s)) {
+    if (out && !FRAME_TYPES_[type] && type !== 'agenda' && headingsOnly_(out, s)) {   // V.1_69: an agenda lists names only (deck 41 General: the spiral was refused)
       if (typeof Logger !== 'undefined' && Logger.log) Logger.log('V.1_58: ' + tag + ' would show only the headings of "' + String(s.title || '') + '"; another layout is used.');
       out = lib === 'solution' ? (solutionFallback_(flattenSpec_(s, type), type, tag, lctx) || out) : null;
     }
@@ -4733,7 +4776,8 @@ var ENGINE = (function () {
         var before = JSON.stringify(out.els), issBefore = layoutIssues_(out, s), ties = boxTies_(out.els), ovBefore = textOverlaps_(out).length;
         compactBoxes_(out); compactBoxes_(out); centreContent_(out);
         var issAfter = layoutIssues_(out, s);
-        var worse = ['detached', 'off-slide'].some(function (k) { return issAfter.indexOf(k) !== -1 && issBefore.indexOf(k) === -1; }) ||
+        var nanAfter = out.els.some(function (e) { return ['x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy'].some(function (k) { return k in e && e[k] != null && !isFinite(Number(e[k])); }); });
+        var worse = nanAfter || ['detached', 'off-slide'].some(function (k) { return issAfter.indexOf(k) !== -1 && issBefore.indexOf(k) === -1; }) ||
           textOverlaps_(out).length > ovBefore || !tiesHold_(out.els, ties);
         if (worse) { out.els = JSON.parse(before); out.qa = out.qa || { issues: [], fixed: [] }; if (out.qa.fixed.indexOf('fit-reverted') === -1) out.qa.fixed.push('fit-reverted'); }
       }
@@ -4874,6 +4918,9 @@ var ENGINE = (function () {
         return !els.some(function (o) { return o !== B && (o.t === 'rect' || o.t === 'roundrect' || o.t === 'ellipse' || o.t === 'shape') && inside(tb, o, 2); });
       });
     })) iss.push('detached');
+    // V.1_69: a shape without a real position (not a number) is drawn at the top of the slide by Google Slides
+    var NUMS = ['x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'size'];
+    if (els.some(function (e) { return NUMS.some(function (k) { return k in e && e[k] != null && !isFinite(Number(e[k])); }); })) iss.push('off-slide');
     if (els.some(function (e) {
       if (e.rot || (e.t === 'image' && ((e.w || 0) >= 700 || (e.h || 0) >= 380))) return false;
       var b = e.t === 'line' ? { x: Math.min(e.x1, e.x2), y: Math.min(e.y1, e.y2), w: Math.abs(e.x2 - e.x1), h: Math.abs(e.y2 - e.y1) }
@@ -5020,11 +5067,16 @@ var ENGINE = (function () {
     if (!body.length) return;
     var topOf = function (e) { return e.t === 'line' ? Math.min(e.y1, e.y2) : e.y; };
     var botOf = function (e) { if (e.t === 'line') return Math.max(e.y1, e.y2); if (e.t === 'text') return e.y + (e.vh || e.h) - INSET; return e.y + (e.h || e.size || 0); };
+    // V.1_69 (deck 41 General 29: every text at the top of the slide): a shape placed by its centre (an arc of a ring) has
+    // no top edge to measure - such a slide is left exactly as the design drew it
+    if (body.some(function (e) { return !isFinite(topOf(e)) || !isFinite(botOf(e)); })) return;
     if (body.some(function (e) { return topOf(e) < headBottom - 2 || (e.t !== 'text' && e.t !== 'line' && ((e.h || 0) >= 300 || (e.w || 0) >= 700)); })) return;
     var bottom = Math.max.apply(null, body.map(botOf));
     var free = BOTTOM - bottom;
     if (free < 24) return;
-    var d = Math.min(36, free / 3);
+    // V.1_69 (deck 41 Proposal 22, Solution 21: the lower part empty): the body sits in the middle of the free space
+    var d = Math.min(60, free / 2);
+    if (!isFinite(d) || d <= 0) return;
     body.forEach(function (e) { if (e.t === 'line') { e.y1 += d; e.y2 += d; } else e.y += d; });
   }
   function qaScore_(iss) { return (iss || []).reduce(function (t, k) { return t + (QA_WEIGHT_[k] || 10); }, 0); }

@@ -163,13 +163,13 @@
     var top = K.header(els, s) + 2;
     var nw = notes.length ? 186 : 0, gx = notes.length ? 14 : 0;
     var px = CX + nw + gx, pw = CW - nw - gx, ph = BOTTOM - top;
-    // numbered notes down the left
+    // bulleted notes down the left (V.1_69)
     if (notes.length) {
       var gapN = Math.min(10, (ph - notes.reduce(function (a, t) { return a + th(t, nw - 22, 9, 400); }, 0)) / Math.max(1, notes.length - 1));
       if (gapN < 3) return null;
       var y = top;
       notes.forEach(function (t, i) {
-        K.text(els, CX, y, 16, 12, String(i + 1), { font: 'mono', weight: 500, max: 9, min: 9, maxLines: 1, color: T.blue });
+        K.rect(els, CX + 2, y + 4.5, 5, 5, T.blue);   // V.1_69: a bullet, not a number, so the notes never echo the numbered groups
         var r = K.text(els, CX + 18, y, nw - 22, 40, t, { weight: 400, max: 9, min: 9, color: T.ink });
         y += r.height + gapN;
       });

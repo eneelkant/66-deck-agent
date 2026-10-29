@@ -4306,6 +4306,62 @@ function nameCaseClient_(sp, ctx) {
 //  - a chart without real numbers becomes cards of its categories (deck 37 Proposal slide 36: only the two bar names were left)
 //  - items or points that each state a target figure ("Target: 55% ...") become KPI tiles (deck 37 Solution slide 37)
 //  - a long closing paragraph written as the last step becomes the slide's takeaway (deck 37 Proposal slide 38)
+/* V.1_69: the figures a request asks for ("99.95% uptime", "recovery under 15 minutes", "40% fewer incidents", "3x faster
+   queries"), in the order written. Money and plain counts ("420M profiles") are not KPI figures and are left out.  */
+function requestFigures_(prompt) {
+  const p = String(prompt || '').replace(/\s+/g, ' ');
+  const out = [];
+  const add = function (at, value, label) {
+    label = String(label || '').replace(/^(?:a|an|the|of|in|on|for)\s+/i, '').replace(/[\s,;:.]+$/, '').trim();
+    const key = figKey_(value);
+    if (!key || out.some(function (f) { return f.key === key && sharedWords_(f.label, label) > 0; })) return;
+    out.push({ at: at, value: value, key: key, label: label, labelCap: label.charAt(0).toUpperCase() + label.slice(1) });
+  };
+  const STOP = '(?=\\s*(?:[,;.)]|\\band\\b|\\bwith\\b|\\bby\\b|\\bwithin\\b|$))';
+  // "99.95% uptime", "40% fewer incidents", "3x faster report builds"
+  const reA = new RegExp('(?:^|[^\\d$€£.])(\\d+(?:\\.\\d+)?\\s?(?:%|x))\\s+((?:[A-Za-z][\\w-]*\\s?){1,6}?)' + STOP, 'gi');
+  let m;
+  while ((m = reA.exec(p))) add(m.index, m[1].replace(/\s+/g, ''), m[2]);
+  // "recovery under 15 minutes", "RTO below 4 hours"
+  const reB = /((?:[A-Za-z][\w-]*\s){1,4}?)(?:under|below|less than|within|in under|<)\s?(\d+(?:\.\d+)?)\s?(minutes?|mins?|hours?|hrs?|seconds?|secs?|ms|days?)\b/gi;
+  while ((m = reB.exec(p))) {
+    const unit = /^min/i.test(m[3]) ? 'min' : /^(hour|hr)/i.test(m[3]) ? 'hours' : /^(sec|s$)/i.test(m[3]) ? 'sec' : /^ms/i.test(m[3]) ? 'ms' : 'days';
+    const lab = m[1].trim().split(/\s+/).filter(function (w) { return !/^(and|with|a|an|the|to|of|is|are|be|at)$/i.test(w); }).slice(-3).join(' ');
+    if (lab) add(m.index, '<' + m[2] + ' ' + unit, lab);
+  }
+  // "cut platform run cost by 30%", "improve query speed by 3x"
+  const reC = /((?:[A-Za-z][\w-]*\s){1,5}?)by\s(\d+(?:\.\d+)?\s?(?:%|x))(?![\w%])/gi;
+  while ((m = reC.exec(p))) {
+    const labC = m[1].trim().split(/\s+/).filter(function (w) { return !/^(and|with|a|an|the|to|of|is|are|be|we|want|wants|should|must|will)$/i.test(w); }).slice(-4).join(' ');
+    if (labC) add(m.index, m[2].replace(/\s+/g, ''), labC);
+  }
+  return out.sort(function (a, b) { return a.at - b.at; });
+}
+function figKey_(v) {
+  let x = String(v || '').toLowerCase().replace(/target\s*:/, '').replace(/\b(under|below|less than|within)\b/g, '<').replace(/\s+/g, '');
+  x = x.replace(/minutes?|mins?/, 'min').replace(/hours?|hrs?/, 'h').replace(/seconds?|secs?/, 's');
+  return /\d/.test(x) ? x : '';
+}
+function sharedWords_(a, b) {
+  const W = function (t) { return String(t || '').toLowerCase().match(/[a-z]{3,}/g) || []; };
+  const B = {}; W(b).forEach(function (w) { B[w.replace(/s$/, '')] = 1; });
+  return W(a).filter(function (w) { return B[w.replace(/s$/, '')]; }).length;
+}
+function isKpiSlide_(sp) {
+  const items = Array.isArray(sp.items) ? sp.items : [];
+  const valued = items.filter(function (it) { return it && typeof it === 'object' && String(it.value || '').trim(); }).length;
+  if (String(sp.type || '').toLowerCase() !== 'stats' && valued < 2) return false;
+  return /\b(kpis?|key performance|performance indicators?|success (?:measures?|metrics?|criteria)|measur(?:e|es|able)|targets?|outcomes? we commit)\b/i.test(String(sp.title || ''));
+}
+function slideHasFigure_(sp) {
+  const parts = [];
+  (Array.isArray(sp.items) ? sp.items : []).forEach(function (it) { if (typeof it === 'string') parts.push(it); else if (it) parts.push(it.value, it.title, it.text, it.label, it.highlight); });
+  (Array.isArray(sp.points) ? sp.points : []).forEach(function (x) { parts.push(typeof x === 'string' ? x : JSON.stringify(x)); });
+  if (Array.isArray(sp.rows)) parts.push(JSON.stringify(sp.rows));
+  if (sp.chart) parts.push(JSON.stringify(sp.chart));
+  parts.push(sp.value, sp.takeaway);
+  return /\d+(?:\.\d+)?\s?(?:%|x\b|[kmb]\b|\$)|\$\s?\d/i.test(parts.filter(Boolean).join(' '));
+}
 function normalizeShapes_(plan, ctx) {
   const words = function (t) { return String(t || '').split(/\s+/).filter(Boolean).length; };
   const FIG_RE = /^(?:target:\s*)?([+\-−~]?\$?\d[\d.,]*\s*(?:%|x|pp|pts?|points?|ms|s|[kKmMbB])?)(?=[\s,;:)]|$)\s*(.*)$/i;
@@ -4401,6 +4457,62 @@ function normalizeShapes_(plan, ctx) {
         if (!String(sp.takeaway || '').trim()) sp.takeaway = 'Pricing is confirmed after the scoping workshop.';
         if (ctx && ctx.log) ctx.log.push('"' + String(sp.title || '').slice(0, 50) + '": ' + removed + ' price(s) not given in the request left out.');
       }
+    }
+    // 9. V.1_69 (deck 41 Solution 7, General 18, Proposal 19): the KPI tiles are the figures the request wrote, in its
+    //    order - a 100% SLA Gemini put in place of "99.95% uptime", a figure written twice and a target the request never
+    //    gave make way for them
+    const reqFigs = requestFigures_(ctx && ctx.userPrompt);
+    if (reqFigs.length >= 2 && isKpiSlide_(sp)) {
+      const cand = [];
+      if (sp.value != null && String(sp.value).trim()) cand.push({ value: String(sp.value).trim(), label: String(sp.label || ''), text: String(sp.text || '') });
+      if (sp.headline && typeof sp.headline === 'object' && String(sp.headline.value || '').trim()) cand.push({ value: String(sp.headline.value).trim(), label: String(sp.headline.label || sp.headline.title || ''), text: String(sp.headline.text || '') });
+      (Array.isArray(sp.items) ? sp.items : []).forEach(function (it) { if (it && typeof it === 'object' && String(it.value || '').trim()) cand.push({ value: String(it.value).trim(), label: String(it.label || it.title || ''), text: String(it.text || '') }); });
+      const used = [];
+      const tiles = reqFigs.slice(0, 6).map(function (f) {
+        let best = -1, bestScore = -1;
+        cand.forEach(function (c, k) {
+          if (used.indexOf(k) !== -1 || figKey_(c.value) !== f.key) return;
+          const sc = sharedWords_(c.label + ' ' + c.text, f.label);
+          if (sc > bestScore) { best = k; bestScore = sc; }
+        });
+        if (best >= 0) { used.push(best); const c = cand[best]; return { value: c.value, label: c.label || f.labelCap, text: c.text }; }
+        return { value: f.value, label: 'Target: ' + f.label, text: '' };
+      });
+      // room left (fewer than three figures asked): Gemini's own figures stay when they are new and not a 100% SLA
+      cand.forEach(function (c, k) {
+        if (tiles.length >= 3 || used.indexOf(k) !== -1) return;
+        if (/^100\s?%$/.test(c.value) || tiles.some(function (t2) { return figKey_(t2.value) === figKey_(c.value); })) return;
+        tiles.push(c);
+      });
+      const before = JSON.stringify((sp.items || []).map(function (it) { return it && it.value; }));
+      if (JSON.stringify(tiles.map(function (t2) { return t2.value; })) !== before || sp.value != null || sp.headline) {
+        sp.type = 'stats'; sp.items = tiles; sp.points = [];
+        delete sp.value; delete sp.label; delete sp.text; delete sp.note; delete sp.headline;
+        if (/INVESTMENT/.test(String(sp.design || '') + String(sp.lockTag || ''))) { delete sp.design; delete sp.lockTag; sp.reference = null; }
+        if (ctx && ctx.log) ctx.log.push('"' + String(sp.title || '').slice(0, 50) + '": KPI tiles are the figures the request gave (' + tiles.map(function (t2) { return t2.value; }).join(', ') + ').');
+      }
+    }
+    // 10. V.1_69 (deck 41 General 5): facts that are not targets, with one target among them - "Target:" goes from the
+    //     label and the figure says it is a target after it, so the slide does not read as a KPI slide by halves
+    if (Array.isArray(sp.items) && sp.items.length >= 2 && !isKpiSlide_(sp)) {
+      const tg = sp.items.filter(function (it) { return it && typeof it === 'object' && /^\s*target\s*:/i.test(String(it.label || '')); });
+      if (tg.length && tg.length < sp.items.length) {
+        tg.forEach(function (it) { it.label = String(it.label).replace(/^\s*target\s*:\s*/i, '').replace(/^./, function (c) { return c.toUpperCase(); }) + ' (target)'; });
+        if (ctx && ctx.log) ctx.log.push('"' + String(sp.title || '').slice(0, 50) + '": "Target:" labels on a slide of facts read as "(target)".');
+      }
+    }
+    // 11. V.1_69 (deck 41 Proposal 20): a slide called "benchmarks" with no figure on it is industry experience - the
+    //     figures stayed in the notes - so it is not called a benchmark (the agenda and divider follow the new title)
+    if (/\bbenchmarks?\b/i.test(String(sp.title || '')) && !slideHasFigure_(sp)) {
+      const oldT = String(sp.title);
+      sp.title = oldT.replace(/\b(industry\s+)?benchmarks?\s+(on|for|in|from)\s+/i, 'Industry experience with ')
+        .replace(/\b(industry\s+)?benchmarks?\b/i, 'industry experience').replace(/^./, function (c) { return c.toUpperCase(); });
+      (plan.slides || []).forEach(function (o) {
+        if (!o || o === sp) return;
+        ['points'].forEach(function (k) { if (Array.isArray(o[k])) o[k] = o[k].map(function (x) { return x === oldT ? sp.title : x; }); });
+        if (Array.isArray(o.items)) o.items.forEach(function (it) { if (it && typeof it === 'object' && it.title === oldT) it.title = sp.title; });
+      });
+      if (ctx && ctx.log) ctx.log.push('"' + oldT.slice(0, 50) + '": no figure on the slide, so it is titled "' + sp.title + '".');
     }
     // 5. a caption, takeaway or callout that says the lead again (deck 37 Proposal slide 21) is dropped
     const lead = String(sp.lead || sp.subtitle || '');
@@ -5178,7 +5290,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_68';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_69';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5367,6 +5479,9 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
       if (key === keyOf(sec && sec.title)) return;                        // V.1_48: a slide named like its section repeats the divider
       seen[key] = true;
       // a workstream inside a section: the light divider (title only, no number)
+      // V.1_69 (deck 41 Proposal 10, 13: unnumbered dark dividers inside a section): no workstream dividers - every
+      // transition slide is a numbered section; a workstream Gemini names is not a slide of its own
+      if (t === 'workstream') return;
       if (proposalOutline && t === 'workstream') {
         if (n < 25) return;                                               // V.1_51: a short deck has no workstream dividers
         if (secs.concat([{ list: list }]).reduce(function (a, x) { return a + x.list.filter(function (y) { return y.level === 2; }).length; }, 0) >= 4) return;
@@ -5480,6 +5595,19 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
   // one is filled below like any other free place (the deck keeps its slide count)
   {
     const onceSeen = {};
+    // V.1_69 (deck 41 Proposal 25 "Joint team structure and RACI governance matrix"): when the request asks for both, a
+    // slide that joins two once-only topics keeps the first one; the second gets its own slide (added below)
+    const asked = onceTopicsIn_(userPrompt);
+    secs.forEach(function (sc) {
+      sc.list.forEach(function (o) {
+        if (!o || o.type === 'section') return;
+        const fams = onceTopicsOf_(o.title);
+        if (fams.length >= 2 && fams.every(function (f) { return asked.indexOf(f) !== -1; })) {
+          o.title = sentenceCase_(String(o.title).split(/\s+(?:and|&|with)\s+/i)[0], 1);
+          ctx.log.push('Outline: "' + o.title + '" keeps one topic; the other gets its own slide.');
+        }
+      });
+    });
     secs.forEach(function (sc) {
       sc.list = sc.list.filter(function (o) {
         if (!o || o.type === 'section') return true;
@@ -5544,6 +5672,53 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
       const at = lastList.indexOf(keepStep);
       if (at !== -1 && at !== lastList.length - 1) { lastList.splice(at, 1); lastList.push(keepStep); }
     }
+  }
+  // V.1_69 (deck 41: Proposal without its requested next steps, Solution without its requested risks and one slide short):
+  // the last word on the outline - every once-only topic the request names has its slide, and the deck has exactly the
+  // number of body slides asked for
+  {
+    const have = {};
+    flat().forEach(function (o) {
+      if (!o || o.type === 'section') return;
+      onceTopicsOf_(o.title).forEach(function (f) { have[f] = true; });
+      if (/\bnext steps?\b|getting started|first step|kick-?off|the ask\b|decision needed|workshop|launch the engagement/i.test(String(o.title || ''))) have.next = true;   // a next step in other words
+    });
+    const reqNames = requestedTopics_(userPrompt);
+    const isRequested = function (o) { return reqNames.some(function (t) { return slideForTopic_([{ type: o.type, title: o.title, lead: o.brief }], t) !== -1; }); };
+    onceTopicsIn_(userPrompt).forEach(function (f) {
+      if (have[f]) return;
+      const entry = Object.assign({}, ONCE_TOPIC_ENTRY_[f]);
+      if (!entry.title) return;
+      // room: a free place, else the last slide of the largest section that no requested topic needs
+      if (flat().length >= body) {
+        const order = secs.slice().sort(function (a, b) { return b.list.length - a.list.length; });
+        let freed = false;
+        for (let q = 0; q < order.length && !freed; q++) {
+          const list = order[q].list;
+          for (let j = list.length - 1; j >= 1 && !freed; j--) {
+            const o = list[j];
+            if (o.type === 'section' || onceTopicsOf_(o.title).length || isRequested(o)) continue;
+            list.splice(j, 1); freed = true;
+          }
+        }
+        if (!freed) return;
+      }
+      if (f === 'next') secs[secs.length - 1].list.push(entry); else placeInSection_(secs, entry, []);
+      have[f] = true;
+      ctx.log.push('Outline: "' + entry.title + '" added (asked for in the request).');
+    });
+    if (flat().length < body) backlogFill_(secs, body, seen, keyOf, flat, userPrompt, [], backlog);
+    if (flat().length < body) {
+      // nothing left in the backlog: a requested topic's second angle keeps the slide count (never a repeat of a once-only topic)
+      const pool = reqNames.filter(function (t) { return !onceTopicOf_(t); });
+      for (let k = 0; flat().length < body && k < pool.length; k++) {
+        const title = sentenceCase_(String(pool[k]).charAt(0).toUpperCase() + String(pool[k]).slice(1) + ' in practice', 1);
+        if (seen[keyOf(title)]) continue;
+        seen[keyOf(title)] = true;
+        placeInSection_(secs, { type: 'cards', title: title, brief: 'How ' + pool[k] + ' works for this client, step by step' }, []);
+      }
+    }
+    if (flat().length !== body) ctx.log.push('Outline: ' + flat().length + ' body slides (asked for ' + body + ').');
   }
   secs.forEach(function (sc) { sc.count = sc.list.length; });
   const slides = flat();
@@ -5997,8 +6172,33 @@ const ONCE_TOPICS_ = [
   ['scope', /\b(scope|in and out|what is in)\b/i], ['raci', /\braci\b|responsibility matrix/i], ['kpi', /\bkpis?\b|success (metrics|measures)|target (metrics|figures)/i],
   ['pricing', /\bpricing\b|commercial (options|models)|investment options|engagement options/i], ['risks', /\brisks?\b.*\bmitigat|\bmitigat.*\brisks?\b|risk register/i],
   ['support', /support model|\bL1\b.*\bL3\b|managed support|support tiers/i], ['team', /team structure|joint team|delivery team|operating structure/i],
-  ['why66', /why 66\s?degrees|why us\b/i], ['next', /next steps?/i], ['timeline', /\b\d+[- ]week (timeline|plan|roadmap)|implementation timeline|delivery timeline/i]
+  ['why66', /why 66\s?degrees|why us\b/i], ['next', /next steps?/i], ['sizing', /\bsizing\b/i], ['timeline', /\b\d+[- ]week (timeline|plan|roadmap)|implementation timeline|delivery timeline/i]
 ];
+// every once-only topic a title (or the request) names, in the order of the list
+function onceTopicsOf_(title) {
+  const t = String(title || '');
+  return ONCE_TOPICS_.filter(function (x) { return x[1].test(t); }).map(function (x) { return x[0]; });
+}
+function onceTopicsIn_(prompt) {
+  // the request names a topic in its own words ("a RACI matrix", "next steps", "three pricing options")
+  const p = String(prompt || '');
+  const extra = { team: /team structure|joint team/i, risks: /\brisks?\b/i, support: /support model|\bL1\b/i, kpi: /\bkpis?\b|success (kpis|metrics)|target figures/i, pricing: /pricing|pricing options/i, scope: /\bscope\b/i };
+  return ONCE_TOPICS_.filter(function (x) { return x[1].test(p) || (extra[x[0]] && extra[x[0]].test(p)); }).map(function (x) { return x[0]; });
+}
+// the standard slide of a once-only topic the request names but the outline lost
+const ONCE_TOPIC_ENTRY_ = {
+  scope: { type: 'comparison', title: 'Scope: what is in and what is out', brief: 'What the engagement covers and what it does not' },
+  raci: { type: 'table', title: 'RACI matrix across delivery workstreams', brief: 'Each workstream with who is Responsible, Accountable, Consulted and Informed on both sides' },
+  kpi: { type: 'stats', title: 'Success KPIs and target figures', brief: 'The target figures the request gives, each with how it is measured' },
+  pricing: { type: 'cards', title: 'Pricing options', brief: 'The commercial options the request names, without amounts unless given' },
+  risks: { type: 'cards', title: 'Key risks and how we mitigate them', brief: 'Each delivery or technical risk with its mitigation' },
+  support: { type: 'cards', title: 'Support model', brief: 'The support levels and what each one covers' },
+  team: { type: 'team', title: 'Joint team structure', brief: 'Both teams, their roles and how they work together' },
+  why66: { type: 'cards', title: 'Why 66degrees', brief: 'Approved 66degrees facts only' },
+  next: { type: 'process', title: 'Next steps', brief: 'The first concrete actions, with owners' },
+  timeline: { type: 'timeline', title: 'Implementation timeline', brief: 'The phases over the weeks the request gives' },
+  sizing: { type: 'table', title: 'Configuration and sizing', brief: 'Components with their size and configuration' }
+};
 function onceTopicOf_(title) {
   for (let i = 0; i < ONCE_TOPICS_.length; i++) if (ONCE_TOPICS_[i][1].test(String(title || ''))) return ONCE_TOPICS_[i][0];
   return '';
