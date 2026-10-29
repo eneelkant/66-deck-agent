@@ -181,7 +181,8 @@ test("Proposal Decks of 10-24 slides use the planned outline path with fewer sec
   assert.equal(d.length, 15);
   assert.ok(d.some((s) => s.type === "team"), "team");
   assert.ok(d.some((s) => /risk/i.test(s.title)), "risks");
-  assert.ok(d.some((s) => s.type === "stats"), "KPIs");
+  // V.1_70: no figures in this request - the KPI slide stays, naming its measures without invented numbers
+  assert.ok(d.some((s) => /key performance/i.test(s.title)), "KPIs");
   assert.ok(!d.some((s) => s.type === "section" && s.level === 2), "no workstream dividers in a short deck");
   prompts.length = 0;
   runDeck(12);

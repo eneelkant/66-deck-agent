@@ -306,9 +306,11 @@ test("long deck of 30 for Unilever: 30 slides; risks with mitigations; team lane
   assert.ok(d.some((s) => s.type === "timeline"), "the roadmap is a timeline");
   assert.ok(!d.some((s) => s.type !== "section" && s.title === "Understanding Unilever's needs"), "no slide named like its section");
   assert.ok(!JSON.stringify(d).includes("**"), "no markdown");
+  // V.1_70: this request gives no figures, so the KPI slide names its measures without invented numbers (step 1: a
+  // figure comes from the request, the files, the approved facts or the research); with figures, see v70.test.js
   const kpi = d.find((s) => /key performance/i.test(s.title));
-  assert.equal(kpi.reference.tag, "P66_KPI_TILES");
-  assert.ok(kpi.items.every((it) => /\d/.test(it.value)));
+  assert.ok(kpi, "the KPI slide is there");
+  assert.ok(!(kpi.items || []).some((it) => /\d/.test(String(it.value || ""))), "no invented KPI figures");
 });
 
 test("version label is V.1_48 or later", () => {

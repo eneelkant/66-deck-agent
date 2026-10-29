@@ -41,6 +41,7 @@
     "ClientLogoProvider.gs",
     "Rebrand.gs",
     "Code.gs",
+    "Brief.gs",
     "Generator.html",
     "appsscript.json",
     "ModelTest.gs",

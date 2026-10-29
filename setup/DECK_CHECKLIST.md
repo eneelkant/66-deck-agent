@@ -1,4 +1,4 @@
-# 66° Deck Agent: the deck checklist (V.1_69)
+# 66° Deck Agent: the deck checklist (V.1_70)
 
 One list for every deck type. It is both the review list for people and the list of what the add-on checks by itself.
 **Auto** means the add-on checks it on every slide before the slide is drawn, draws the slide again with a better
@@ -69,6 +69,19 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 |---|---|
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 | Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
+
+## Step 1 - the brief (V.1_70): every deck type
+
+| Rule | How it is kept |
+|---|---|
+| The request is read once into a fixed brief: client, slide count, topics, figures in order, prices (or none) | Gemini (temperature 0), checked by the code; the code alone when Gemini is not reachable. Test v70 |
+| Every prompt that writes slides gets the brief; every part of a long deck uses the same brief | Test v70 |
+| A figure on a slide comes from the brief, the request, the attached files, the approved facts or the research | Auto: the figure check, before and after the fill steps; what is left out is listed in the speaker notes. Test v70 |
+| A research figure on a slide names its source in the speaker notes | Auto. Test v70 |
+| Never 100% uptime, availability or SLA; no "Amber." / "Green." left in a text | Auto. Test v70 |
+| KPI tiles: the brief's figures in the request's order, the label does not repeat the figure, every tile has its text | Auto. Test v69, v70 |
+| One measure, one figure in the whole deck (the request's figure wins) | Auto; otherwise a "Check before sharing" note. Test v70 |
+| Dark content slides: at most 3, never next to another dark slide or a dark divider | Design choice rule. Test v70 |
 
 ## The request is the source (V.1_69): every deck type
 
