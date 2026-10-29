@@ -1,4 +1,4 @@
-# 66° Deck Agent: the deck checklist (V.1_72)
+# 66° Deck Agent: the deck checklist (V.1_73)
 
 One list for every deck type. It is both the review list for people and the list of what the add-on checks by itself.
 **Auto** means the add-on checks it on every slide before the slide is drawn, draws the slide again with a better
@@ -69,6 +69,22 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 |---|---|
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 | Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
+
+## Step 4 - the checker blocks a bad slide (V.1_73) and the deck-44 fixes: every deck type
+
+| Rule | How it is kept |
+|---|---|
+| A slide the checker still finds a problem on (cut, lost content or figures, out of its box, off the slide, overlapping, headings only, empty) is written again once to fit its design, then drawn with a safe layout | Gate.gs, before the notes and drawing, in short and long decks; a budget per part. Test v73 |
+| The safe layout never drops a figure | Test v73 |
+| Dark content slides: at most 3, never beside a dark slide or divider - also Solution decks and across parts | SolutionKit + chooser. Test v70, v73 |
+| A RACI shows roles only; rows written as objects become table rows; the detail goes to the notes | Contracts (code). Test v73 |
+| A risk slide shows its mitigations ("Risk: ... Mitigation: ..." fields are read) | Contracts (code). Test v73 |
+| No broken text after a figure or amount is taken out | Brief.gs fragment repair, last step. Test v73 |
+| Support in any wording is the support slide; testing, monitoring and security once (twice in a 35+ deck only on another angle) | Outline. Test v73 |
+| Section balancing keeps a slide with the section it belongs to | Test v73 |
+| Headings-only lists of up to six words get their descriptions | Test v73 |
+| The request's target beats a research figure in any text; 66degrees credential counts only as approved | Test v73 |
+| Each target has one slide of its own besides the KPI slide | Outline. Test v73 |
 
 ## Step 3 - each slide kind in its shape (V.1_72) and the deck-43 fixes: every deck type
 

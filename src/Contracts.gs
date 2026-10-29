@@ -68,6 +68,8 @@ function contractGaps_(sp, kind, ctx) {
   } else if (kind === 'risks') {
     if (items.length < 2 || items.length > 6) gaps.push('2-6 risks');
     if (items.some(function (it) { return !(it && (it.title || it.label) && said(it) >= 8); })) gaps.push('a risk without its mitigation');
+    // (V.1_73: a slide titled for mitigations shows them - a fix, a mitigation, points, or a text that says how)
+    if (/mitigat|how we (handle|address|manage)/i.test(String(sp.title || '')) && items.some(function (it) { return it && !wordsIn_(it.fix || it.mitigation) && !(Array.isArray(it.points) && it.points.length) && !/\b(mitigat\w*|by |through|we will|we |enforce|deploy|configure|schedule|run |use )/i.test(itemText_(it)); })) gaps.push('a risk without its mitigation');
   } else if (kind === 'next') {
     if (items.length < 3 || items.length > 6) gaps.push('3-6 steps');
     if (items.some(function (it) { return !(it && (it.title || it.label) && said(it) >= 6); })) gaps.push('a step without what it involves');
@@ -184,13 +186,83 @@ function applyContractAnswer_(sp, kind, ans, ctx) {
   return true;
 }
 
+/* V.1_73 (deck 44 Proposal 35 "Consulted for scope and strategy inputs", Solution 37 rows as {label, left, right} with a
+   sentence in each cell): a RACI is put in shape by the code - rows written as objects become table rows (the columns
+   kept), and a cell that starts with its role keeps only the role ("Accountable / Responsible" stays); what a cell said
+   after its role goes to the speaker notes */
+var ROLE_START_RE_ = /^\s*((?:responsible|accountable|consulted|informed)(?:\s*(?:\/|&|,|and)\s*(?:responsible|accountable|consulted|informed))*)\b/i;
+function normalizeRaci_(sp) {
+  let changed = false;
+  if (!Array.isArray(sp.rows)) return false;
+  const cols = Array.isArray(sp.columns) ? sp.columns.map(String) : [];
+  // rows as objects: {label|workstream|aspect, then one key per party (left / right / the column names)}
+  if (sp.rows.some(function (r) { return r && typeof r === 'object' && !Array.isArray(r); })) {
+    sp.rows = sp.rows.map(function (r) {
+      if (Array.isArray(r) || !r || typeof r !== 'object') return r;
+      const keys = Object.keys(r);
+      const head = r.label || r.workstream || r.aspect || r.title || r.name || r.area || '';
+      const rest = keys.filter(function (k) { return ['label', 'workstream', 'aspect', 'title', 'name', 'area', 'icon'].indexOf(k) === -1; });
+      // the columns given name the parties in order; otherwise left / right / the other keys in their order
+      const byCol = cols.slice(1).map(function (c) { const k = rest.filter(function (x) { return x.toLowerCase() === String(c).toLowerCase(); })[0]; return k ? r[k] : undefined; });
+      const vals = byCol.some(function (v) { return v !== undefined; }) ? byCol : rest.map(function (k) { return r[k]; });
+      return [String(head)].concat(vals.map(function (v) { return v == null ? '' : String(typeof v === 'object' ? (v.text || v.title || '') : v); }));
+    });
+    changed = true;
+  }
+  const extra = [];
+  sp.rows = sp.rows.map(function (r) {
+    if (!Array.isArray(r)) return r;
+    return r.map(function (c, j) {
+      if (!j || typeof c !== 'string') return c;
+      const free = /deliverable|output|artifact|notes?|description|scope|outcome|milestone/i.test(String(cols[j] || ''));
+      const m = !free && c.match(ROLE_START_RE_);
+      if (!m || m[0].trim() === c.trim().replace(/\.$/, '')) return c;
+      const role = m[1].replace(/\s*(\/|&|,|and)\s*/gi, ' / ').replace(/\b\w/g, function (x) { return x.toUpperCase(); }).replace(/\b(Responsible|Accountable|Consulted|Informed)\b/g, function (x) { return x; });
+      const roleOut = role.charAt(0) + role.slice(1).replace(/ \/ (\w)/g, function (a, w) { return ' / ' + w.toLowerCase(); });
+      const rest = c.slice(m[0].length).replace(/^[\s,:;.\-–]+/, '').trim();
+      if (rest) extra.push(String(r[0] || '') + ' (' + String(cols[j] || '') + '): ' + rest);
+      changed = true;
+      return roleOut;
+    });
+  });
+  // the first column (the workstreams) has its heading
+  const w = Math.max.apply(null, sp.rows.filter(Array.isArray).map(function (r) { return r.length; }).concat([0]));
+  if (w && cols.length === w - 1) { sp.columns = ['Workstream'].concat(cols); changed = true; }
+  if (extra.length) sp.notes = String(sp.notes || '') + '\nRoles in detail: ' + extra.join(' ').slice(0, 1500);
+  if (changed) { sp.type = 'table'; delete sp.design; sp.reference = null; }
+  return changed;
+}
+
+/* V.1_73 (deck 44 Solution 38: "Risk: ...; Impact: ...; Mitigation: ...; Mitigation: ..." in one field, so the slide
+   showed the risks and none of their mitigations): fields written as a record are read - the risk and its impact are the
+   text, the mitigations are the fix */
+function splitRiskRecords_(sp) {
+  if (!Array.isArray(sp.items)) return false;
+  let n = 0;
+  sp.items.forEach(function (it) {
+    if (!it || typeof it !== 'object') return;
+    const src = String(it.fix || it.text || '');
+    if (!/\bmitigation\s*:/i.test(src) || !/\b(risk|impact)\s*:/i.test(src)) return;
+    const parts = src.split(/\s*[;·|]\s*|\s*\.\s+(?=(?:risk|impact|mitigation|owner|likelihood)\s*:)/i).map(function (x) { return x.trim(); }).filter(Boolean);
+    const get = function (name) { return parts.filter(function (x) { return new RegExp('^' + name + '\\s*:', 'i').test(x); }).map(function (x) { x = x.replace(/^[a-z]+\s*:\s*/i, '').trim(); x = x.charAt(0).toUpperCase() + x.slice(1); return /[.!?]$/.test(x) ? x : x + '.'; }); };
+    const mit = get('mitigation'), risk = get('risk'), impact = get('impact');
+    if (!mit.length) return;
+    it.fix = mit.join(' ');
+    it.text = risk.concat(impact).join(' ');
+    n++;
+  });
+  return n > 0;
+}
+
 // the contract pass over the written slides (returns the number of slides put in shape)
 function conformSlides_(slides, ctx) {
   let n = 0;
   const ask = [];
   (slides || []).forEach(function (sp, i) {
+    if (sp && typeof sp === 'object' && splitRiskRecords_(sp)) n++;         // V.1_73: on every slide
     const kind = contractKind_(sp, ctx);
     if (!kind) return;
+    if (kind === 'raci' && normalizeRaci_(sp)) n++;                          // V.1_73: by the code first
     const gaps = contractGaps_(sp, kind, ctx);
     if (!gaps.length) return;
     if (kind === 'kpi') { if (conformKpi_(sp, ctx)) n++; return; }

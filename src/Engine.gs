@@ -5328,6 +5328,8 @@ var ENGINE = (function () {
       LIB_MODE_ = libOf_(s1);
       try { var o = V[tag](s1, {}); return !!o && contentCount_(o) > 0; } catch (e) { return false; } finally { LIB_MODE_ = wasMode; }
     },
+    // V.1_73: a slide's content as plain items or points (the gate's safe layout)
+    flatten: function (spec) { var sp = cleanSpec(spec || {}); var t = ALIASES[String(sp.type || 'bullets').toLowerCase()] || String(sp.type || 'bullets').toLowerCase(); return flattenSpec_(sp, L[t] ? t : 'bullets'); },
     render: render, measure: measure, layoutIssues: function (o, sp) { return layoutIssues_(o, sp || {}); }, variantsFor: function (type) { return (VARIANTS[type] || []).slice(); }, cleanSpec: cleanSpec, cleanText: cleanText, designMenu: designMenu, layouts: Object.keys(L), VARIANTS: VARIANTS, BRAND: BRAND, TOKENS: T, W: W, H: H, INSET: INSET,
     textWidth: textWidth, wrap: wrap, fit: fit, tableRowsThatFit: tableRowsThatFit, PROPOSAL_TAGS: PROPOSAL_TAGS_, SOLUTION_TAGS: SOLUTION_TAGS_, posSize: posSize, splitSpace: splitSpace, innerSize: innerSize, boxH: boxH };
 })();

@@ -479,6 +479,7 @@ function generatePresentationRun_(data, run) {
   let stats, tempId = null, copied;
   if (!CONFIG.useBeautifulAi) {
     deckFigureCheck_(plan.slides, ctx, sources);                                 // V.1_70: again after the fill and fit steps
+    deckGate_(plan.slides, ctx, started);                                        // V.1_73: step 4 - no bad slide goes in
     finalizeNotes_(plan, sources, ctx);
     stats = drawSlidesIntoActive_(target, plan.slides, ctx, blankDeck);
     copied = stats.redrawn || plan.slides.length;
@@ -2753,6 +2754,12 @@ function agendaNotes_(sp) {
     low.slice(0, -1).join(', ') + ' and ' + low[low.length - 1] + '.';
   if (typeof keepNames_ === 'function') sp.notes = keepNames_(sp.notes);
 }
+// V.1_73: step 4 - a slide the checker still finds a problem on is written again once, then drawn with a safe layout
+// (Gate.gs); never stops a deck
+function deckGate_(slides, ctx, started) {
+  if (typeof gateSlides_ !== 'function') return null;
+  try { return gateSlides_(slides, ctx, started); } catch (e) { if (ctx && ctx.log) ctx.log.push('Slide gate skipped: ' + e.message); return null; }
+}
 // V.1_72: step 3 - the slides of a known kind (KPIs, RACI, team, risks, pricing, next steps) in the shape their designs
 // need (Contracts.gs); never stops a deck
 function deckShapeCheck_(slides, ctx) {
@@ -2766,7 +2773,11 @@ function deckFigureCheck_(slides, ctx, sources) {
     if (typeof canonicalCredentials_ === 'function') canonicalCredentials_(slides, ctx);   // V.1_71: one figure per 66degrees credential
     if (typeof approvedCredentialClaims_ === 'function') approvedCredentialClaims_(slides, ctx);   // V.1_72: credential claims as approved
     if (typeof foreignWords_ === 'function') foreignWords_(slides);                               // V.1_72: English words only
-    const n = guardFigures_(slides, ctx, sources); sameMeasureFigures_(slides, ctx); return n;
+    const n = guardFigures_(slides, ctx, sources); sameMeasureFigures_(slides, ctx);
+    if (typeof targetFiguresInText_ === 'function') targetFiguresInText_(slides, ctx);   // V.1_73
+    if (typeof credentialCounts_ === 'function') credentialCounts_(slides, ctx);         // V.1_73
+    if (typeof fragmentRepair_ === 'function') fragmentRepair_(slides, ctx);             // V.1_73: last - no broken text
+    return n;
   }
   catch (e) { if (ctx && ctx.log) ctx.log.push('Figure check skipped: ' + e.message); return 0; }
 }
@@ -3454,6 +3465,21 @@ function chooseDesignsByContent_(plan, ctx) {
       prevLook = lookKey(type, current, m0);
       if (current) { used[current] = (used[current] || 0) + 1; lastAt[current] = at; }
       if (prevLook) looksUsed[prevLook] = (looksUsed[prevLook] || 0) + 1;
+      // V.1_73 (deck 44 Proposal 16: the one design that fits cards with points is dark, beside a dark divider): when the
+      // dark rule does not allow a dark slide here, the points are written as text so a light design can show them
+      if (m0 && m0.dark && type !== 'section' && !darkContentAllowed_(prevDark, nextDark, darkUsed, darkMax) && Array.isArray(sp.items)) {
+        const flat = Object.assign({}, sp, { items: sp.items.map(function (it) { return it && typeof it === 'object' && Array.isArray(it.points) ? Object.assign({}, it, { text: [it.text].concat(it.points.map(function (p) { return typeof p === 'string' ? p : (p && (p.text || p.title)) || ''; })).filter(Boolean).map(function (x) { x = String(x).trim(); return /[.!?]$/.test(x) ? x : x + '.'; }).join(' '), points: undefined }) : it; }) });
+        const light = drawableDesigns_(type, itemCount_(flat), flat).filter(function (d) {
+          if (ENGINE.canDraw && !ENGINE.canDraw(trialOf(flat, d.tag))) return false;
+          let mm = null; try { mm = ENGINE.measure(trialOf(flat, d.tag), { tokens: ctx.tokens || null }); } catch (e) {}
+          return mm && !mm.dark && mm.content > 0 && !mm.overflow.length;
+        })[0];
+        if (light) {
+          flat.items.forEach(function (it) { if (it && typeof it === 'object') delete it.points; });
+          Object.assign(sp, flat); sp.reference = referenceForTag_(ctx.lib, light.tag); delete sp.design;
+          m0 = { dark: false }; prevTag = light.tag; swaps++;
+        }
+      }
       prevDark = type === 'section' || !!(m0 && m0.dark);                     // V.1_70: a divider is dark (not counted)
       if (prevDark && type !== 'section') darkUsed++;
       return;
@@ -3478,7 +3504,12 @@ function chooseDesignsByContent_(plan, ctx) {
       return { d: d, m: m, fitsWell: fitsWell, look: lookKey(type, d.tag, m) };
     });
     let best = null;
-    cands.forEach(function (c) {
+    // V.1_73: the dark rule is a rule - a dark design is not a candidate where a dark slide is not allowed (when a light
+    // design can show the content at all)
+    const darkOk = darkContentAllowed_(prevDark, nextDark, darkUsed, darkMax);
+    const lightCands = cands.filter(function (c) { return !c.m.dark && c.m.content > 0; });
+    const pickFrom = !darkOk && lightCands.length ? lightCands : cands;
+    pickFrom.forEach(function (c) {
       const d = c.d, m = c.m;
       // 1. Fit is a gate, not a ranking: every design that shows the content well competes on equal terms
       let score = 0;
@@ -3502,6 +3533,7 @@ function chooseDesignsByContent_(plan, ctx) {
       // V.1_63 (deck 35: the same four blue-header cards on slides 19, 37, 40 and 49): a design used again in a long deck
       // stays at least 8 slides away from its last place; designs that show icons are preferred for parallel items
       if (lastAt[d.tag] && at - lastAt[d.tag] < 8) score -= 140;
+      if (lastAt[d.tag] && at - lastAt[d.tag] <= 2) score -= 300;      // V.1_73: never two slides later (fewer designs now dark is limited)
       if (m.icons > 0 && ['cards', 'process', 'diagram'].indexOf(type) !== -1) score += 30;
       if (c.look === prevLook && !geminiPick) score -= 50;
       // 3. Variety between decks (every user): designs and looks used in the last decks lose, unused ones win
@@ -4458,7 +4490,7 @@ function normalizeShapes_(plan, ctx) {
     // 7. V.1_67 (deck 39 Proposal 23 "Scope": five bullets that were only headings): points of one to four words are
     //    headings without their content - they become items, so the fill step writes what each one covers
     if (['bullets', 'statement'].indexOf(String(sp.type || '').toLowerCase()) !== -1 && Array.isArray(sp.points) && sp.points.length >= 3 &&
-        !(Array.isArray(sp.items) && sp.items.length) && sp.points.every(function (p) { return typeof p === 'string' && !/[.!?]$/.test(p.trim()) && p.trim().split(/\s+/).length <= (/scope|assumption|dependenc|deliverable|out of|in scope/i.test(String(sp.title || '')) ? 7 : 4); })) {   // V.1_68: "Out of scope (future phases)"
+        !(Array.isArray(sp.items) && sp.items.length) && sp.points.every(function (p) { return typeof p === 'string' && !/[.!?]$/.test(p.trim()) && p.trim().split(/\s+/).length <= (/scope|assumption|dependenc|deliverable|out of|in scope/i.test(String(sp.title || '')) ? 7 : 6); })) {   // V.1_68: "Out of scope (future phases)"; V.1_73: 6 words (deck 44 Proposal 32)
       sp.type = 'cards'; sp.items = sp.points.map(function (p) { return { title: String(p).trim(), text: '' }; }); sp.points = []; delete sp.design; sp.reference = null;
     }
     // 8. V.1_67 (deck 39 General 26: "$285K fixed fee", "$85K / month" in a deck whose request gave no price): an amount
@@ -5348,7 +5380,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_72';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_73';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5680,7 +5712,9 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
         if (!o || o.type === 'section') return true;
         const f = onceTopicOfEntry_(o);
         if (!f) return true;
-        if (onceSeen[f]) { ctx.log.push('Outline: "' + String(o.title).slice(0, 60) + '" left out (the deck already has "' + String(onceSeen[f]).slice(0, 50) + '").'); return false; }
+        onceSeen.__n = onceSeen.__n || {};   // (V.1_73: a second slide of a topic only on another angle - few shared words)
+        if ((onceSeen.__n[f] || 0) >= onceLimit_(f, n) || ((onceSeen.__n[f] || 0) >= 1 && sharedWords_(String(o.title || ''), String(onceSeen[f] || '')) >= 2)) { ctx.log.push('Outline: "' + String(o.title).slice(0, 60) + '" left out (the deck already has "' + String(onceSeen[f]).slice(0, 50) + '").'); return false; }
+        onceSeen.__n[f] = (onceSeen.__n[f] || 0) + 1;
         onceSeen[f] = o.title;
         return true;
       });
@@ -5794,11 +5828,29 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
         if (!o || o.type === 'section') return true;
         const f = onceTopicOfEntry_(o);
         if (!f) return true;
-        if (onceLast[f]) { ctx.log.push('Outline: "' + String(o.title).slice(0, 60) + '" left out (the deck already has "' + String(onceLast[f]).slice(0, 50) + '").'); return false; }
+        onceLast.__n = onceLast.__n || {};
+        if ((onceLast.__n[f] || 0) >= onceLimit_(f, n) || ((onceLast.__n[f] || 0) >= 1 && sharedWords_(String(o.title || ''), String(onceLast[f] || '')) >= 2)) { ctx.log.push('Outline: "' + String(o.title).slice(0, 60) + '" left out (the deck already has "' + String(onceLast[f]).slice(0, 50) + '").'); return false; }
+        onceLast.__n[f] = (onceLast.__n[f] || 0) + 1;
         onceLast[f] = o.title;
         return true;
       });
     });
+    // V.1_73 (deck 44 General 13 / 17, 14 / 18: two slides for each target): a target of the request has one slide of its
+    // own (besides the KPI slide); a second one goes - its place is filled below with a topic the deck does not have
+    {
+      const tg = typeof briefTargets_ === 'function' ? briefTargets_(ctx) : [];
+      const tCount = {};
+      secs.forEach(function (sc) {
+        sc.list = sc.list.filter(function (o) {
+          if (!o || o.type === 'section' || onceTopicOfEntry_(o) === 'kpi') return true;
+          const hit = tg.filter(function (f) { const lw = String(f.label || '').split(/\s+/).filter(function (w) { return w.length > 2; }); return lw.length && sharedWords_(String(o.title || ''), f.label) >= Math.min(2, lw.length); })[0];
+          if (!hit) return true;
+          tCount[hit.key] = (tCount[hit.key] || 0) + 1;
+          if (tCount[hit.key] > 1) { ctx.log.push('Outline: "' + String(o.title).slice(0, 60) + '" left out (the target "' + hit.value + ' ' + hit.label + '" has its slide).'); return false; }
+          return true;
+        });
+      });
+    }
     if (flat().length < body) backlogFill_(secs, body, seen, keyOf, flat, userPrompt, [], backlog);
     if (flat().length < body) {
       const pool2 = reqNames.filter(function (t) { return !onceTopicOf_(t); });
@@ -6274,13 +6326,18 @@ const ONCE_TOPICS_ = [
   ['scope', /\b(scope|in and out|what is in)\b/i], ['raci', /\braci\b|responsibility matrix/i],
   ['pricing', /\bpricing\b|commercial (options|models|structures?)|investment options|engagement (options|models)/i],
   ['risks', /\brisks\b|\bkey risks?\b|^risks?\b|risk (register|management|mitigation)|mitigation (plan|controls|strategies)/i],
-  ['support', /support model|\bL1\b.*\bL3\b|managed support|support tiers|follow-the-sun support/i], ['team', /team structure|joint team|delivery team|operating structure|team and governance/i],
+  ['support', /support model|support (and|&) operat\w*|enterprise support|day[- ]?(two|2) (support|operations)|\bL1\b.*\bL3\b|managed support|support tiers|follow-the-sun support|incident escalation/i], ['team', /team structure|joint team|delivery team|operating structure|team and governance/i],   // V.1_73: support in any wording (deck 44 General 31 / 38)
   ['why66', /why 66\s?degrees|why us\b|partnership differentiators|engineering scale and expertise|our (credentials|expertise)|proven (delivery|engineering|expertise)/i],
   ['next', /next steps?/i], ['sizing', /\bsizing\b|configuration (and|&) (sizing|specifications)/i],
   ['timeline', /\b\d+[- ]week (timeline|plan|roadmap)|implementation timeline|delivery timeline/i],
+  // V.1_73 (deck 44: testing three times, monitoring three times, security twice): at most once, twice in a deck of 35+
+  ['qa', /\btesting\b|quality assurance|\bqa\b|test (strategy|plan)|validation testing/i], ['monitoring', /\bmonitor(ing)?\b|observability|\balerting\b/i],
+  ['security', /\bsecur(e|ing|ity)\b|zero[- ]trust|firewall/i],
   // (last: "Support model and SLA tiers" is the support slide, "Risks to the KPIs" the risk slide)
   ['kpi', /\bkpis?\b|success (metrics|measures|criteria)|target (metrics|figures|kpis)|\bslas?\b|\bslos?\b|performance targets|measur(e|ing) success|key performance/i]
 ];
+// V.1_73: how many slides a topic may have - once; testing, monitoring and security twice in a deck of 35 slides or more
+function onceLimit_(f, n) { return (['qa', 'monitoring', 'security'].indexOf(f) !== -1 && Number(n) >= 35) ? 2 : 1; }
 // the once-only topic of an outline entry: its title first, its brief when the title says nothing (a KPI slide titled
 // "Measuring what matters" with the brief "target KPIs")
 function onceTopicOfEntry_(o) {
@@ -6314,7 +6371,10 @@ const ONCE_TOPIC_ENTRY_ = {
   why66: { type: 'cards', title: 'Why 66degrees', brief: 'Approved 66degrees facts only' },
   next: { type: 'process', title: 'Next steps', brief: 'The first concrete actions, with owners' },
   timeline: { type: 'timeline', title: 'Implementation timeline', brief: 'The phases over the weeks the request gives' },
-  sizing: { type: 'table', title: 'Configuration and sizing', brief: 'Components with their size and configuration' }
+  sizing: { type: 'table', title: 'Configuration and sizing', brief: 'Components with their size and configuration' },
+  qa: { type: 'process', title: 'Testing and quality assurance', brief: 'How the solution is tested before go-live' },        // V.1_73
+  monitoring: { type: 'cards', title: 'Monitoring and alerting across the platform', brief: 'What is watched, the alerts and who acts on them' },
+  security: { type: 'cards', title: 'Security controls and compliance', brief: 'Identity, network, encryption and audit controls' }
 };
 function onceTopicOf_(title) {
   for (let i = 0; i < ONCE_TOPICS_.length; i++) if (ONCE_TOPICS_[i][1].test(String(title || ''))) return ONCE_TOPICS_[i][0];
@@ -6540,8 +6600,11 @@ function longDeckStep_(ctx, target, st, t0) {
       st.ledger = (st.ledger || []).concat([].concat.apply([], plan.slides.map(proposalLedgerOf_))).slice(-200);
     }
     deckFigureCheck_(plan.slides, ctx, st.sources);                      // V.1_70: again after the fill and fit steps
+    deckGate_(plan.slides, ctx, b0);                                     // V.1_73: step 4 - no bad slide goes in
     finalizeNotes_(plan, st.sources, ctx);
+    ctx.nextPartStartsDark = !!all[st.next + part.length] && all[st.next + part.length].type === 'section';   // V.1_73: Solution dark rule
     drawSlidesIntoActive_(longDrawTarget_(target, st), plan.slides, ctx, false);   // V.1_51: into the working copy
+    ctx.nextPartStartsDark = false;
     st.next += part.length;
     st.drawn += plan.slides.length;
     const ms = Date.now() - b0;

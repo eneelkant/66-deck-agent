@@ -100,7 +100,7 @@ test("4. a topic shown once keeps its first slide; the later repeat's place is f
   assert.equal(G.onceTopicOf_("RACI matrix across delivery workstreams"), "raci");
   assert.equal(G.onceTopicOf_("Current challenges across 400 stores"), "");
   const code = read("src/Code.gs");
-  assert.match(code, /if \(onceSeen\[f\]\) \{ ctx\.log\.push\('Outline: "'/);
+  assert.match(code, /if \(\(onceSeen\.__n\[f\] \|\| 0\) >= onceLimit_\(f, n\)/);   // (V.1_73: a count per topic)
   assert.ok(code.indexOf("const onceSeen = {}") < code.indexOf("if (flat().length < body) backlogFill_(secs, body, seen, keyOf, flat, userPrompt, holes, backlog);"), "the place is filled after");
 });
 

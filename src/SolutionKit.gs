@@ -608,6 +608,7 @@ function solutionBalanceSections_(secs) {
   const words = secs.map(function (sc) { return solutionStems_({ title: sc.title, message: (sc.description || '') + ' ' + (sc.storyline || '') }); });
   const fit = function (o, k) { const st = solutionStems_(o); return st.filter(function (w) { return words[k].indexOf(w) !== -1; }).length; };
   let moves = 0;
+  const held = {};                                                     // V.1_73: boundaries whose edge slide belongs where it is
   for (let guard = 0; guard < 60; guard++) {
     const sizes = secs.map(function (sc) { return sc.list.length; });
     if (Math.max.apply(null, sizes) - Math.min.apply(null, sizes) <= 2) break;
@@ -615,12 +616,17 @@ function solutionBalanceSections_(secs) {
     let best = null;
     for (let k = 0; k < secs.length - 1; k++) {
       const d = sizes[k] - sizes[k + 1];
-      if (Math.abs(d) >= 2 && (!best || Math.abs(d) > Math.abs(best.d))) best = { k: k, d: d };
+      if (Math.abs(d) >= 2 && !held[k + ':' + (d > 0 ? 1 : -1)] && (!best || Math.abs(d) > Math.abs(best.d))) best = { k: k, d: d };
     }
     if (!best) break;
     const from = best.d > 0 ? best.k : best.k + 1, to = best.d > 0 ? best.k + 1 : best.k;
     const list = secs[from].list;
     if (list.length <= 1) break;
+    // V.1_73 (deck 44 Solution 33: "Risks, governance, and next steps" opened with a runbook and a chaos test): a slide that
+    // belongs to its section (shares its words) stays at that boundary - other boundaries still balance; a section of five
+    // or more slides more than its neighbour gives a slide anyway
+    const edge = to > from ? list[list.length - 1] : list[0];
+    if (edge && fit(edge, from) > fit(edge, to) && Math.abs(best.d) < 5) { held[best.k + ':' + (best.d > 0 ? 1 : -1)] = true; continue; }
     if (to > from) secs[to].list.unshift(list.pop()); else secs[to].list.push(list.shift());
     moves++;
   }
@@ -632,25 +638,33 @@ function solutionBalanceSections_(secs) {
    never right after another dark slide or a dark divider. Designs drawn only dark count as dark slides too. */
 var SOLUTION_DARK_OK_ = { S66_ICON_CARD_GRID: 1, S66_NUMBERED_CARD_GRID: 1, S66_THREE_CARD_COLUMNS: 1, S66_QUAD_RULE_CARDS: 1, S66_LEVEL_CARDS: 1, S66_LIFECYCLE_COLUMNS: 1, S66_STEP_COLUMNS: 1 };
 var SOLUTION_DARK_ONLY_ = { S66_DARK_STATEMENT: 1, S66_U_JOURNEY: 1, S66_SERVICE_HUB_DARK: 1 };
+// V.1_73 (deck 44 Solution 18 / 27: dark slides beside a dark divider, four dark slides in one deck): the rule of every
+// deck type - at most 3 dark content slides, never right before or after a dark slide or a dark divider, also where a
+// long deck is built in parts (the divider that opens the next part, the one that closed the last part)
+var DECK_DARK_MAX_ = 3;
 function solutionDarkRhythm_(specs, ctx) {
   if (!specs || !specs.length || !isSolutionDeck_(ctx)) return 0;
   const p = ctx.proposal || (ctx.proposal = { client: null, logoId: '', sectionStyle: 'dark' });
-  let since = typeof p.sinceDark === 'number' ? p.sinceDark : 2, n = 0, blockNext = false;
-  specs.forEach(function (sp) {
+  let since = typeof p.sinceDark === 'number' ? p.sinceDark : 2, n = 0, blockNext = !!p.darkBlockNext;
+  let used = typeof p.darkUsed === 'number' ? p.darkUsed : 0;
+  const isDarkDivider = function (sp) { const tg = sp && ((sp.reference && sp.reference.tag) || sp.lockTag || ''); return !!sp && String(sp.type || '').toLowerCase() === 'section' && tg !== 'P66_SECTION_LIGHT'; };
+  specs.forEach(function (sp, i) {
     if (!sp) return;
     const t = String(sp.type || '').toLowerCase();
-    if (t === 'cover' || t === 'agenda' || t === 'closing') return;
+    if (t === 'cover' || t === 'agenda' || t === 'closing') { blockNext = false; return; }
     const tag = (sp.reference && sp.reference.tag) || sp.lockTag || '';
     // V.1_54 (deck 25): a dark divider only keeps the slide right after it light (it used to restart the count, so
     // sections of 3-4 slides never had a dark slide)
-    if (t === 'section') { if (tag !== 'P66_SECTION_LIGHT') blockNext = true; return; }
-    if (SOLUTION_DARK_ONLY_[tag]) { since = 0; blockNext = true; return; }
-    if (SOLUTION_DARK_OK_[tag] && since >= 4 && !blockNext) { sp.dark = true; since = 0; n++; return; }
+    if (t === 'section') { blockNext = tag !== 'P66_SECTION_LIGHT'; return; }
+    if (SOLUTION_DARK_ONLY_[tag]) { since = 0; blockNext = true; used++; return; }
+    const next = specs[i + 1];
+    const nextDark = next ? (isDarkDivider(next) || SOLUTION_DARK_ONLY_[(next.reference && next.reference.tag) || next.lockTag || '']) : !!ctx.nextPartStartsDark;
+    if (SOLUTION_DARK_OK_[tag] && since >= 4 && !blockNext && !nextDark && used < DECK_DARK_MAX_) { sp.dark = true; since = 0; n++; used++; blockNext = true; return; }
     delete sp.dark;
     blockNext = false;
     since++;
   });
-  p.sinceDark = since;
+  p.sinceDark = since; p.darkUsed = used; p.darkBlockNext = blockNext;
   return n;
 }
 

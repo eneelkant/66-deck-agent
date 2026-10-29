@@ -43,6 +43,7 @@
     "Code.gs",
     "Brief.gs",
     "Contracts.gs",
+    "Gate.gs",
     "Generator.html",
     "appsscript.json",
     "ModelTest.gs",

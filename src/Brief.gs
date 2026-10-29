@@ -562,3 +562,144 @@ function foreignWords_(slides) {
   (slides || []).forEach(function (sp) { if (sp && typeof sp === 'object') Object.keys(sp).forEach(function (k) { if (!FIG_SKIP_KEYS_[k]) sp[k] = walk(sp[k]); }); });
   return n;
 }
+
+/* V.1_73 (deck 44 Solution 6 "averages to per minute", "with over 57% exceeding in cost", Proposal 14 "in technical labor
+   productivity gains", "saved by retiring legacy BI licenses", Proposal 32 "cuts development time by"): text left broken
+   where a figure or an amount was taken out - by any step - is repaired: the broken sentence goes when the text has
+   another one; an item whose only text is broken goes when the slide keeps two or more; otherwise the broken words at
+   the end go ("cuts development time by" -> "cuts development time"). Runs last, on every slide. */
+var FRAG_END_RE_ = /\b(by|of|to|from|than|at|with|and|or|the|per|over|under|about|around|nearly|almost|roughly|up to|between|exceeding|averaging|saving)\s*[.!?]?\s*$/i;
+var FRAG_IN_RE_ = /\b(to|and|or)\s+per\b|\bbetween\s+(and|to)\b|\b(averages?|averaging|exceed(s|ing)?|totaling|valued at)\s+(to|per|in|of|and|by|for|from|with|on)\s|\b(saves?|saved)\s+(to|per|in|of|and|for|from|on)\s|\b(by|of|to|from|than|with)\s+(in|of|per|and|to)\s|\b[a-z]{3,}:\s+(of|and|to|by|per)\s|\(\s*\)|\s,\s*[,.]/i;
+var FRAG_ART_RE_ = /\b(a|an|the)\s+(of|in|and|per)\s/;            // (lower case only: "zone A and zone B" is fine)
+var FRAG_START_RE_ = /^(in|of|by|to|for|and|with|from|on|at|per|saved|or)\b/;     // (lower case: a text that lost its first word)
+function isFragment_(t) {
+  var x = String(t || '').trim();
+  if (!x) return false;
+  return FRAG_START_RE_.test(x) || FRAG_IN_RE_.test(x + ' ') || FRAG_ART_RE_.test(x + ' ') || FRAG_END_RE_.test(x);
+}
+function repairText_(t) {
+  var x = String(t || '').trim();
+  if (!isFragment_(x)) return { text: x, ok: true };
+  var sentences = x.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+  if (sentences.length > 1) {
+    var keep = sentences.filter(function (sn) { return !isFragment_(sn); });
+    if (keep.length) return { text: keep.join(' '), ok: true };
+  }
+  // one sentence: broken words at its end go; a sentence broken inside is not kept
+  if (!FRAG_IN_RE_.test(x + ' ') && !FRAG_ART_RE_.test(x + ' ') && !FRAG_START_RE_.test(x)) {
+    var y = x.replace(/[.!?]\s*$/, '');
+    for (var k = 0; k < 3 && FRAG_END_RE_.test(y); k++) y = y.replace(FRAG_END_RE_, '').replace(/[\s,;:]+$/, '');
+    if (y.split(/\s+/).length >= 4) return { text: y + (/[.!?]$/.test(x) ? '.' : ''), ok: true };
+  }
+  return { text: x, ok: false };
+}
+function fragmentRepair_(slides, ctx) {
+  var n = 0;
+  (slides || []).forEach(function (sp) {
+    if (!sp || typeof sp !== 'object') return;
+    var t = String(sp.type || '').toLowerCase();
+    if (['cover', 'closing', 'template', 'agenda'].indexOf(t) !== -1) return;
+    ['lead', 'subtitle', 'takeaway', 'statement', 'text', 'banner', 'note'].forEach(function (k) {
+      if (typeof sp[k] !== 'string' || !isFragment_(sp[k])) return;
+      var r = repairText_(sp[k]); n++;
+      sp[k] = r.ok ? r.text : '';
+    });
+    ['callout', 'insight'].forEach(function (k) {
+      var o = sp[k];
+      if (o && typeof o === 'object' && typeof o.text === 'string' && isFragment_(o.text)) { var r = repairText_(o.text); o.text = r.ok ? r.text : ''; n++; }
+    });
+    if (Array.isArray(sp.points)) {
+      var pts = sp.points.map(function (p) { if (typeof p !== 'string' || !isFragment_(p)) return p; var r = repairText_(p); n++; return r.ok ? r.text : null; });
+      var keptP = pts.filter(function (p) { return p !== null; });
+      sp.points = keptP.length >= 2 || keptP.length === pts.length ? keptP : sp.points;
+    }
+    if (Array.isArray(sp.items)) {
+      var drop = [];
+      sp.items.forEach(function (it, j) {
+        if (!it || typeof it !== 'object') return;
+        ['text', 'description', 'fix'].forEach(function (k) {
+          if (typeof it[k] !== 'string' || !isFragment_(it[k])) return;
+          var r = repairText_(it[k]); n++;
+          if (r.ok) it[k] = r.text; else if (k === 'text' && !String(it.value || '').trim()) drop.push(j); else it[k] = '';
+        });
+        if (Array.isArray(it.points)) it.points = it.points.filter(function (p) { return !(typeof p === 'string' && isFragment_(p) && !repairText_(p).ok); }).map(function (p) { return typeof p === 'string' && isFragment_(p) ? repairText_(p).text : p; });
+      });
+      if (drop.length && sp.items.length - drop.length >= 2) sp.items = sp.items.filter(function (it, j) { return drop.indexOf(j) === -1; });
+      else drop.forEach(function (j) { if (sp.items[j]) sp.items[j].text = ''; });
+    }
+    if (Array.isArray(sp.rows)) sp.rows = sp.rows.map(function (r) { return Array.isArray(r) ? r.map(function (c) { if (typeof c !== 'string' || !isFragment_(c)) return c; var rr = repairText_(c); n++; return rr.ok ? rr.text : 'To be confirmed'; }) : r; });
+  });
+  if (n && ctx && ctx.log) ctx.log.push('Text check: ' + n + ' broken text(s) repaired (a figure or amount had been taken out).');
+  return n;
+}
+
+/* V.1_73 (deck 44 Proposal 18: "Industry benchmark: 25% to 35% run cost reduction" beside the requested 30% lower platform
+   run cost): in any text, a figure for the same measure as a target of the request, other than the target, goes (the
+   sentence or list point that carries it) */
+function targetFiguresInText_(slides, ctx) {
+  var targets = typeof briefTargets_ === 'function' ? briefTargets_(ctx) : [];
+  if (!targets.length) return 0;
+  var n = 0;
+  var conflict = function (s) {
+    var hit = false;
+    figTokens_(s).forEach(function (tok) {
+      var around = String(s).slice(Math.max(0, tok.at - 60), tok.at + String(tok.text).length + 60);
+      targets.forEach(function (f) {
+        var lw = String(f.label || '').split(/\s+/).filter(function (w) { return w.length > 2; });
+        if (lw.length < 2 || sharedWords_(around, f.label) < 2) return;
+        if (figKey_(tok.text) === f.key || String(tok.text).indexOf(String(f.value).replace(/\s+/g, '')) !== -1) return;
+        if (/[%x×]/i.test(tok.text) !== /[%x×]/i.test(f.value)) return;
+        hit = true;
+      });
+    });
+    return hit;
+  };
+  var fix = function (x) {
+    if (typeof x !== 'string' || !conflict(x)) return x;
+    var parts = x.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+    var keep = parts.filter(function (p) { return !conflict(p); });
+    n++;
+    return keep.length ? keep.join(' ') : null;
+  };
+  (slides || []).forEach(function (sp) {
+    if (!sp || typeof sp !== 'object' || (typeof isKpiSlide_ === 'function' && isKpiSlide_(sp))) return;
+    ['lead', 'takeaway', 'statement', 'text'].forEach(function (k) { if (typeof sp[k] === 'string') { var r = fix(sp[k]); sp[k] = r === null ? '' : r; } });
+    if (Array.isArray(sp.points)) { var p2 = sp.points.map(function (p) { return typeof p === 'string' ? fix(p) : p; }).filter(function (p) { return p !== null; }); if (p2.length >= 2 || !sp.points.length) sp.points = p2; }
+    if (Array.isArray(sp.items)) sp.items.forEach(function (it) { if (it && typeof it === 'object' && typeof it.text === 'string') { var r = fix(it.text); if (r !== null) it.text = r; } });
+  });
+  if (n && ctx && ctx.log) ctx.log.push('Figure check: ' + n + ' figure(s) for the same measure as a target of the request left out.');
+  return n;
+}
+
+/* V.1_73 (deck 44 General 35: "84 Partner Expertise designations"): a count of 66degrees credentials (specializations,
+   designations, expertises, awards, certifications, experts, projects) is kept only when the approved facts or the
+   request give that number */
+var CRED_COUNT_RE_ = /\b(\d[\d,]*)\+?\s+(?:[A-Za-z/&-]+\s){0,3}?(specializations?|designations?|expertises?|partner expertise|awards?|certifications?|experts|engineers|consultants|projects|customers|clients|partner of the year)\b/gi;
+function credentialCounts_(slides, ctx) {
+  var approved = [(typeof APPROVED_FACTS !== 'undefined' ? APPROVED_FACTS.join(' ') : ''), JSON.stringify((ctx && ctx.approvedFacts) || []), String((ctx && ctx.userPrompt) || '')].join(' ').replace(/,/g, '');
+  var n = 0;
+  var fix = function (x) {
+    if (typeof x !== 'string') return x;
+    var bad = false;
+    x.replace(CRED_COUNT_RE_, function (all, num) { if (approved.indexOf(String(num).replace(/,/g, '')) === -1) bad = true; return all; });
+    if (!bad) return x;
+    n++;
+    var parts = x.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+    var keep = parts.filter(function (p) { var b = false; p.replace(CRED_COUNT_RE_, function (all, num) { if (approved.indexOf(String(num).replace(/,/g, '')) === -1) b = true; return all; }); return !b; });
+    if (keep.length) return keep.join(' ');
+    // one sentence: only the count's phrase goes ("6 Specializations and 84 Partner Expertise designations" -> "6 Specializations")
+    return x.replace(/\s*(,|and|plus|with)?\s*\b\d[\d,]*\+?\s+(?:[A-Za-z/&-]+\s){0,3}?(specializations?|designations?|expertises?|partner expertise|awards?)\b/gi, function (all, j, w) { return approved.indexOf(String(all.match(/\d[\d,]*/)[0]).replace(/,/g, '')) === -1 ? '' : all; }).replace(/\s{2,}/g, ' ').trim();
+  };
+  (slides || []).forEach(function (sp) {
+    if (!sp || typeof sp !== 'object') return;
+    var walk = function (v) {
+      if (typeof v === 'string') return fix(v);
+      if (Array.isArray(v)) return v.map(walk);
+      if (v && typeof v === 'object') { Object.keys(v).forEach(function (k) { if (!FIG_SKIP_KEYS_[k] && k !== 'value') v[k] = walk(v[k]); }); return v; }
+      return v;
+    };
+    Object.keys(sp).forEach(function (k) { if (!FIG_SKIP_KEYS_[k]) sp[k] = walk(sp[k]); });
+  });
+  if (n && ctx && ctx.log) ctx.log.push('66degrees credentials: ' + n + ' count(s) not in the approved facts left out.');
+  return n;
+}

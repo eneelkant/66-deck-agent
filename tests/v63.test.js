@@ -129,8 +129,10 @@ test("a design used again in a long deck is kept away from its last place", () =
   // (about six designs can draw this content: they come round in turn, never one right after itself or two slides later)
   const last = {}, gaps = [];
   slides.forEach((sp, i) => { const t = sp.reference && sp.reference.tag; if (!t) return; if (last[t] != null) gaps.push(i - last[t]); last[t] = i; });
-  assert.ok(Math.min.apply(null, gaps) >= 4, gaps.join(","));
-  assert.ok(gaps.reduce((a, b) => a + b, 0) / gaps.length >= 5, gaps.join(","));
+  // (V.1_73: at most 3 dark slides in a deck, so 30 slides of cards rotate through the 3 light designs: a design comes
+  //  back after 3 slides at the earliest, never right after itself or two slides later)
+  assert.ok(Math.min.apply(null, gaps) >= 3, gaps.join(","));
+  assert.ok(gaps.reduce((a, b) => a + b, 0) / gaps.length >= 3, gaps.join(","));
 });
 
 test("ordinary business words in the request are not names; real names keep their capitals", () => {
