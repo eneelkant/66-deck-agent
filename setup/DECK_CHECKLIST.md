@@ -1,4 +1,4 @@
-# 66° Deck Agent: the deck checklist (V.1_71)
+# 66° Deck Agent: the deck checklist (V.1_72)
 
 One list for every deck type. It is both the review list for people and the list of what the add-on checks by itself.
 **Auto** means the add-on checks it on every slide before the slide is drawn, draws the slide again with a better
@@ -69,6 +69,21 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 |---|---|
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 | Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
+
+## Step 3 - each slide kind in its shape (V.1_72) and the deck-43 fixes: every deck type
+
+| Rule | How it is kept |
+|---|---|
+| Gemini can be given the shape its answer must have (response schema); a call without one is unchanged; a model that refuses it is asked again without it | Brand.gs callGeminiJSON. Test v72 |
+| KPI slide: the request's figures in its order, as tiles with their texts | Contracts (code). Test v72 |
+| Pricing slide: its title says pricing; without prices it says "Pricing is confirmed after the scoping workshop." | Contracts (code). Test v72 |
+| RACI, team, risks, next steps: written again with the schema when out of shape; used only when the answer passes | Contracts + schema. Test v72 |
+| The brief is asked with its schema | Test v72 |
+| A dark slide is never next to a dark divider, also across the parts of a long deck | Test v70, v72 |
+| A section never has a slide's name; next steps is the last body slide; no one-word titles | Outline. Test v72 |
+| The agenda is the spiral up to 6 sections (wider tags for long names) | Test v69, v72 |
+| 66degrees credentials only as approved (600+ certifications, 6 specializations, no ranking claims) | Test v71, v72 |
+| Risk tables never cut their mitigations; no non-English words; no "·" headings in regions or links | Test v72 |
 
 ## Step 2 - the outline (V.1_71) and the deck-42 fixes: every deck type
 

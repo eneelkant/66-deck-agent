@@ -3448,7 +3448,13 @@ var ENGINE = (function () {
     var cols = [['#', 26], ['Description', 230], ['Type', 70], ['Status', 70], ['Impact', 70], ['Likelihood', 80], ['Owner', CW - 546]];
     var x = CX, hdr = 22;
     cols.forEach(function (c) { rect(els, x + 1, top, c[1] - 2, hdr, T.blue); text(els, x + 4, top, c[1] - 8, hdr, c[0], { weight: 500, max: 10, min: 10, maxLines: 1, valign: 'middle', color: T.white }); x += c[1]; });
-    var rowH = (BOTTOM - top - hdr - 4) / risks.length, mitH = risks.some(function (r) { return r.mitigation; }) ? Math.min(30, rowH * 0.4) : 0;
+    // V.1_72 (deck 43 General 19: mitigations cut to one line with "..."): the mitigation row is as tall as its text (up to
+    // two lines); when the rows cannot hold it, another design shows the risks whole
+    var rowH = (BOTTOM - top - hdr - 4) / risks.length;
+    var mitNeed = Math.max.apply(null, risks.map(function (r) { return r.mitigation ? textH('Mitigation: ' + r.mitigation, CW - 40 - 2 * INSET, 10, 400) : 0; }));
+    if (mitNeed > 2 * lineHeight('sans', 10) + 1) return null;
+    var mitH = mitNeed ? mitNeed + 8 : 0;
+    if (rowH - mitH - 2 < 22) return null;
     risks.forEach(function (r, i) {
       var y = top + hdr + 2 + i * rowH, xx = CX;
       var vals = [String(i + 1), r.description, r.type || '', r.status || '', r.impact || '', r.likelihood || '', r.owner || ''];
@@ -4081,6 +4087,11 @@ var ENGINE = (function () {
     var norm = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
     // V.1_71 (deck 42 Proposal 4: "This executive overview uses P66_EXEC_TWO_COL to frame ..." drawn as a row): the names
     // of designs and sentences about the slide itself never reach the slide (or its notes)
+    // V.1_72 (deck 43 General 19: a risk table written twice - as rows and as a "risks" register): the table's rows are
+    // the slide; the second copy goes
+    if (t === 'table' && Array.isArray(s.rows) && s.rows.filter(Array.isArray).length >= 3 && Array.isArray(s.risks) && s.risks.length) {
+      s = Object.assign({}, s); delete s.risks; log.push('one-risk-table');
+    }
     var metaFree = stripMetaText_(s);
     if (metaFree !== s) { s = metaFree; log.push('no-design-names'); }
     // V.1_71 (deck 42 Proposal 4: the speaker notes drawn as the slide's rows instead of its four cards): points that only
@@ -4398,6 +4409,18 @@ var ENGINE = (function () {
     var undot = function (x) { x = String(x || ''); return /^[\d<>~+\-−$]/.test(x) ? x : x.replace(/\s+·\s+/, ': '); };
     if (Array.isArray(s.items)) s = Object.assign({}, s, { items: s.items.map(function (it) { if (!it || typeof it !== 'object') return it; var o = Object.assign({}, it); if (typeof o.title === 'string') o.title = undot(o.title); if (typeof o.label === 'string' && !String(o.value || '').trim()) o.label = undot(o.label); return o; }) });
     if (Array.isArray(s.layers)) s = Object.assign({}, s, { layers: s.layers.map(function (l) { return l && typeof l === 'object' ? Object.assign({}, l, { label: undot(l.label || l.title || l.name) }) : l; }) });
+    // V.1_72 (deck 43 Solution 13: "Primary region · us-central1 (active HA)", "WSFC cluster 1 · multi-zone ..."): regions,
+    // their zones and details, groups and links too
+    if (Array.isArray(s.regions)) s = Object.assign({}, s, { regions: s.regions.map(function (r) {
+      if (!r || typeof r !== 'object') return r;
+      var o = Object.assign({}, r);
+      ['label', 'title', 'detail', 'note'].forEach(function (k) { if (typeof o[k] === 'string') o[k] = undot(o[k]); });
+      if (Array.isArray(o.zones)) o.zones = o.zones.map(function (z) { return z && typeof z === 'object' ? Object.assign({}, z, typeof z.title === 'string' ? { title: undot(z.title) } : {}) : z; });
+      return o;
+    }) });
+    if (Array.isArray(s.groups)) s = Object.assign({}, s, { groups: s.groups.map(function (g) { return g && typeof g === 'object' && typeof g.label === 'string' ? Object.assign({}, g, { label: undot(g.label) }) : g; }) });
+    if (typeof s.link === 'string') s = Object.assign({}, s, { link: undot(s.link) });
+    else if (s.link && typeof s.link === 'object' && typeof s.link.label === 'string') s = Object.assign({}, s, { link: Object.assign({}, s.link, { label: undot(s.link.label) }) });
     // 7. texts start with a capital ("fixed-price 12-week outcome")
     if (Array.isArray(s.items)) s = Object.assign({}, s, { items: s.items.map(function (it) {
       if (!it || typeof it !== 'object') return typeof it === 'string' ? capFirst_(it) : it;

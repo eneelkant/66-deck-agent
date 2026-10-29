@@ -26,7 +26,11 @@
     var rows = agendaRows_(s), n = rows.length;
     if (n < 3 || n > 7) return null;
     // V.1_69: a section name that would be cut short in its tag (more than two lines) gives the agenda to the list design
-    if (rows.some(function (r) { return K.textH(String(r.title), (168 - 16) * 0.9, 9.5, 500) > 2 * K.lineHeight('sans', 9.5) + 1; })) return null;   // (measured 10% narrower, as Slides wraps)
+    // V.1_72 (deck 43 General 2: four sections, drawn as a list because one name needed three lines): the tags widen to
+    // 200 pt before the agenda gives up the spiral
+    var fitsIn = function (w) { return !rows.some(function (r) { return K.textH(String(r.title), (w - 16) * 0.9, 9.5, 500) > 2 * K.lineHeight('sans', 9.5) + 1; }); };   // (measured 10% narrower, as Slides wraps)
+    var TW = fitsIn(168) ? 168 : fitsIn(200) ? 200 : 0;
+    if (!TW) return null;
     var els = [];
     K.text(els, X0, 24, W - 2 * X0, 30, agendaTitle_(s), { weight: 500, max: 20, min: 15, maxLines: 2, color: T.ink });   // V.1_69: a long agenda title is never cut
     // spiral of short dashes (three turns, getting smaller towards the centre)
@@ -53,7 +57,7 @@
       }
       K.ring(els, nx - 5, ny - 5, 10, T.white, T.blue, 1);
       K.ellipse(els, nx - 2.5, ny - 2.5, 5, 5, T.blue);
-      var tw = 168, th = 30, tx = 446 + (i % 2) * 18, ty = ny - th / 2;
+      var tw = TW, th = 30, tx = (TW > 168 ? 430 : 446) + (i % 2) * 18, ty = ny - th / 2;
       K.dashedLine(els, nx + 7, ny, tx, ny, '#9AA4B2', 0.6, 1.5, 2);
       K.roundrect(els, tx, ty, tw, th, '#ECECEC', { color: '#DBDDE1', width: 0.75 });
       K.text(els, tx + 8, ty + 1, tw - 16, th - 2, r.title, { weight: 500, max: TSZ.heading, min: 9.5, maxLines: 2, align: 'center', valign: 'middle', color: T.ink });

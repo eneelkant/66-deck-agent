@@ -192,7 +192,7 @@ test("6. lower temperatures for slide JSON; dark content slides: at most 3, neve
   assert.match(code, /callGeminiJSON\(parts, ctx\.apiKey, usePlanner \? 0\.1 : 0\.2\)/);
   assert.match(code, /callGeminiJSON\(parts, ctx\.apiKey, libOutline \? 0\.2 : 0\.3\)/);
   assert.doesNotMatch(code, /callGeminiJSON\(\[\{ text: (prompt|topPrompt) \}\], ctx\.apiKey, 0\.6\)/);
-  assert.match(read("src/Brief.gs"), /callGeminiJSON\(\[\{ text: briefPrompt_\(prompt, files, slideCount\) \}\], ctx && ctx\.apiKey, 0\)/);
+  assert.match(read("src/Brief.gs"), /callGeminiJSON\(\[\{ text: briefPrompt_\(prompt, files, slideCount\) \}\], ctx && ctx\.apiKey, 0,/);   // (V.1_72: and its schema)
   const ok = vm.runInContext("darkContentAllowed_", G);
   assert.equal(ok(false, false, 0, 4), true);
   assert.equal(ok(true, false, 0, 4), false, "after a dark slide or divider");

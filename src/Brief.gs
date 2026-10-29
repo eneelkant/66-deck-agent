@@ -21,7 +21,8 @@ function buildBrief_(userPrompt, sources, ctx, slideCount) {
   var g = null;
   try {
     var model = typeof runModels_ === 'function' ? runModels_().check : '';
-    g = withModel_(model, function () { return callGeminiJSON([{ text: briefPrompt_(prompt, files, slideCount) }], ctx && ctx.apiKey, 0); });
+    g = withModel_(model, function () { return callGeminiJSON([{ text: briefPrompt_(prompt, files, slideCount) }], ctx && ctx.apiKey, 0,
+      typeof BRIEF_SCHEMA_ !== 'undefined' ? { schema: BRIEF_SCHEMA_ } : undefined); });   // V.1_72: the brief's shape is fixed
   } catch (e) {
     if (ctx && ctx.log) ctx.log.push('Brief: read by the code (Gemini: ' + String((e && e.message) || e).slice(0, 80) + ').');
   }
@@ -276,7 +277,8 @@ function guardFigures_(slides, ctx, sources) {
       if (!bad.length) return s;
       var out = figStrip_(s, bad, kind);
       // V.1_71 (deck 42 Solution 22: "reorganize between and 30%"): a text the check would break stays whole, with a note
-      if (/\b(between|from|than|by|of|with|and|to)\s*([.,;:)]|$)|\bbetween\s+and\b|\b(and|to)\s+(and|to)\b|^\s*(and|or|to|by|of)\b/i.test(out) || (kind === 'text' && out.split(/\s+/).length < 3 && s.split(/\s+/).length >= 5)) {
+      // (V.1_72, deck 43 Solution 6: "Contoso Health baseline: of historical outages"): a colon or an article left before "of"
+      if (/\b(between|from|than|by|of|with|and|to)\s*([.,;:)]|$)|\bbetween\s+and\b|\b(and|to)\s+(and|to)\b|^\s*(and|or|to|by|of)\b|:\s+(of|and|to|by|from|in)\b|\b(a|an|the)\s+(of|in|and)\b/i.test(out) || (kind === 'text' && out.split(/\s+/).length < 3 && s.split(/\s+/).length >= 5)) {
         bad.forEach(function (b) { if (toCheck.indexOf(b.trim()) === -1) toCheck.push(b.trim()); });
         return s;
       }
@@ -396,7 +398,7 @@ function guardFigures_(slides, ctx, sources) {
       if (it && typeof it === 'object' && it.title !== undefined && !String(it.title).trim() && it.text) it.title = String(it.text).split(/\s+/).slice(0, 4).join(' ');
     });
     // research figures that stay: their source number goes in the notes, so the Sources list names it
-    var cites = Object.keys(cited).filter(function (n) { return String(sp.notes || '').indexOf('[' + n + ']') === -1; });
+    var cites = Object.keys(cited).filter(function (n) { return /^\d+$/.test(n) && String(sp.notes || '').indexOf('[' + n + ']') === -1; });   // (V.1_72: never an empty list)
     if (cites.length) sp.notes = String(sp.notes || '') + (sp.notes ? ' ' : '') + 'Figures on this slide: ' + cites.map(function (n) { return '[' + n + ']'; }).join(' ') + '.';
     if (toCheck.length && !/Check before sharing: figures without a source/.test(String(sp.notes || ''))) sp.notes = String(sp.notes || '') + '\nCheck before sharing: figures without a source kept so the sentence reads (' + toCheck.slice(0, 4).join(', ') + ').';
     if (removed.length) {
@@ -500,5 +502,63 @@ function canonicalCredentials_(slides, ctx) {
   };
   (slides || []).forEach(function (sp) { if (sp && typeof sp === 'object') walk(sp); });
   if (n && ctx && ctx.log) ctx.log.push('66degrees credentials: ' + n + ' figure(s) set to the approved facts (' + Object.keys(canon).map(function (k) { return canon[k] + ' ' + k; }).join(', ') + ').');
+  return n;
+}
+
+/* V.1_72 (deck 43 General 27: "12 Google Cloud Specializations", "the second largest pure-play Google Cloud services firm in
+   North America"): a 66degrees credential on a slide is one of the approved facts. The number of specializations is the
+   approved list's; a ranking claim ("second largest", "leading", "top 3") that the approved facts and the request do not
+   make goes (the item goes when the slide keeps three or more). */
+var RANK_CLAIM_RE_ = /\b(the\s+)?(second|third|largest|biggest|leading|top[- ]?\d+|number one|no\.?\s?1|#\s?\d)\b[^.]{0,80}\b(partner|firm|provider|consultanc\w*|pure[- ]play|integrator|company)\b/i;
+function approvedSpecializationCount_() {
+  var facts = typeof APPROVED_FACTS !== 'undefined' ? APPROVED_FACTS : [];
+  var f = facts.filter(function (x) { return /^\s*Specializations\s*:/i.test(String(x)); })[0];
+  return f ? String(f).replace(/^\s*Specializations\s*:\s*/i, '').replace(/\.\s*$/, '').split(/\s*,\s*/).filter(Boolean).length : 0;
+}
+function approvedCredentialClaims_(slides, ctx) {
+  var nSpec = approvedSpecializationCount_(), n = 0;
+  var approvedText = (typeof APPROVED_FACTS !== 'undefined' ? APPROVED_FACTS.join(' ') : '') + ' ' + String((ctx && ctx.userPrompt) || '');
+  var rankOk = RANK_CLAIM_RE_.test(approvedText);
+  var fixStr = function (x) {
+    if (typeof x !== 'string') return x;
+    if (nSpec) x = x.replace(/\b(\d+)\+?(\s+(?:Google Cloud\s+)?specializations?)\b/gi, function (all, num, rest) { if (Number(num) === nSpec) return all; n++; return nSpec + rest; });
+    if (!rankOk && RANK_CLAIM_RE_.test(x)) {
+      var left = (x.match(/[^.!?]+[.!?]*(\s+|$)/g) || [x]).filter(function (sn) { return !RANK_CLAIM_RE_.test(sn); }).join('').trim();
+      if (left !== x.trim()) { n++; x = left; }
+    }
+    return x;
+  };
+  (slides || []).forEach(function (sp) {
+    if (!sp || typeof sp !== 'object') return;
+    var walk = function (v) {
+      if (typeof v === 'string') return fixStr(v);
+      if (Array.isArray(v)) return v.map(walk);
+      if (v && typeof v === 'object') { Object.keys(v).forEach(function (k) { if (!FIG_SKIP_KEYS_[k]) v[k] = walk(v[k]); }); return v; }
+      return v;
+    };
+    Object.keys(sp).forEach(function (k) { if (!FIG_SKIP_KEYS_[k]) sp[k] = walk(sp[k]); });
+    // an item left without its text by this goes, when the slide keeps three or more
+    if (Array.isArray(sp.items)) {
+      var kept = sp.items.filter(function (it) { return !(it && typeof it === 'object' && (it.title || it.label) && it.text !== undefined && !String(it.text).trim()); });
+      if (kept.length >= 3 && kept.length < sp.items.length) sp.items = kept;
+    }
+  });
+  if (n && ctx && ctx.log) ctx.log.push('66degrees credentials: ' + n + ' claim(s) set to the approved facts.');
+  return n;
+}
+
+/* V.1_72 (deck 43 General 29: "a structured cuatro-step mobilisation path"): a word of another language in an English deck */
+var FOREIGN_WORDS_ = { cuatro: 'four', tres: 'three', cinco: 'five', seis: 'six', quatre: 'four', trois: 'three',
+  vier: 'four', drei: 'three', quatro: 'four', etapas: 'stages', pasos: 'steps' };   // (only words that are never English)
+function foreignWords_(slides) {
+  var re = new RegExp('\\b(' + Object.keys(FOREIGN_WORDS_).join('|') + ')\\b', 'gi'), n = 0;
+  var fix = function (x) { return typeof x === 'string' ? x.replace(re, function (w) { n++; var e = FOREIGN_WORDS_[w.toLowerCase()]; return w.charAt(0) === w.charAt(0).toUpperCase() ? e.charAt(0).toUpperCase() + e.slice(1) : e; }) : x; };
+  var walk = function (v) {
+    if (typeof v === 'string') return fix(v);
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === 'object') { Object.keys(v).forEach(function (k) { if (!FIG_SKIP_KEYS_[k] && k !== 'notes') v[k] = walk(v[k]); }); return v; }
+    return v;
+  };
+  (slides || []).forEach(function (sp) { if (sp && typeof sp === 'object') Object.keys(sp).forEach(function (k) { if (!FIG_SKIP_KEYS_[k]) sp[k] = walk(sp[k]); }); });
   return n;
 }

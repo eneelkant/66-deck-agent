@@ -421,6 +421,7 @@ function generatePresentationRun_(data, run) {
   const plan = planContent(userPrompt, presentationType, totalSlides - sectionCount, sources, ctx);
   if (proposalRun) proposalStructure_(plan, ctx, sectionCount);
   deckFigureCheck_(plan.slides, ctx, sources);                                   // V.1_70: figures only from the request and sources
+  deckShapeCheck_(plan.slides, ctx);                                            // V.1_72: each slide kind in its shape
   progressStage_(ctx, 'write', 'done', plan.slides.length + ' slides planned');
   progressSlides_(ctx, plan.slides.map(specTitle_));
   checkCancel_(ctx);
@@ -2752,11 +2753,19 @@ function agendaNotes_(sp) {
     low.slice(0, -1).join(', ') + ' and ' + low[low.length - 1] + '.';
   if (typeof keepNames_ === 'function') sp.notes = keepNames_(sp.notes);
 }
+// V.1_72: step 3 - the slides of a known kind (KPIs, RACI, team, risks, pricing, next steps) in the shape their designs
+// need (Contracts.gs); never stops a deck
+function deckShapeCheck_(slides, ctx) {
+  if (typeof conformSlides_ !== 'function') return 0;
+  try { return conformSlides_(slides, ctx); } catch (e) { if (ctx && ctx.log) ctx.log.push('Slide shape step skipped: ' + e.message); return 0; }
+}
 // V.1_70: the figure check of Brief.gs on a set of slides (never stops a deck)
 function deckFigureCheck_(slides, ctx, sources) {
   if (typeof guardFigures_ !== 'function') return 0;
   try {
     if (typeof canonicalCredentials_ === 'function') canonicalCredentials_(slides, ctx);   // V.1_71: one figure per 66degrees credential
+    if (typeof approvedCredentialClaims_ === 'function') approvedCredentialClaims_(slides, ctx);   // V.1_72: credential claims as approved
+    if (typeof foreignWords_ === 'function') foreignWords_(slides);                               // V.1_72: English words only
     const n = guardFigures_(slides, ctx, sources); sameMeasureFigures_(slides, ctx); return n;
   }
   catch (e) { if (ctx && ctx.log) ctx.log.push('Figure check skipped: ' + e.message); return 0; }
@@ -3415,7 +3424,9 @@ function chooseDesignsByContent_(plan, ctx) {
     at++;
     let type = normalizeType_(sp.type);
     const nextSp = plan.slides[idx + 1];
-    const nextDark = !!nextSp && normalizeType_(nextSp.type) === 'section';      // V.1_70: the divider after this slide is dark
+    // V.1_70: the divider after this slide is dark; V.1_72 (deck 43 Solution 9 / Proposal 8): also when that divider is the
+    // first slide of the next part of a long deck
+    const nextDark = nextSp ? normalizeType_(nextSp.type) === 'section' : !!ctx.nextPartStartsDark;
     if (type === 'template' || String(sp.type || '').toLowerCase() === 'template') { if (sp.tag) used[sp.tag] = 1; return; }
     // V.1_42b: a Proposal Deck slide no proposal design can draw is reshaped into one that can (never the plain layout)
     if (typeof proposalCycle_ === 'function' && proposalCycle_(sp, used)) type = normalizeType_(sp.type);    // V.1_50: a loop is a cycle
@@ -5337,7 +5348,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_71';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_72';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5654,9 +5665,13 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
       sc.list.forEach(function (o) {
         if (!o || o.type === 'section') return;
         const fams = onceTopicsOf_(o.title);
-        if (fams.length >= 2 && fams.every(function (f) { return asked.indexOf(f) !== -1; })) {
-          o.title = sentenceCase_(String(o.title).split(/\s+(?:and|&|with)\s+/i)[0], 1);
-          ctx.log.push('Outline: "' + o.title + '" keeps one topic; the other gets its own slide.');
+        // (V.1_72, deck 43 Solution 25 "Delivery team and RACI governance": a slide joining two once-only topics keeps one,
+        //  also when the request does not ask for both)
+        if (fams.length >= 2) {
+          const parts = String(o.title).split(/\s+(?:and|&|with)\s+/i);
+          const keepAsked = parts.filter(function (pt) { const f = onceTopicOf_(pt); return f && asked.indexOf(f) !== -1; })[0];
+          o.title = sentenceCase_(keepAsked || parts[0], 1);
+          ctx.log.push('Outline: "' + o.title + '" keeps one topic' + (fams.every(function (f) { return asked.indexOf(f) !== -1; }) ? '; the other gets its own slide.' : '.'));
         }
       });
     });
@@ -5800,6 +5815,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
   // V.1_71 (deck 42 General: sections "Pipeline availability", "Query throughput", "Infrastructure cost"): a section is
   // named after the topics of its slides, never after a target of the request
   renameTargetSections_(secs, ctx);
+  finalOutlineOrder_(secs, ctx);                                        // V.1_72
   secs.forEach(function (sc) { sc.count = sc.list.length; });
   const slides = flat();
   if (slides.length < body) ctx.log.push('The outline has ' + slides.length + ' body slides (asked for ' + body + ').');
@@ -6321,6 +6337,42 @@ function richTopicTitle_(topic) {
   // (a two-word topic is already a title: "Reference architecture", "Support priorities"; a lone word gets its angle)
   return t.split(/\s+/).length <= 1 ? sentenceCase_(T + ': approach and key decisions', 1) : sentenceCase_(T, 1);
 }
+// V.1_72 (deck 43): the last word on the outline's order and names
+// - a one-word slide title gets a real title (Solution 11 "Security"), whoever wrote it
+// - a section never has the same name as one of its slides (General 9 / 10, 16 / 18): it takes its topics
+// - next steps is the last body slide of the deck (Proposal: the RACI came after it)
+function finalOutlineOrder_(secs, ctx) {
+  if (!Array.isArray(secs) || !secs.length) return;
+  const norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+  secs.forEach(function (sc) {
+    sc.list.forEach(function (o) {
+      if (o && o.type !== 'section' && String(o.title || '').trim().split(/\s+/).length <= 1) {
+        const nt = richTopicTitle_(o.title);
+        if (nt !== o.title) { ctx && ctx.log && ctx.log.push('Outline: "' + o.title + '" is titled "' + nt + '".'); o.title = nt; }
+      }
+    });
+  });
+  const req = requestedTopics_((ctx && ctx.userPrompt) || '');
+  secs.forEach(function (sc) {
+    const own = sc.list.filter(function (o) { return o && o.type !== 'section'; });
+    if (!own.some(function (o) { return norm(o.title) === norm(sc.title); })) return;
+    const covered = req.filter(function (t) { return !/\d/.test(t) && slideForTopic_(own.map(function (o) { return { type: o.type, title: o.title, lead: o.brief }; }), t) !== -1; });
+    let names = covered.slice(0, 2);
+    if (names.length < 2) names = names.concat(own.filter(function (o) { return norm(o.title) !== norm(sc.title); }).slice(0, 2 - names.length).map(function (o) { return shortTitle_(o.title); }));
+    if (!names.length) return;
+    const nt = sentenceCase_(names.map(function (x, i) { x = String(x); return i ? x.charAt(0).toLowerCase() + x.slice(1) : x.charAt(0).toUpperCase() + x.slice(1); }).join(' and '), 1);
+    if (nt && norm(nt) !== norm(sc.title)) { ctx && ctx.log && ctx.log.push('Outline: section "' + sc.title + '" is renamed "' + nt + '" (a slide had the same name).'); sc.title = nt; }
+  });
+  const isNext = function (o) { return o && o.type !== 'section' && /\bnext steps?\b|getting started|first steps?\b|launch the (engagement|partnership|project)/i.test(String(o.title || '')); };
+  let step = null;
+  secs.forEach(function (sc) { sc.list.forEach(function (o) { if (!step && isNext(o)) step = o; }); });
+  const from = step ? secs.filter(function (sc) { return sc.list.indexOf(step) !== -1; })[0] : null;
+  // (never leaves a section empty: the deck keeps its dividers and its slide count)
+  if (step && from && (from === secs[secs.length - 1] || from.list.filter(function (o) { return o.type !== 'section'; }).length > 1)) {
+    from.list = from.list.filter(function (o) { return o !== step; });
+    secs[secs.length - 1].list.push(step);
+  }
+}
 // A section named after a target ("Query throughput acceleration" for "3x faster query throughput") takes the topics of
 // its slides instead (the requested topics they cover, else its first two slide subjects)
 function renameTargetSections_(secs, ctx) {
@@ -6462,6 +6514,7 @@ function longDeckStep_(ctx, target, st, t0) {
       return written.slides[wk++];
     }).filter(function (sp) { return sp && !sp.leaveOut; }) };
     deckFigureCheck_(plan.slides, ctx, st.sources);                      // V.1_70: figures only from the request and sources
+    deckShapeCheck_(plan.slides, ctx);                                   // V.1_72: each slide kind in its shape
     // Diagram uploads (rebuilt once, on the first diagram slide of the deck) and branded icons, as in a short deck
     // each uploaded diagram takes the slide whose topic matches it; anything left is placed in the last part
     if (typeof attachDiagramsToPlan_ === 'function' && ((st.sources && st.sources.diagrams) || []).some(function (d) { return !d.attached; })) {
@@ -6475,7 +6528,10 @@ function longDeckStep_(ctx, target, st, t0) {
     fillThinSlides_(plan, ctx);
     if (st.usedNumbers.length > 200) st.usedNumbers = st.usedNumbers.slice(-200);
     selectReferences(plan, ctx);
+    const after = all[st.next + part.length];
+    ctx.nextPartStartsDark = !!after && after.type === 'section';      // V.1_72: the divider that opens the next part
     chooseDesignsByContent_(plan, ctx);
+    ctx.nextPartStartsDark = false;
     try { fillThinSlides_(plan, ctx, { textsOnly: true }); } catch (eT) {}    // V.1_67: texts too short for the design chosen (pricing options)
     fitContentToDesigns_(plan, ctx, b0);
     syncDividerPoints_(plan.slides, part, all, st);                     // V.1_47: a divider lists the titles its slides show

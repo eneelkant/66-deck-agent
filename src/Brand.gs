@@ -366,13 +366,18 @@ function isRetryable(code, message) {
     /high demand|overloaded|unavailable|try again|resource.?exhausted|deadline/i.test(message || '');
 }
 
-function callGeminiJSON(parts, apiKey, temperature) {
+// V.1_72: opts.schema (optional) - the shape the answer must have (a Vertex AI response schema). Gemini cannot answer in
+// another shape. A call without a schema sends exactly what it sent before. When a model refuses the schema, the call
+// is made again without it (the answer is then checked by the code, as before), so a deck never stops because of it.
+function callGeminiJSON(parts, apiKey, temperature, opts) {
   requireVertexConfig_();
   const models = modelCandidates(apiKey, 'text').slice(0, 4);
   const payload = {
     contents: [{ role: 'user', parts: parts }],
     generationConfig: { responseMimeType: 'application/json', temperature: temperature === undefined ? 0.4 : temperature }
   };
+  let schemaOn = !!(opts && opts.schema);
+  if (schemaOn) payload.generationConfig.responseSchema = opts.schema;
   const waits = [2000, 6000];
   const started = Date.now();
   let lastError = 'Vertex AI did not respond.';
@@ -392,6 +397,12 @@ function callGeminiJSON(parts, apiKey, temperature) {
       } catch (e) {
         lastError = e.message;
         if (/not enabled|VERTEX_PROJECT_ID is not configured|authentication failed/i.test(lastError)) throw e;
+        // V.1_72: a model that refuses the response schema is asked again without it (once)
+        if (schemaOn && /schema|response_?schema|invalid json payload|invalid argument|400/i.test(lastError)) {
+          schemaOn = false; delete payload.generationConfig.responseSchema; attempt--;
+          if (typeof Logger !== 'undefined' && Logger.log) Logger.log('Response schema not accepted (' + models[m] + '): asked again without it.');
+          continue;
+        }
         if (isRetryable(0, lastError) && attempt < waits.length) { Utilities.sleep(waits[attempt]); continue; }
         if (/not found|not supported/i.test(lastError)) break;
         if (attempt < waits.length) { Utilities.sleep(waits[attempt]); continue; }

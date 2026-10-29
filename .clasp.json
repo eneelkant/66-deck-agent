@@ -42,6 +42,7 @@
     "Rebrand.gs",
     "Code.gs",
     "Brief.gs",
+    "Contracts.gs",
     "Generator.html",
     "appsscript.json",
     "ModelTest.gs",
