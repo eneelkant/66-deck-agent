@@ -4360,11 +4360,24 @@ var ENGINE = (function () {
       if (parts.every(function (p) { return /^[A-Z][\w /&-]{1,24}:\s+\S/.test(p); })) return parts.map(function (p) { return sentence(p.replace(/^[A-Z][\w /&-]{1,24}:\s+/, '')); }).join(' ');
       // phrases of three words or more joined with "·" (not "205% · three-year ROI")
       if (parts.every(function (p) { return p.trim().split(/\s+/).length >= 3; })) return parts.map(sentence).join(' ');
+      // V.1_74 (deck 45 Proposal 33: "51% reduction · Retiring redundant BI servers ... cuts overhead."): a short figure
+      // phrase before a sentence reads "51% reduction: retiring redundant BI servers ..."
+      if (parts.length === 2 && /^[<>~+\-−]?\$?\d[\d.,]*\s*(%|x|×)?(\s+\S+){0,3}$/.test(parts[0].trim()) && parts[1].trim().split(/\s+/).length >= 4)
+        return parts[0].trim() + ': ' + parts[1].trim().replace(/^([A-Z])(?=[a-z])/, function (c) { return c.toLowerCase(); });
       return x;
     };
     // 15. "Target:" in front of a label on a slide that already says it shows targets, and before any price or table cell
-    var targetSlide = /\b(targets?|kpis?|goals?|success measures?|benchmarks?)\b/i.test(String(s.title || ''));
-    var noTarget = function (x, always) { x = String(x == null ? '' : x); return (always || targetSlide) ? capFirst_(x.replace(/^\s*(target|(industry )?benchmark)\s*:\s*/i, '')) : x; };
+    // V.1_74 (deck 45 General 12 "Core modernization key performance indicators": one tile "Target: pipeline availability",
+    // the others without; Solution 5: "Target cross-region recovery time" beside "Uptime"): on a slide whose title says
+    // it shows targets or KPIs (in any of its names), no tile label says "target" again
+    var targetSlide = /\b(targets?|kpis?|goals?|success (measures?|metrics|criteria)|benchmarks?|key performance|performance indicators?|objectives)\b/i.test(String(s.title || ''));
+    var noTarget = function (x, always) {
+      x = String(x == null ? '' : x);
+      if (!(always || targetSlide)) return x;
+      x = x.replace(/^\s*(target|(industry )?benchmark)\s*:\s*/i, '');
+      if (targetSlide && !always) x = x.replace(/^\s*targets?\s+(?=[a-z][\w-]*\s+\w)/i, '').replace(/\s*\(target\)\s*$/i, '');
+      return capFirst_(x);
+    };
     if (Array.isArray(s.items)) s = Object.assign({}, s, { items: s.items.map(function (it) {
       if (!it || typeof it !== 'object') return it;
       var o = Object.assign({}, it);
@@ -4575,7 +4588,18 @@ var ENGINE = (function () {
       } else if (v && typeof v === 'object') { var h2 = headOf(v), p2 = textsIn(v, []); if (h2 || p2.length) groups.push({ title: h2, points: p2 }); }
       else if (real(v)) looseTexts.push(String(v).trim());
     };
-    Object.keys(s).forEach(function (k) { if (!SKIP[k] && k !== 'columns') walk(s[k]); });
+    // V.1_74 (deck 45 Solution 17: a comparison table shown as "Hyperdisk Extreme · 120,000 IOPS · ... · Yes", its column
+    // headings lost): rows under their column headings read as "Heading: value", one point each
+    var heads = Array.isArray(s.columns) ? s.columns.map(function (c) { return String(c && typeof c === 'object' ? (c.text || c.title || c.label || '') : (c == null ? '' : c)).trim(); }) : [];
+    var headed = Array.isArray(s.rows) && heads.length >= 3 && heads.filter(real).length >= heads.length - 1 &&
+      s.rows.every(function (r) { return !Array.isArray(r) || r.length === heads.length; });
+    if (headed) s.rows.forEach(function (r) {
+      if (!Array.isArray(r)) return;
+      var cells = r.map(function (c) { return String(c == null ? '' : (typeof c === 'object' ? (c.text || c.title || '') : c)).trim(); });
+      if (!real(cells[0])) return;
+      groups.push({ title: cells[0], points: cells.slice(1).map(function (c, j) { return real(c) ? (real(heads[j + 1]) ? heads[j + 1] + ': ' + c : c) : ''; }).filter(Boolean) });
+    });
+    Object.keys(s).forEach(function (k) { if (!SKIP[k] && k !== 'columns' && !(headed && k === 'rows')) walk(s[k]); });
     if (Array.isArray(s.columns) && s.columns.some(function (c) { return c && typeof c === 'object'; })) walk(s.columns);
     // V.1_65 (deck 37 Solution slide 6): never a cut sentence; whole sentences that fit, else the first whole sentence
     var cutW = function (t, n) {
@@ -4753,6 +4777,9 @@ var ENGINE = (function () {
     if (minY === Infinity) return;
     var free = BOTTOM - maxY;
     if (free < 24) return;
+    // V.1_74 (step 5, deck 45: "empty space under titles" on 14 slides): the body stays under the header - only a
+    // compact design (rings, a short chain) is still centred; the free space is handled after the box fitting
+    if (!out.center) return;
     // Content that fills most of the area gets a small nudge; a compact design (rings, short rows) is centred
     // A third of the free space above the content, two thirds below (no wide band under the intro, no empty bottom
     // half); compact designs such as the ring chain are centred
@@ -4788,17 +4815,20 @@ var ENGINE = (function () {
   // Fit check for one planned slide at the standard type sizes: which texts do not fit, which boxes are mostly empty.
   // How far down the content area a layout reaches (1 = to the footer). A design that leaves the bottom third empty for this
   // content scores low, so the chooser prefers a design that fills the slide (no half-empty slides).
+  // V.1_74 (step 5): the body is drawn a fixed gap under the header, so what counts is the height the body takes, not
+  // where a design happened to put it
   function coverageOf_(out) {
-    var top = 68, maxY = -Infinity;
+    var top = 68, maxY = -Infinity, minY = Infinity;
     (out.els || []).forEach(function (e) {
-      if (!e || e.t === 'image') return;
+      if (!e || e.t === 'image' || e.hdr) return;
       var y = e.t === 'line' ? Math.max(e.y1, e.y2) : (e.y || 0) + (e.t === 'text' ? (e.vh || e.h || 0) : (e.h || e.size || 0));
       var y0 = e.t === 'line' ? Math.min(e.y1, e.y2) : (e.y || 0);
       if (y0 < 60 || y0 > BOTTOM) return;
       maxY = Math.max(maxY, Math.min(y, BOTTOM));
+      minY = Math.min(minY, y0);
     });
     if (maxY === -Infinity) return 0;
-    return Math.max(0, Math.min(1, (maxY - top) / Math.max(1, BOTTOM - top)));
+    return Math.max(0, Math.min(1, (maxY - Math.max(top, minY) + 16) / Math.max(1, BOTTOM - top)));   // (+16: the gap under the header)
   }
 
   function measure(spec, ctx) {
@@ -4880,7 +4910,7 @@ var ENGINE = (function () {
       // the box it was in, nothing new overlaps or leaves the slide (otherwise the slide stays as the design drew it)
       if (!s.diagram && !QA_FRAME_[type] && ['chart', 'timeline'].indexOf(type) === -1) {   // (tables too: their note panels; cells are never fitted)
         var before = JSON.stringify(out.els), issBefore = layoutIssues_(out, s), ties = boxTies_(out.els), ovBefore = textOverlaps_(out).length;
-        compactBoxes_(out); compactBoxes_(out); centreContent_(out);
+        compactBoxes_(out); compactBoxes_(out); if (out.center) centreContent_(out); else placeBody_(out, s);
         var issAfter = layoutIssues_(out, s);
         var nanAfter = out.els.some(function (e) { return ['x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy'].some(function (k) { return k in e && e[k] != null && !isFinite(Number(e[k])); }); });
         var worse = nanAfter || ['detached', 'off-slide'].some(function (k) { return issAfter.indexOf(k) !== -1 && issBefore.indexOf(k) === -1; }) ||
@@ -5219,6 +5249,111 @@ var ENGINE = (function () {
     var d = Math.min(60, free / 2);
     if (!isFinite(d) || d <= 0) return;
     body.forEach(function (e) { if (e.t === 'line') { e.y1 += d; e.y2 += d; } else e.y += d; });
+  }
+  /* V.1_74 - STEP 5 (deck 45: a band of empty space between the title and the content on 14 slides of all three decks;
+     the body was moved down to the middle of the free space): the body starts a fixed gap under the header and the free
+     space under it is shared out -
+     1. the body (every shape under the header, as one piece) moves up so it starts BODY_GAP_ under the header;
+     2. the boxes of its lowest row (cards, panels: 60 pt or taller, ending together) grow down into the free space, by at
+        most a third of their height, so the slide is not left with an empty lower half; their texts stay where they are;
+     3. a little of what is still free goes above the body (never more than BODY_GAP_MAX_ - BODY_GAP_).
+     Like the box fitting, this is undone when it makes anything worse (a text out of its box, new overlaps). */
+  var BODY_GAP_ = 20, BODY_GAP_MAX_ = 30;
+  function placeBody_(out, spec) {
+    if (!out || !out.els || out.noCentre) return;
+    var els = out.els;
+    var head = els.filter(function (e) { return e.hdr; });
+    if (!head.length) return;
+    var headBottom = Math.max.apply(null, head.map(function (e) { return e.y + (e.vh || e.h) - (e.t === 'text' ? INSET : 0); }));
+    var body = els.filter(function (e) { return !e.hdr && !(e.t === 'image' && ((e.w || 0) >= 700 || (e.h || 0) >= 380)); });
+    if (!body.length || !isFinite(headBottom)) return;
+    var topOf = function (e) { if (e.t === 'line') return Math.min(e.y1, e.y2); if (e.t === 'arc') return e.cy - e.r; return e.t === 'text' ? e.y + INSET : e.y; };
+    var botOf = function (e) { if (e.t === 'line') return Math.max(e.y1, e.y2); if (e.t === 'arc') return e.cy + e.r; if (e.t === 'text') return e.y + (e.vh || e.h) - INSET; return e.y + (e.h || e.size || 0); };
+    if (body.some(function (e) { return !isFinite(topOf(e)) || !isFinite(botOf(e)); })) return;
+    // something beside the header (a photo strip, a side panel from the top) or a full-height shape: left as drawn
+    if (body.some(function (e) { return topOf(e) < headBottom - 2 || (e.t !== 'text' && e.t !== 'line' && ((e.h || 0) >= 300 || (e.w || 0) >= 700)); })) return;
+    var moveY = function (e, d) { if (e.t === 'line') { e.y1 += d; e.y2 += d; } else if (e.t === 'arc') e.cy += d; else e.y += d; };
+    var top = Math.min.apply(null, body.map(topOf));
+    // 1. up to the gap under the header
+    var up = top - (headBottom + BODY_GAP_);
+    if (up > 2) body.forEach(function (e) { moveY(e, -up); });
+    var bottom = Math.max.apply(null, body.map(botOf));
+    var free = BOTTOM - bottom;
+    if (free < 16) return;
+    // 2. the main row of boxes (60 pt or taller, the same top and height - the cards, tiles or panels) grows down into the
+    //    free space, by at most half its height, leaving 24 pt free; what stands under the row moves down with it
+    var boxes = body.filter(function (e) { return (e.t === 'rect' || e.t === 'roundrect') && (e.h || 0) >= 60; });
+    var rowOf = function (b) { return boxes.filter(function (o) { return Math.abs(o.y - b.y) < 2 && Math.abs(o.h - b.h) < 2; }); };
+    var main = null;
+    boxes.forEach(function (b) { var r = rowOf(b); if (!main || r.length * b.h > main.length * main[0].h) main = r; });
+    if (main) {
+      var rowTop = main[0].y, rowBot = main[0].y + main[0].h;
+      // a box still ends just under its text (V.1_67, deck 39 "fix down all the boxes"): the emptiest box of the row keeps
+      // its empty part under 26 pt or a fifth of its height - so the row grows only by what that leaves
+      var emptyIn = main.map(function (b) {
+        var lowT = null;
+        body.forEach(function (t) { if (t.t === 'text' && String(t.text || '').trim() && t.x + INSET >= b.x - 1 && t.x + t.w - INSET <= b.x + b.w + 1 && topOf(t) >= b.y - 1 && topOf(t) < b.y + b.h) lowT = Math.max(lowT || 0, botOf(t)); });
+        return lowT == null ? null : b.y + b.h - lowT;
+      }).filter(function (g) { return g != null; });
+      var e0 = emptyIn.length ? Math.max(0, Math.max.apply(null, emptyIn)) : 0, h0 = main[0].h;
+      var grow = Math.min(free - 24, h0 / 2, Math.max(26 - e0, (0.2 * h0 - e0) / 0.8));
+      var hollow0 = layoutIssues_(out, spec || {}).indexOf('hollow') !== -1, snap = JSON.stringify(out.els);
+      if (grow > 6) {
+        var x0 = Math.min.apply(null, main.map(function (b) { return b.x; })) - 2, x1 = Math.max.apply(null, main.map(function (b) { return b.x + b.w; })) + 2;
+        // a panel the row stands in grows with it
+        var holders = body.filter(function (e) { return (e.t === 'rect' || e.t === 'roundrect') && main.indexOf(e) === -1 && main.some(function (b) { return e.x <= b.x + 1 && e.x + e.w >= b.x + b.w - 1 && e.y <= b.y + 1 && e.y + e.h >= b.y + b.h - 1; }); });
+        body.forEach(function (e) {
+          if (main.indexOf(e) !== -1 || holders.indexOf(e) !== -1) { e.h += grow; return; }
+          var a = topOf(e), z = botOf(e);
+          if (a >= rowBot - 2) { moveY(e, grow); return; }                                   // under the row: moves down
+          // a line or a thin bar that runs down the boxes (a column rule, an accent bar) grows with them
+          if (e.t === 'line' && Math.abs(e.x1 - e.x2) < 1 && Math.abs(z - rowBot) <= 3 && a < rowBot - 6) { if (e.y2 > e.y1) e.y2 += grow; else e.y1 += grow; return; }
+          if ((e.t === 'rect' || e.t === 'roundrect') && (e.w || 0) <= 8 && (e.h || 0) >= 24 && Math.abs(z - rowBot) <= 3) { e.h += grow; return; }
+          // what sits on the bottom edge of the boxes (an accent line, a footer label in the card) stays on that edge
+          var ex = e.t === 'line' ? Math.min(e.x1, e.x2) : (e.x || 0);
+          if (a >= rowTop && Math.abs(z - rowBot) <= 4 && (z - a) <= 8 && ex >= x0 && ex <= x1) moveY(e, grow);
+        });
+        free -= grow;
+        // (undone when the boxes would read as hollow: the move up stays)
+        if (!hollow0 && layoutIssues_(out, spec || {}).indexOf('hollow') !== -1) {
+          out.els = JSON.parse(snap); free += grow;
+          els = out.els;
+          head = els.filter(function (e) { return e.hdr; });
+          body = els.filter(function (e) { return !e.hdr && !(e.t === 'image' && ((e.w || 0) >= 700 || (e.h || 0) >= 380)); });
+        }
+      }
+    }
+    // 2b. rows of the body that stand apart (bands with space between them) get more room between them, so a short
+    //     body spreads over the slide instead of leaving its lower part empty (24 pt more per gap at most)
+    if (free > 40) {
+      var spans = body.map(function (e) { return { e: e, a: topOf(e), b: botOf(e) }; }).sort(function (p, q) { return p.a - q.a; });
+      var bands = [];
+      spans.forEach(function (p) {
+        var last = bands[bands.length - 1];
+        if (last && p.a <= last.b + 2) { last.b = Math.max(last.b, p.b); last.list.push(p.e); }
+        else bands.push({ a: p.a, b: p.b, list: [p.e] });
+      });
+      if (bands.length >= 2) {
+        var per = Math.min(24, (free - 28) / (bands.length - 1));
+        if (per > 3) {
+          var keep = JSON.stringify(out.els), ties0 = boxTies_(out.els), ov0 = textOverlaps_(out).length;
+          bands.forEach(function (bd, k) { if (k) bd.list.forEach(function (e) { moveY(e, per * k); }); });
+          // (undone on its own when a text leaves its box or texts meet: the move up above stays)
+          if (textOverlaps_(out).length > ov0 || !tiesHold_(out.els, ties0)) { out.els = JSON.parse(keep); return placeBodyAir_(out, headBottom, free); }
+          free -= per * (bands.length - 1);
+        }
+      }
+    }
+    // 3. a little air above the body
+    placeBodyAir_(out, headBottom, free);
+  }
+  function placeBodyAir_(out, headBottom, free) {
+    var down = Math.min(BODY_GAP_MAX_ - BODY_GAP_, Math.max(0, free - 16) / 3);
+    if (!(down > 1)) return;
+    out.els.forEach(function (e) {
+      if (e.hdr || (e.t === 'image' && ((e.w || 0) >= 700 || (e.h || 0) >= 380))) return;
+      if (e.t === 'line') { e.y1 += down; e.y2 += down; } else if (e.t === 'arc') e.cy += down; else e.y += down;
+    });
   }
   function qaScore_(iss) { return (iss || []).reduce(function (t, k) { return t + (QA_WEIGHT_[k] || 10); }, 0); }
   function layoutAllSteps_(s, type, lctx) {

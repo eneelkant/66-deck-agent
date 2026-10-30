@@ -127,10 +127,23 @@ function briefTargets_(ctx) {
   var b = ctx && ctx.brief;
   if (!b || !Array.isArray(b.figures)) return [];
   var t = b.figures.filter(function (f) { return f.kind !== 'fact'; });
-  return t.map(function (f) {
+  var out = [];
+  t.forEach(function (f) {
     var label = String(f.label || f.measure || '').trim();
-    return { value: f.value, key: f.key || figKey_(f.value), label: label, labelCap: label.charAt(0).toUpperCase() + label.slice(1), at: f.at };
+    var o = { value: f.value, key: f.key || figKey_(f.value), label: label, labelCap: label.charAt(0).toUpperCase() + label.slice(1), at: f.at };
+    // V.1_74 (deck 45 Solution 5: "40% fewer - Fewer incidents" and "40% - Fewer incidents" as two tiles): one target
+    // read twice from the request ("40% fewer incidents", "a 40% incident reduction") is one target - the same number
+    // for the same measure
+    var core = function (v) { var m = String(v || '').match(/[<>~]?\s*\$?\d[\d.,]*\s*(%|x|×|ms|min|h|s)?/i); return m ? m[0].replace(/\s+/g, '').toLowerCase() : ''; };
+    var words = function (x) { return String(x || '').toLowerCase().replace(/\d[\d.,]*\s*%?/g, ' ').match(/[a-z]{4,}/g) || []; };
+    var dup = out.filter(function (p) {
+      if (!core(p.value) || core(p.value) !== core(o.value)) return false;
+      var a = words(p.label + ' ' + p.value), c = words(o.label + ' ' + o.value);
+      return !a.length || !c.length || a.some(function (w) { return c.some(function (x) { return x.slice(0, 5) === w.slice(0, 5); }); });
+    })[0];
+    if (!dup) out.push(o);
   });
+  return out;
 }
 
 // The block every slide-writing prompt gets

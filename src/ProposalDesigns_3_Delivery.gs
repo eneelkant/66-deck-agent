@@ -240,6 +240,10 @@
       var seen = {};
       lanes.forEach(function (l) { l.bars.forEach(function (b) { if (b.group && !seen[b.group]) { seen[b.group] = 1; legend.push(String(b.group)); } }); });
     }
+    // V.1_74 (deck 45 Proposal 22: a legend "Active delivery phase / Milestone review at each phase exit" over bars coloured
+    // by their row, so the Phase 2 bar read as a milestone review): a legend is drawn only when bars carry its groups
+    var grouped = lanes.some(function (l) { return l.bars.some(function (b) { return b.group != null && b.group !== '' && (typeof b.group === 'number' || legend.indexOf(String(b.group)) !== -1); }); });
+    if (!grouped) legend = [];
     function colorOf(b, li) {
       if (b.group != null && b.group !== '') {
         var k = typeof b.group === 'number' ? b.group : legend.indexOf(String(b.group));

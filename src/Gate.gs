@@ -53,7 +53,11 @@ var GATE_SCHEMA_ = {
 // Gemini's rewrite applied to a copy: texts replace texts in the same places; values, icons and designs stay
 function gateApply_(sp, ans) {
   const t = JSON.parse(JSON.stringify(sp));
-  if (ans.title && String(ans.title).trim()) t.title = String(ans.title).trim();
+  // V.1_74 (deck 45 Proposal 16: the rewrite moved "38%" and "205% ROI" from the tiles into the title, "... platforms -
+  // 38% productivity, 205% ROI over three years."): a new title never takes a figure the old one did not have
+  const figsOf = function (x) { return (String(x || '').match(/\d[\d.,]*\s*(%|x\b|×)?/g) || []).map(function (f) { return f.replace(/\s+/g, ''); }); };
+  const newT = String(ans.title || '').trim();
+  if (newT && figsOf(newT).every(function (f) { return figsOf(sp.title).indexOf(f) !== -1; })) t.title = newT.replace(/\.\s*$/, '');
   if (typeof ans.lead === 'string' && (t.lead || ans.lead.trim())) t.lead = ans.lead.trim();
   if (Array.isArray(ans.items) && Array.isArray(t.items) && ans.items.length === t.items.length) {
     t.items = t.items.map(function (it, k) {

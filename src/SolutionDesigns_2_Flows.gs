@@ -49,6 +49,9 @@
   // V.1_53: a point or text with no real words (".", "-") counts as empty (deck 24: a card with a heading only)
   function real(t) { return /[A-Za-z0-9]{2,}/.test(String(t || '')); }
   function linesOf(it) { var p = it.points.filter(real); return p.length ? p : (real(it.text) ? [it.text] : []); }
+  // V.1_74 (deck 45 Solution 25: "...rejoin WSFC Reverse Distributed AG replication ... to us-central1 Verify asynchronous
+  // log seeding ..."): points shown as one text are sentences, each with its full stop
+  function textOf(it) { var p = linesOf(it); return p.length > 1 ? p.map(function (x) { x = String(x).trim(); return /[.!?:]$/.test(x) ? x : x + '.'; }).join(' ') : p.join(' '); }
   function heading(els, x, y, w, str, color, maxLines, align) {
     return K.text(els, x, y, w, 60, str, { weight: 500, max: TSZ.heading, min: TSZ.heading, maxLines: maxLines || 3, color: color || T.ink, align: align || 'left' });
   }
@@ -239,7 +242,7 @@
       heading(els, x + pad, yy, iw, it.title, P.ink, 3, 'center');
       yy += hB + 8;
       if (hasTag) { if (it.tag) chip(els, cx, yy, it.tag, P.dark ? DARK_LINE : TINT, P.dark ? T.white : T.blue, iw, true); yy += 24; }
-      var stxt = linesOf(it).join(' ');                                // V.1_58: long or labelled texts read left-aligned
+      var stxt = textOf(it);                                // V.1_58: long or labelled texts read left-aligned
       K.text(els, x + pad, yy, iw, top + ch - yy - pad, stxt.replace(/\s+·\s+/g, '\n'), { weight: 400, max: TSZ.body, min: TSZ.body, align: (/·/.test(stxt) || stxt.split(/\s+/).length > 14) ? 'left' : 'center', color: P.body });
     });
     if (take) K.text(els, CX, BOTTOM - 16, CW, 16, take, { weight: 400, max: 9.5, min: 9, maxLines: 1, align: 'center', color: P.muted });
@@ -393,7 +396,7 @@
     var top = bandH + 16;
     var take = clean(s.takeaway), takeH = take ? 18 : 0;
     var pad = 12, nb = 22, tx = CX + pad + nb + 14, tw = CX + CW - pad - tx;
-    var hs = items.map(function (it) { return pad + th(it.title, tw, TSZ.heading, 500) + 4 + th(linesOf(it).join(' '), tw, TSZ.body) + pad; });
+    var hs = items.map(function (it) { return pad + th(it.title, tw, TSZ.heading, 500) + 4 + th(textOf(it), tw, TSZ.body) + pad; });
     var gap = 8, total = hs.reduce(function (a, b) { return a + b; }, 0) + gap * (n - 1), avail = BOTTOM - top - takeH;
     if (total > avail) return null;
     var k = Math.min(1.3, avail / total), y = top;
@@ -403,7 +406,7 @@
       K.rect(els, CX, y + pad, nb, nb, T.blue);
       K.text(els, CX, y + pad, nb, nb, K.pad2(i + 1), { font: 'mono', weight: 500, max: 9.5, min: 9, maxLines: 1, align: 'center', valign: 'middle', color: T.white });
       var hr = heading(els, tx, y + pad, tw, it.title, T.ink, 2);
-      body(els, tx, y + pad + hr.height + 4, tw, h - 2 * pad - hr.height - 4, linesOf(it).join(' '));
+      body(els, tx, y + pad + hr.height + 4, tw, h - 2 * pad - hr.height - 4, textOf(it));
       y += h + gap;
     });
     if (take) K.text(els, CX, BOTTOM - 14, CW, 14, take, { weight: 400, max: 9, min: 8.5, maxLines: 1, color: MUTED });
@@ -563,7 +566,7 @@
     K.text(els, CX + 14, top + 8, CW - 28, cH - 16, full, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.ink, runs: [{ start: 0, end: lead, color: T.ink, weight: 500 }] });
     var take = clean(s.takeaway), takeH = take ? th(take, CW - 40, TSZ.body) + 16 : 0;
     var y = top + cH + 12, gap = 12, cw = (CW - 2 * gap) / 3, pad = 14, iw = cw - 2 * pad;
-    var tB = maxOf(items, function (it) { return th(linesOf(it).join(' '), iw, TSZ.body); });
+    var tB = maxOf(items, function (it) { return th(textOf(it), iw, TSZ.body); });
     var titleB = maxOf(items, function (it) { return th(it.title, iw, TSZ.heading, 500); });
     var need = pad + 14 + 6 + 30 + 4 + titleB + 10 + 1 + 10 + tB + pad, avail = BOTTOM - y - (take ? takeH + 12 : 0);
     if (need > avail) return null;
@@ -579,7 +582,7 @@
       var hr = heading(els, x + pad, yy, iw, it.title, T.ink, 2);
       yy += hr.height + 10;
       K.line(els, x + pad, yy, x + cw - pad, yy, LINE, 0.75);
-      body(els, x + pad, yy + 10, iw, y + ch - yy - 10 - pad, linesOf(it).join(' '));
+      body(els, x + pad, yy + 10, iw, y + ch - yy - 10 - pad, textOf(it));
     });
     if (take) {
       var ty = y + ch + 12;

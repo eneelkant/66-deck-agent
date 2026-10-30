@@ -70,6 +70,32 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 | Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
 
+## Step 5 - the drawing (V.1_74) and the deck-45 fixes: every deck type
+
+| Rule | How it is kept |
+|---|---|
+| The body starts 20-30 pt under the title or lead - never a band of empty space under the title | Auto (`placeBody_`); Test v74 |
+| Free space under the body: the main row of boxes grows a little (a box still ends just under its text), rows that stand apart get more room between them | Auto; Test v58, v67, v74 |
+| Only a compact design (rings, a short chain) is centred on the slide | Auto; Test v74 |
+| A table heading or cell written as an object is its text - never "[object Object]" | Auto (`normalizeCells_`); Test v74 |
+| A RACI written as sentences ("66degrees is Responsible for ...") becomes one role column per party; the details go to the notes | Auto (`raciFromSentences_`); Test v74 |
+| The outline's KPI slide shows the request's targets as tiles, also when Gemini wrote it as lists; one KPI slide per deck (also across the parts of a long deck) | Auto (`conformSlides_`, `ctx.deckState`); Test v74 |
+| A team or governance slide is never renamed "Pricing options"; a slide is pricing by its content only when no slide is titled for pricing | Auto (`contractKind_`); Test v74 |
+| One target read twice from the request is one tile | Auto (`briefTargets_`); Test v74 |
+| On a KPI slide no tile label says "Target" again | Auto (Engine rule 15); Test v74 |
+| The request's own figures are never flagged "not found in the research sources" | Auto; Test v74 |
+| Research by 66degrees itself is never a research source (66degrees facts come from the approved facts) | Auto (`weakSource_`); Test v74 |
+| Titles: no full stop, no figures hung on with a dash; the gate's rewrite never moves figures into a title | Auto (`finishSlides_`, `gateApply_`); Test v74 |
+| Headings in sentence case without a full stop; no step that only counts the steps; counts in titles match the slide | Auto (`finishSlides_`); Test v74 |
+| Product names as Google Cloud writes them; no absolute promise ("zero data loss") | Auto (`finishSlides_`); Test v74 |
+| An item that only repeats another item goes to the notes | Auto (`finishSlides_`); Test v74 |
+| Points shown as one text are sentences with full stops; rows keep their column headings when drawn as text | Auto; Test v74 |
+| Agenda: the spiral for up to 6 sections also with long section names (wider tags, three lines for up to five) | Test v74 |
+| A divider's rule sits right under a one-line title | Test v74 |
+| A Gantt legend only when the bars carry its groups | Test v74 |
+| A new outline slide goes to the section it is about, before pricing and next steps | Auto (`placeInSection_`); Test v74 |
+| Slides of a part that came back empty are written once more before any is left out | Auto (`longDeckStep_`); Test v74 |
+
 ## Step 4 - the checker blocks a bad slide (V.1_73) and the deck-44 fixes: every deck type
 
 | Rule | How it is kept |

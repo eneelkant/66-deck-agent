@@ -16,6 +16,34 @@ var PRICING_TITLE_RE_ = /\b(pric\w*|commercial|investment options?|fees?|cost op
 var ENGAGEMENT_RE_ = /\b(engagement models?|fixed[- ](scope|price|fee)|time and materials|t&m|milestone[- ]based|staff aug\w*|pods?\b|retainer|managed services?|velocity engineering|direct hire|subscription|outcome[- ]based)\b/i;
 
 function wordsIn_(t) { return String(t || '').split(/\s+/).filter(Boolean).length; }
+/* V.1_74 (deck 45 Proposal 30: three RACI headings drawn as "[object Object]"): a column or a cell written as an object
+   ({"label": "66degrees"}, {"party": ..., "role": ...}) is its text - on every table, before anything reads it */
+function cellText_(c) {
+  if (c == null) return '';
+  if (typeof c !== 'object') return String(c);
+  if (Array.isArray(c)) return c.map(cellText_).filter(Boolean).join(', ');
+  const k = ['text', 'title', 'label', 'name', 'party', 'header', 'heading', 'role', 'value'].filter(function (x) { return typeof c[x] === 'string' || typeof c[x] === 'number'; })[0];
+  if (k) return String(c[k]);
+  const first = Object.keys(c).map(function (x) { return c[x]; }).filter(function (v) { return typeof v === 'string' || typeof v === 'number'; })[0];
+  return first == null ? '' : String(first);
+}
+function normalizeCells_(sp) {
+  if (!sp || typeof sp !== 'object') return false;
+  // (only a table - rows under column headings; the columns of a diagram or an architecture flow are objects with their
+  //  own items and stay as they are)
+  if (!Array.isArray(sp.rows) || !sp.rows.some(Array.isArray)) return false;
+  let changed = false;
+  if (Array.isArray(sp.columns) && sp.columns.some(function (c) { return c && typeof c === 'object' && !Array.isArray(c) && !Array.isArray(c.items) && !Array.isArray(c.points); })) {
+    sp.columns = sp.columns.map(function (c) { return c && typeof c === 'object' && (Array.isArray(c.items) || Array.isArray(c.points)) ? c : cellText_(c); });
+    changed = true;
+  }
+  if (Array.isArray(sp.rows)) sp.rows = sp.rows.map(function (r) {
+    if (!Array.isArray(r) || !r.some(function (c) { return c && typeof c === 'object'; })) return r;
+    changed = true;
+    return r.map(cellText_);
+  });
+  return changed;
+}
 function itemText_(it) { return typeof it === 'string' ? it : String((it && (it.text || it.description || it.fix)) || ''); }
 
 // the contract kind of a slide ('' = none)
@@ -31,7 +59,12 @@ function contractKind_(sp, ctx) {
   if (/\bnext steps?\b|getting started|first steps?\b|launch the (engagement|partnership|project)/i.test(title)) return 'next';
   if (/\brisks?\b/i.test(title) && !/\brisk[- ]based\b/i.test(title)) return 'risks';
   const asked = ctx && ctx.brief && Array.isArray(ctx.brief.families) ? ctx.brief.families : [];
-  if (PRICING_TITLE_RE_.test(title) || (asked.indexOf('pricing') !== -1 && items.length >= 2 &&
+  // V.1_74 (deck 45 General 33: "Integrated team structure and governance" renamed "Pricing options: ..." because two
+  // cards said "pods", while slide 37 was the pricing slide): a slide is a pricing slide by its content only when no
+  // slide of the deck is titled for pricing, and never when its title says team, governance or structure
+  const pricedByTitle = ctx && Array.isArray(ctx.outlineTitles) && ctx.outlineTitles.some(function (t) { return String(t || '') !== title && PRICING_TITLE_RE_.test(String(t || '')); });
+  const teamTitle = /\b(team|governance|structure|committee|steering|operating model|raci|roles?)\b/i.test(title);
+  if (PRICING_TITLE_RE_.test(title) || (!pricedByTitle && !teamTitle && asked.indexOf('pricing') !== -1 && items.length >= 2 &&
       items.filter(function (it) { return ENGAGEMENT_RE_.test(String((it && (it.title || it.label)) || '') + ' ' + itemText_(it)); }).length >= 2)) return 'pricing';
   if (t === 'team' || /team structure|joint team|delivery team|team and governance|operating model/i.test(title)) return 'team';
   return '';
@@ -191,10 +224,47 @@ function applyContractAnswer_(sp, kind, ans, ctx) {
    kept), and a cell that starts with its role keeps only the role ("Accountable / Responsible" stays); what a cell said
    after its role goes to the speaker notes */
 var ROLE_START_RE_ = /^\s*((?:responsible|accountable|consulted|informed)(?:\s*(?:\/|&|,|and)\s*(?:responsible|accountable|consulted|informed))*)\b/i;
+var RACI_CLAUSE_RE_ = /^\s*(?:and\s+|while\s+|whereas\s+)?([A-Za-z0-9][\w&.'\- ]{0,40}?)\s+(?:is|are|remains?|acts as)\s+(?:the\s+)?(responsible|accountable|consulted|informed)\b(.*)$/i;
+/* V.1_74 (deck 45 General 34: one column "Role assignment and governance responsibility" with "66degrees is Responsible
+   for ...; ZoomInfo is Accountable for ..., Consulted on ..." in every row): the parties named in such sentences become
+   the columns, each cell the party's role on that workstream (its first role there); what follows goes to the notes */
+function raciFromSentences_(sp) {
+  const rows = (sp.rows || []).filter(Array.isArray);
+  if (rows.length < 2) return false;
+  const parties = [], table = [], extra = [];
+  let hit = 0;
+  rows.forEach(function (r) {
+    const roles = {};
+    r.slice(1).forEach(function (c) {
+      String(c || '').split(/\s*;\s*|\.\s+(?=[A-Z0-9])/).forEach(function (cl) {
+        const m = cl.match(RACI_CLAUSE_RE_);
+        if (!m) return;
+        const party = m[1].replace(/^(the|both)\s+/i, '').trim();
+        if (!party || party.split(/\s+/).length > 4) return;
+        const key = party.toLowerCase();
+        if (!parties.some(function (p) { return p.toLowerCase() === key; })) parties.push(party);
+        const name = parties.filter(function (p) { return p.toLowerCase() === key; })[0];
+        if (!roles[name]) roles[name] = m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase();
+        extra.push(String(r[0] || '') + ': ' + cl.trim().replace(/[.;]+$/, '') + '.');
+      });
+    });
+    if (Object.keys(roles).length) hit++;
+    table.push({ head: String(r[0] || ''), roles: roles });
+  });
+  if (parties.length < 2 || hit < Math.ceil(rows.length * 0.6)) return false;
+  const cols = Array.isArray(sp.columns) ? sp.columns.map(cellText_) : [];
+  sp.columns = [cols[0] && !/role|responsib|assignment|governance/i.test(cols[0]) ? cols[0] : 'Workstream'].concat(parties);
+  sp.rows = table.map(function (t) { return [t.head].concat(parties.map(function (p) { return t.roles[p] || ''; })); });
+  sp.notes = String(sp.notes || '') + '\nRoles in detail: ' + extra.join(' ').slice(0, 1500);
+  return true;
+}
 function normalizeRaci_(sp) {
   let changed = false;
   if (!Array.isArray(sp.rows)) return false;
-  const cols = Array.isArray(sp.columns) ? sp.columns.map(String) : [];
+  if (normalizeCells_(sp)) changed = true;
+  const sentences = sp.rows.some(function (r) { return Array.isArray(r) && r.slice(1).some(function (c) { return /\b(is|are)\s+(the\s+)?(responsible|accountable|consulted|informed)\b/i.test(String(c || '')); }); });
+  if (sentences && raciFromSentences_(sp)) { sp.type = 'table'; delete sp.design; sp.reference = null; return true; }
+  const cols = Array.isArray(sp.columns) ? sp.columns.map(cellText_) : [];
   // rows as objects: {label|workstream|aspect, then one key per party (left / right / the column names)}
   if (sp.rows.some(function (r) { return r && typeof r === 'object' && !Array.isArray(r); })) {
     sp.rows = sp.rows.map(function (r) {
@@ -254,13 +324,40 @@ function splitRiskRecords_(sp) {
   return n > 0;
 }
 
+// what a slide said before it is made the KPI slide (it goes to the notes)
+function kpiSourceText_(sp) {
+  const out = [];
+  const walk = function (v) {
+    if (v == null) return;
+    if (typeof v === 'string') { if (/[a-z]{3}/i.test(v)) out.push(v.trim()); return; }
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if (typeof v === 'object') ['label', 'title', 'text', 'points', 'items'].forEach(function (k) { walk(v[k]); });
+  };
+  ['items', 'points', 'left', 'right', 'rows'].forEach(function (k) { walk(sp[k]); });
+  return out.map(function (x) { return /[.!?]$/.test(x) ? x : x + '.'; }).join(' ');
+}
+
 // the contract pass over the written slides (returns the number of slides put in shape)
 function conformSlides_(slides, ctx) {
   let n = 0;
   const ask = [];
+  const state = (ctx && ctx.deckState) || (ctx ? (ctx.deckState = {}) : {});
+  const targets = typeof briefTargets_ === 'function' ? briefTargets_(ctx) : [];
   (slides || []).forEach(function (sp, i) {
     if (sp && typeof sp === 'object' && splitRiskRecords_(sp)) n++;         // V.1_73: on every slide
-    const kind = contractKind_(sp, ctx);
+    if (sp && typeof sp === 'object' && normalizeCells_(sp)) n++;           // V.1_74: no "[object Object]" in a table
+    let kind = contractKind_(sp, ctx);
+    // V.1_74 (deck 45 Proposal: "KPI measurement baselines and tracking mechanisms" was the deck's KPI slide in the
+    // outline, Gemini wrote it as two lists - so the targets 95% and 50% were shown nowhere): the slide the outline gave
+    // the KPI topic is the KPI slide when the request gives target figures and the deck has none yet
+    const t0 = String((sp && sp.type) || '').toLowerCase();
+    if (kind !== 'kpi' && sp && typeof sp === 'object' && targets.length >= 2 && !state.kpiSlide && ['section', 'agenda', 'cover', 'closing', 'template'].indexOf(t0) === -1 &&
+        typeof onceTopicOf_ === 'function' && onceTopicOf_(sp.title) === 'kpi' && !/\b(slas?|slos?)\b/i.test(String(sp.title || ''))) {
+      kind = 'kpi';
+      const before = kpiSourceText_(sp);
+      if (before) sp.notes = String(sp.notes || '') + '\nAlso on this topic: ' + before.slice(0, 1200);
+    }
+    if (kind === 'kpi') state.kpiSlide = String(sp.title || '').slice(0, 80) || true;
     if (!kind) return;
     if (kind === 'raci' && normalizeRaci_(sp)) n++;                          // V.1_73: by the code first
     const gaps = contractGaps_(sp, kind, ctx);

@@ -420,6 +420,7 @@ function generatePresentationRun_(data, run) {
   ctx.proposalSections = sectionCount;
   const plan = planContent(userPrompt, presentationType, totalSlides - sectionCount, sources, ctx);
   if (proposalRun) proposalStructure_(plan, ctx, sectionCount);
+  ctx.outlineTitles = (plan.slides || []).map(function (o) { return o && o.title; });   // V.1_74: the deck's titles (pricing by title)
   deckFigureCheck_(plan.slides, ctx, sources);                                   // V.1_70: figures only from the request and sources
   deckShapeCheck_(plan.slides, ctx);                                            // V.1_72: each slide kind in its shape
   progressStage_(ctx, 'write', 'done', plan.slides.length + ' slides planned');
@@ -480,6 +481,7 @@ function generatePresentationRun_(data, run) {
   if (!CONFIG.useBeautifulAi) {
     deckFigureCheck_(plan.slides, ctx, sources);                                 // V.1_70: again after the fill and fit steps
     deckGate_(plan.slides, ctx, started);                                        // V.1_73: step 4 - no bad slide goes in
+    deckFinishCheck_(plan.slides, ctx);                                          // V.1_74: titles, counts, claims, names
     finalizeNotes_(plan, sources, ctx);
     stats = drawSlidesIntoActive_(target, plan.slides, ctx, blankDeck);
     copied = stats.redrawn || plan.slides.length;
@@ -1177,7 +1179,7 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
     plan.slides.forEach(function (sp) { if (sp.title && String(sp.type).toLowerCase() !== 'template') sp.title = sentenceCase_(sp.title, 2); });
     ensureTitles_(plan.slides, ctx);                                              // V.1_47: the same final checks as a short deck
     plan.slides.forEach(function (sp) { removeHypeWords_(sp); sentenceCaseHeadings_(sp); });
-    flagUnverifiedFigures_(plan.slides, sources, approvedFacts);
+    flagUnverifiedFigures_(plan.slides, sources, approvedFacts, ctx);
     finalVoicePass_(plan.slides, ctx);
     if (!plan.deck_title) plan.deck_title = batch.deckTitle || '';
     return plan;
@@ -1192,7 +1194,7 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
   fillThinSlides_(plan, ctx);                                                     // no slide that looks empty
   architectureAsDiagram_(plan.slides, ctx);                                       // V.1_47: an architecture slide is a diagram
   riskSlidesWithMitigations_(plan.slides, ctx);                                   // V.1_48: every risk with its mitigation
-  flagUnverifiedFigures_(plan.slides, sources, approvedFacts);                   // V.1_47: product figures to check before sharing
+  flagUnverifiedFigures_(plan.slides, sources, approvedFacts, ctx);              // V.1_47: product figures to check before sharing
   plan.slides.forEach(function (sp) { nameCaseClient_(sp, ctx); });               // a case study names its client
   plan.slides.forEach(function (sp) {                                            // brand rule: sentence-case titles
     const tt = String(sp.type).toLowerCase();
@@ -1389,8 +1391,11 @@ function riskSlidesWithMitigations_(slides, ctx) {
 
 // V.1_47: figures in card texts (product limits such as "100 million rows") that the sources do not contain get a note to
 // check them before sharing (they are not removed: they may be right, but nobody has confirmed them)
-function flagUnverifiedFigures_(slides, sources, approved) {
-  const corpus = [JSON.stringify((sources && sources.research) || []), String((sources && sources.text) || ''), JSON.stringify(approved || [])].join(' ');
+// V.1_74 (deck 45 General 12, Proposal 6: "figures not found in the research sources (99.9%)" on the request's own
+// targets): the request and its brief count as sources here
+function flagUnverifiedFigures_(slides, sources, approved, ctx) {
+  const corpus = [JSON.stringify((sources && sources.research) || []), String((sources && sources.text) || ''), JSON.stringify(approved || []),
+    String((ctx && ctx.userPrompt) || ''), JSON.stringify((ctx && ctx.brief && ctx.brief.figures) || [])].join(' ');
   if (corpus.length < 200) return 0;
   let n = 0;
   (slides || []).forEach(function (sp) {
@@ -2554,6 +2559,11 @@ const WEAK_SOURCE_RE_ = /\b(intercom|fin ai|fin\.ai|zendesk|freshworks|freshdesk
 const TRUSTED_SOURCE_RE_ = /\b(google|gartner|forrester|idc|mckinsey|deloitte|bcg|bain|accenture|pwc|kpmg|ey\b|harvard|hbr|mit\b|stanford|reuters|bloomberg|financial times|wall street journal|wsj|economist|forbes|cx today|statista|pew)\b/i;
 function weakSource_(src) {
   const who = [src.title, src.publisher, src.url].map(function (x) { return String(x || ''); }).join(' ');
+  // V.1_74 (deck 45 General 23: "99.2% automated data accuracy" from "Retail case study (66degrees, 2023)
+  // https://66degrees.com"): what 66degrees says about itself comes from the approved facts, never from web research
+  // (a research source by 66degrees, or one that links only to a home page, is not used)
+  if (/\b66\s?degrees\b/i.test(String(src.publisher || '') + ' ' + String(src.url || ''))) return true;
+  if (/^https?:\/\/(www\.)?[^\/]+\/?$/i.test(String(src.url || '').trim()) && /case study|customer story/i.test(String(src.title || ''))) return true;
   if (TRUSTED_SOURCE_RE_.test(String(src.publisher || '')) && !WEAK_SOURCE_RE_.test(String(src.publisher || ''))) return false;
   return WEAK_SOURCE_RE_.test(who) || (/\bblog\b/i.test(who) && !TRUSTED_SOURCE_RE_.test(who));
 }
@@ -2756,6 +2766,11 @@ function agendaNotes_(sp) {
 }
 // V.1_73: step 4 - a slide the checker still finds a problem on is written again once, then drawn with a safe layout
 // (Gate.gs); never stops a deck
+// V.1_74: the last text checks on the finished slides (Finish.gs); never stops a deck
+function deckFinishCheck_(slides, ctx) {
+  if (typeof finishSlides_ !== 'function') return 0;
+  try { return finishSlides_(slides, ctx); } catch (e) { if (ctx && ctx.log) ctx.log.push('Finish check skipped: ' + e.message); return 0; }
+}
 function deckGate_(slides, ctx, started) {
   if (typeof gateSlides_ !== 'function') return null;
   try { return gateSlides_(slides, ctx, started); } catch (e) { if (ctx && ctx.log) ctx.log.push('Slide gate skipped: ' + e.message); return null; }
@@ -5380,7 +5395,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_73';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_74';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -6186,21 +6201,31 @@ function backlogFill_(secs, body, seen, keyOf, flat, prompt, holes, backlog) {
 }
 // Puts a new outline slide into its section: the section Gemini named, else the place of a removed slide, else the section
 // whose title shares the most words with it, else the shortest section
+/* V.1_74 (deck 45 Solution: "Integration with existing systems", "How the solution is deployed" and "Operating the
+   platform day to day" in section 01 "Current architecture and failure modes", because a place freed there was filled
+   first, whatever the slide was about; Proposal 38 "Integration with existing systems" after the pricing slide): a new
+   slide goes to the section it is about - by the section's name (twice) and the titles of its slides - and only a slide
+   about none of them fills a freed place; inside its section it stands before the pricing and next-step slides */
 function placeInSection_(secs, o, holes) {
   let k = isFinite(o.sec) && o.sec >= 1 && o.sec <= secs.length ? o.sec - 1 : -1;
-  if (k === -1 && holes && holes.length) k = holes.shift();
   if (k === -1) {
     const ts = Object.keys(topicStems_(o.title + ' ' + (o.brief || ''), true));
     let best = 0;
     secs.forEach(function (sc, j) {
       const ss = topicStems_(sc.title + ' ' + (sc.description || ''), true);
-      const score = ts.filter(function (w) { return ss[w]; }).length;
+      const ls = topicStems_(sc.list.filter(function (x) { return x && x.type !== 'section'; }).map(function (x) { return x.title; }).join(' '), true);
+      const score = 2 * ts.filter(function (w) { return ss[w]; }).length + ts.filter(function (w) { return ls[w]; }).length;
       if (score > best) { best = score; k = j; }
     });
+    if (best < 2) k = -1;
   }
+  if (k === -1 && holes && holes.length) k = holes.shift();
   if (k === -1) k = secs.map(function (sc, j) { return j; }).sort(function (a, b) { return secs[a].list.length - secs[b].list.length; })[0];
   delete o.sec;
-  secs[k].list.push(o);
+  const list = secs[k].list;
+  const late = typeof onceTopicOfEntry_ === 'function' ? list.findIndex(function (x) { const f = x && x.type !== 'section' ? onceTopicOfEntry_(x) : ''; return f === 'pricing' || f === 'next'; }) : -1;
+  if (late !== -1 && ['pricing', 'next'].indexOf(onceTopicOfEntry_(o)) === -1) list.splice(late, 0, o);
+  else list.push(o);
 }
 // A slide that names the subject of an EARLIER section (all of that section's words, none of its own section's) moves
 // to the end of that section: "Understanding Apple's current forecasting needs" belongs in "Understanding Apple's needs"
@@ -6549,6 +6574,8 @@ function prepareLongCtx_(ctx, st) {
   ctx.deckSize = st.n;
   ctx.chooserState = st.chooser;
   ctx.stockUsed = st.stockUsed = st.stockUsed || {};                 // V.1_50: a stock image once per deck, across all parts
+  ctx.deckState = st.deckState = st.deckState || {};                 // V.1_74: what the deck already has (its KPI slide), across parts
+  ctx.outlineTitles = ((st.outline && st.outline.slides) || []).map(function (o) { return o && o.title; });   // V.1_74
   if (ctx.lib) ctx.lib = applyDepartmentFilter_(ctx.lib, st.department);
 }
 
@@ -6568,6 +6595,22 @@ function longDeckStep_(ctx, target, st, t0) {
     const written = content.length ? planContent(st.userPrompt, st.presentationType, content.length, st.sources, ctx,
       { batch: { slides: content, deckSize: st.n, deckTitle: st.outline.deck_title, otherTitles: others, usedNumbers: st.usedNumbers,
         plan: st.outline.plan || [], ledger: st.ledger || [] } }) : { slides: [] };   // V.1_51: storyline + what earlier slides said
+    // V.1_74 (deck 45 Solution: 33 slides for 40 asked - slides Gemini did not write in a part were left out): the slides
+    // of a part that came back empty are written once more, on their own, before any is left out
+    {
+      const lost = [];
+      (written.slides || []).forEach(function (sp, k) { if (!sp || sp.leaveOut) lost.push(k); });
+      if (lost.length && content.length && Date.now() - b0 < 150000) {
+        try {
+          const again = planContent(st.userPrompt, st.presentationType, lost.length, st.sources, ctx,
+            { batch: { slides: lost.map(function (k) { return content[k]; }), deckSize: st.n, deckTitle: st.outline.deck_title, otherTitles: others.concat(content.map(function (o) { return o.title; })),
+              usedNumbers: st.usedNumbers, plan: st.outline.plan || [], ledger: st.ledger || [] } });
+          let back = 0;
+          lost.forEach(function (k, j) { const sp = again && again.slides && again.slides[j]; if (sp && !sp.leaveOut) { written.slides[k] = sp; back++; } });
+          ctx.log.push('Part ' + (st.next + 1) + ': ' + lost.length + ' slide(s) came back empty; ' + back + ' written again.');
+        } catch (eL) { ctx.log.push('Part ' + (st.next + 1) + ': empty slides not written again (' + eL.message + ').'); }
+      }
+    }
     let wk = 0;
     const plan = { slides: part.map(function (o) {
       if (o.type === 'section') return { type: 'section', title: o.title, number: o.number, lead: o.lead, level: o.level, points: o.points, notes: '' };
@@ -6601,6 +6644,7 @@ function longDeckStep_(ctx, target, st, t0) {
     }
     deckFigureCheck_(plan.slides, ctx, st.sources);                      // V.1_70: again after the fill and fit steps
     deckGate_(plan.slides, ctx, b0);                                     // V.1_73: step 4 - no bad slide goes in
+    deckFinishCheck_(plan.slides, ctx);                                  // V.1_74: titles, counts, claims, names
     finalizeNotes_(plan, st.sources, ctx);
     ctx.nextPartStartsDark = !!all[st.next + part.length] && all[st.next + part.length].type === 'section';   // V.1_73: Solution dark rule
     drawSlidesIntoActive_(longDrawTarget_(target, st), plan.slides, ctx, false);   // V.1_51: into the working copy

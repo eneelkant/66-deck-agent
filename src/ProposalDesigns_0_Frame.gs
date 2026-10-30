@@ -28,8 +28,12 @@
     // V.1_69: a section name that would be cut short in its tag (more than two lines) gives the agenda to the list design
     // V.1_72 (deck 43 General 2: four sections, drawn as a list because one name needed three lines): the tags widen to
     // 200 pt before the agenda gives up the spiral
-    var fitsIn = function (w) { return !rows.some(function (r) { return K.textH(String(r.title), (w - 16) * 0.9, 9.5, 500) > 2 * K.lineHeight('sans', 9.5) + 1; }); };   // (measured 10% narrower, as Slides wraps)
-    var TW = fitsIn(168) ? 168 : fitsIn(200) ? 200 : 0;
+    var fitsIn = function (w, lines) { return !rows.some(function (r) { return K.textH(String(r.title), (w - 16) * 0.9, 9.5, 500) > (lines || 2) * K.lineHeight('sans', 9.5) + 1; }); };   // (measured 10% narrower, as Slides wraps)
+    // V.1_74 (deck 45 General 2: five long section names, drawn as a list although the rule is the spiral up to six
+    // sections): the tags widen to 236 pt, and with five sections or fewer a name may take three lines (the tags still
+    // clear each other on the arc)
+    var TL = 2;
+    var TW = fitsIn(168) ? 168 : fitsIn(200) ? 200 : fitsIn(236) ? 236 : (n <= 5 && fitsIn(236, 3)) ? (TL = 3, 236) : 0;
     if (!TW) return null;
     var els = [];
     K.text(els, X0, 24, W - 2 * X0, 30, agendaTitle_(s), { weight: 500, max: 20, min: 15, maxLines: 2, color: T.ink });   // V.1_69: a long agenda title is never cut
@@ -57,10 +61,10 @@
       }
       K.ring(els, nx - 5, ny - 5, 10, T.white, T.blue, 1);
       K.ellipse(els, nx - 2.5, ny - 2.5, 5, 5, T.blue);
-      var tw = TW, th = 30, tx = (TW > 168 ? 430 : 446) + (i % 2) * 18, ty = ny - th / 2;
+      var tw = TW, th = TL === 3 ? 42 : 30, tx = (TW > 200 ? 410 : TW > 168 ? 430 : 446) + (i % 2) * 18, ty = ny - th / 2;
       K.dashedLine(els, nx + 7, ny, tx, ny, '#9AA4B2', 0.6, 1.5, 2);
       K.roundrect(els, tx, ty, tw, th, '#ECECEC', { color: '#DBDDE1', width: 0.75 });
-      K.text(els, tx + 8, ty + 1, tw - 16, th - 2, r.title, { weight: 500, max: TSZ.heading, min: 9.5, maxLines: 2, align: 'center', valign: 'middle', color: T.ink });
+      K.text(els, tx + 8, ty + 1, tw - 16, th - 2, r.title, { weight: 500, max: TSZ.heading, min: 9.5, maxLines: TL, align: 'center', valign: 'middle', color: T.ink });
     });
     return { bg: T.white, els: els, noBalance: true };
   });
@@ -126,8 +130,10 @@
     var els = [];
     var no = s.noNumber ? '' : (s.number || (lctx && lctx.sectionNo ? K.pad2(lctx.sectionNo) : ''));   // V.1_63: a workstream has none
     if (no) K.text(els, 32.4, 150, 80, 26, String(no), { weight: 400, max: 18, min: 16, maxLines: 1, color: T.white });
-    var t = K.text(els, 32.4, 180, 330, 60, s.title, { weight: 400, max: 15, min: 13, maxLines: 2, color: T.white });
-    var lw = Math.min(330, Math.max(110, (t.width || 160) + 6));
+    // V.1_74 (deck 45 Proposal 11: the rule far under a one-line title - the 330 pt box measured it as two lines): the
+    // title box is 400 pt wide (the streaks start further right), so a title Slides draws on one line is measured as one
+    var t = K.text(els, 32.4, 180, 400, 60, s.title, { weight: 400, max: 15, min: 13, maxLines: 2, color: T.white });
+    var lw = Math.min(400, Math.max(110, (t.width || 160) + 6));
     K.line(els, 33.4, 180 + t.height + 6, 33.4 + lw, 180 + t.height + 6, T.white, 0.75);
     return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true, noBalance: true };
   });
