@@ -54,7 +54,7 @@ test("A3. Proposal 37: a section divider's title is never the deck's pricing sli
   const slides = [sp];
   G.conformSlides_(slides, ctx);
   assert.match(slides[0].title, /^Pricing options: /);
-  assert.equal(slides[0].takeaway, "Pricing is confirmed after the scoping workshop.");
+  assert.match(slides[0].lead, /Pricing is confirmed after the scoping workshop\.$/);   // V.1_76: in the lead
 });
 
 test("A4. General 29: a risk's mitigation the design cannot show is written into its text, not sent to the notes", () => {

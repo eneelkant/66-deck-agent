@@ -4453,6 +4453,17 @@ var ENGINE = (function () {
       return o;
     }) });
     if (Array.isArray(s.points)) s = Object.assign({}, s, { points: s.points.map(function (p) { return typeof p === 'string' ? capFirst_(p) : p; }) });
+    // 19. V.1_76 (deck 47 Proposal 37 "Support model": three tiers L1-L3 as items and three support sentences as points -
+    //     the slide was drawn with the points and the tiers were lost): items that each have a heading and a text are the
+    //     slide's content; points beside them go to the takeaway (one) or the speaker notes (more)
+    var fullIts = Array.isArray(s.items) ? s.items.filter(function (it) { return it && typeof it === 'object' && String(it.title || it.label || '').trim() && String(it.text || it.description || '').trim(); }) : [];
+    var strPts = Array.isArray(s.points) ? s.points.filter(function (p) { return typeof p === 'string' && p.trim(); }) : [];
+    if (['cards', 'process', 'diagram'].indexOf(t) !== -1 && fullIts.length >= 2 && fullIts.length === (s.items || []).filter(Boolean).length && strPts.length) {
+      var ptsTxt = strPts.map(function (p) { p = capFirst_(p.trim()); return /[.!?]$/.test(p) ? p : p + '.'; });
+      if (ptsTxt.length === 1 && !String(s.takeaway || '').trim()) s = Object.assign({}, s, { points: [], takeaway: ptsTxt[0] });
+      else s = Object.assign({}, s, { points: [], notes: String(s.notes || '') + '\nAlso on this topic: ' + ptsTxt.join(' ') });
+      log.push('points-beside-items');
+    }
     // 8. the speaker notes never give other figures than the slide (deck 38 Proposal slide 20: 55% / 90% / 30% in the
     //    notes, 99% / 25% on the slide): a notes sentence with a figure the slide does not show is left out
     if (typeof s.notes === 'string' && s.notes && t !== 'cover' && t !== 'section' && t !== 'agenda' && t !== 'closing') {

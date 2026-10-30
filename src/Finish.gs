@@ -39,7 +39,10 @@ var ABSOLUTE_FIXES_ = [
   [/\bzero\s+(data|message|record|transaction)\s+loss\b/g, function (m, w) { return 'protection against ' + w + ' loss'; }],
   [/\b(eliminat|prevent)(e|es|ing)\s+(data|message|record|transaction)\s+loss\b/gi, function (m, a, e, w) { return 'guard' + (e === 'es' ? 's' : e === 'ing' ? 'ing' : '') + ' against ' + w.toLowerCase() + ' loss'; }],
   [/\b(eliminat)(e|es|ing)\s+(downtime|outages)\b/gi, function (m, a, e, w) { return 'minimiz' + (e === 'es' ? 'es' : e === 'ing' ? 'ing' : 'e') + ' ' + w.toLowerCase(); }],
-  [/\b(never|cannot)\s+(loses?|lose)\s+(data|messages?|records?)\b/gi, function (m, a, b, w) { return 'is built not to lose ' + w.toLowerCase(); }]
+  [/\b(never|cannot)\s+(loses?|lose)\s+(data|messages?|records?)\b/gi, function (m, a, b, w) { return 'is built not to lose ' + w.toLowerCase(); }],
+  // V.1_76 (deck 47 Proposal 38 "while guaranteeing completion", Solution 18 "Zero dropped tracking requests")
+  [/\b(while |and )?guarantee(s|d|ing)?\s+(on-time\s+)?(completion|delivery|success|results|outcomes)\b/gi, function (m, a, s1, ot, w) { return 'with clear ' + (w.toLowerCase() === 'completion' ? 'completion milestones' : w.toLowerCase() + ' criteria'); }],
+  [/\b([Zz])ero\s+(dropped|lost|failed)\s+((?:[a-z-]+\s+){0,2}(?:requests|transactions|messages|events|orders|calls))\b/g, function (m, z, a, w) { return (z === 'Z' ? 'Minimal ' : 'minimal ') + a + ' ' + w; }]
 ];
 
 function finishFrame_(sp) {
@@ -137,6 +140,29 @@ function finishRepeats_(sp) {
   return true;
 }
 
+// 8. (V.1_76, deck 47 General 39 "Design technical") a step or card heading never ends on a half phrase: a dangling
+//    adjective gets its noun from the item's text when it has one, else "approach"; a dangling small word goes
+var HEAD_ADJ_END_RE_ = /\b(technical|strategic|operational|functional|initial|final|joint|key|core|digital|global|regional|executive)\s*$/i;
+var HEAD_SMALL_END_RE_ = /\s+(the|a|an|and|or|of|to|for|with|across|into|from|by|on|in|at|per)\s*$/i;
+function finishHeadings_(sp) {
+  if (!Array.isArray(sp.items)) return false;
+  let changed = false;
+  sp.items.forEach(function (it) {
+    if (!it || typeof it !== 'object' || typeof it.title !== 'string') return;
+    let h = it.title.trim().replace(/[.]$/, '');
+    const before = h;
+    for (let k = 0; k < 2 && HEAD_SMALL_END_RE_.test(h) && h.split(/\s+/).length > 2; k++) h = h.replace(HEAD_SMALL_END_RE_, '');
+    const m = h.match(HEAD_ADJ_END_RE_);
+    if (m && h.split(/\s+/).length >= 2) {
+      const adj = m[1].toLowerCase();
+      const nm = String(it.text || '').match(new RegExp('\\b' + adj + '\\s+([a-z][a-z-]{3,})\\b', 'i'));
+      h = h + ' ' + (nm ? nm[1].toLowerCase() : 'approach');
+    }
+    if (h !== before) { it.title = h; changed = true; }
+  });
+  return changed;
+}
+
 function finishSlides_(slides, ctx) {
   let n = 0;
   (slides || []).forEach(function (sp) {
@@ -147,6 +173,7 @@ function finishSlides_(slides, ctx) {
     finishTitle_(sp);
     if (typeof sentenceCaseHeadings_ === 'function') sentenceCaseHeadings_(sp);
     finishCountSteps_(sp);
+    finishHeadings_(sp);
     finishCounts_(sp);
     finishTexts_(sp, function (x) {
       let y = x;

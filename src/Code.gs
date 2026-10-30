@@ -3227,6 +3227,8 @@ function fitContentToDesigns_(plan, ctx, started) {
       const txt = ENGINE.cleanText(String(f.text));
       // still too long: kept when it is shorter than before (the next round takes it from there), else tried again
       if (it.action === 'shorten' && txt.length > it.max_chars * 1.05 && txt.length >= String(it.current || '').length) return;
+      // V.1_76 (deck 47 General 39 "Design technical"): a shortened text or heading never ends on a half phrase
+      if (it.action === 'shorten' && halfPhrase_(txt) && !halfPhrase_(String(it.current || ''))) return;
       setByPath_(plan.slides[it.slide], it.path, it.path[0] === 'title' ? sentenceCase_(txt.replace(/[.]$/, '')) : txt);
       res.fixed++;
     });
@@ -3242,6 +3244,14 @@ function fitContentToDesigns_(plan, ctx, started) {
   return res;
 }
 
+// V.1_76: a text that ends where its noun should come ("Design technical", "Plan the initial", "Scale across")
+var HALF_END_RE_ = /\b(technical|strategic|operational|functional|initial|final|joint|key|core|digital|global|regional|enterprise|executive|data|cloud|the|a|an|and|or|of|to|for|with|across|into|from|by|on|in|at|per)\s*[.]?\s*$/i;
+function halfPhrase_(t) {
+  const x = String(t || '').trim();
+  if (!x) return false;
+  if (typeof FRAG_END_RE_ !== 'undefined' && FRAG_END_RE_.test(x)) return true;
+  return x.split(/\s+/).length >= 2 && HALF_END_RE_.test(x);
+}
 // Path of the string field whose (cleaned) value is exactly `text`, e.g. ['items', 2, 'text']; null if none
 function findTextPath_(obj, text) {
   const skip = { reference: 1, notes: 1, fact_tags: 1, design: 1, type: 1, title: 1 };
@@ -3368,7 +3378,10 @@ function setRunNames_(prompt, extra) {
   RUN_NAMES_ = {};
   const p = String(prompt || '');
   const lower = {};
-  (p.match(/\b[a-z][a-z'’-]+\b/g) || []).forEach(function (w) { lower[w] = true; });
+  // (V.1_76, deck 47 General 1 "Transforming replenishment at kroger": "kroger.com" in the request counted as the name
+  //  written in lower case, so "Kroger" lost its capital) - web addresses and e-mails are not words of the request
+  (p.replace(/\b[\w.+-]+@[\w-]+(\.[\w-]+)+\b|\b(?:https?:\/\/)?(?:www\.)?[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|io|ai|co|us|uk|de|in|gov|edu)(?:\/\S*)?/gi, ' ')
+    .match(/\b[a-z][a-z'’-]+\b/g) || []).forEach(function (w) { lower[w] = true; });
   const SMALL = /^(a|an|and|or|for|of|in|on|at|to|by|the|with|from|vs|via|as|is|are|our|your|their|we|it|i|this|that|these|those|create|make|build|write|propose|cover|include|keep|use|add|show|today|please)$/i;
   // runs of capitalised words (and acronyms) that do not start a sentence
   const re = /([^.!?\n]\s+)((?:[A-Z][A-Za-z0-9&]*(?:['’]s)?|[A-Z]{2,}[a-z]?)(?:\s+(?:[A-Z][A-Za-z0-9&]*|[A-Z]{2,}|of|and|for)(?=\s|[,.;:)!?]|$))*)/g;
@@ -5470,7 +5483,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_75';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_76';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -6581,6 +6594,12 @@ function renameTargetSections_(secs, ctx) {
 function startLongDeck_(ctx, target, p, started) {
   progressStage_(ctx, 'write', 'active', 'Gemini is planning the outline of ' + p.n + ' slides');
   const outline = planOutline_(p.userPrompt, p.presentationType, p.n, p.sources, ctx);
+  // V.1_76: an outline shorter than the deck asked for (cover, agenda and closing are the other three slides) is written
+  // to the slide log, so a short deck shows where the slides went
+  try {
+    const planned = ((outline && outline.slides) || []).length + 3;
+    if (planned < p.n && typeof recordSlide_ === 'function') recordSlide_({ type: 'outline', title: 'Outline has ' + planned + ' of ' + p.n + ' slides' }, { drawnWith: 'outline-short', qa: { issues: ['outline-short'], fixed: [] } }, null);
+  } catch (eO) {}
   const st = {
     mode: 'create-long', runId: ctx.runId, startedAt: started, userPrompt: p.userPrompt, presentationType: p.presentationType, proposal: ctx.proposal || null,
     department: p.department, n: p.n, sources: p.sources, brief: ctx.brief || null, outline: outline, next: 0, drawn: 0, phase: 'body', avgBatchMs: 0, usedNumbers: [],
@@ -6714,7 +6733,12 @@ function longDeckStep_(ctx, target, st, t0) {
     const plan = { slides: part.map(function (o) {
       if (o.type === 'section') return { type: 'section', title: o.title, number: o.number, lead: o.lead, level: o.level, points: o.points, notes: '' };
       return written.slides[wk++];
-    }).filter(function (sp) { return sp && !sp.leaveOut; }) };
+    }).filter(function (sp) {
+      // V.1_76 (deck 47 Solution: 38 slides for 40, with nothing to say which went): a slide left out is written to the
+      // slide log as "left-out" with its outline title, so the reason can be found
+      if (sp && sp.leaveOut && typeof recordSlide_ === 'function') recordSlide_(sp, { drawnWith: 'left-out', qa: { issues: ['left-out'], fixed: [] } }, null);
+      return sp && !sp.leaveOut;
+    }) };
     deckFigureCheck_(plan.slides, ctx, st.sources);                      // V.1_70: figures only from the request and sources
     deckShapeCheck_(plan.slides, ctx);                                   // V.1_72: each slide kind in its shape
     // Diagram uploads (rebuilt once, on the first diagram slide of the deck) and branded icons, as in a short deck

@@ -70,6 +70,20 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 | Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
 
+## The clean-up (V.1_76) and the deck-47 fixes: every deck type
+
+| Rule | How it is kept |
+|---|---|
+| Money with a one-letter unit is one figure ($61.6B, $7.4M, $250K): a sourced one stays, an unsourced one goes whole | Auto (`FIG_TOKEN_RE_`); Test v76 |
+| A figure word left without its figure ("Up to reduction", "down to MAPE") is repaired or its sentence goes | Auto (`fragmentRepair_`); Test v76 |
+| A slide whose items or points are the request's targets is the KPI slide when the deck has none | Auto (`conformSlides_`); Test v76 |
+| A client name the request also writes as a web address keeps its capital | Auto (`setRunNames_`); Test v76 |
+| A heading never ends on a half phrase ("Design technical"); a shortened text is never kept when it does | Auto (fit step, `finishSlides_`); Test v76 |
+| Without prices given, the pricing slide's lead says "Pricing is confirmed after the scoping workshop." | Auto (`conformPricing_`); Test v76 |
+| No "guaranteeing completion" or "zero dropped requests" | Auto (`finishSlides_`); Test v76 |
+| Items with a heading and a text are the slide's content; points beside them go to the takeaway or the notes | Auto (Engine rule 19); Test v76 |
+| A slide left out and a short outline are written to the slide log ("left-out", "outline-short") | Auto; Test v76 |
+
 ## The last fix round (V.1_75) and the deck-46 fixes: every deck type
 
 | Rule | How it is kept |

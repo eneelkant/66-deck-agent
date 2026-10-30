@@ -169,7 +169,9 @@ function briefPromptBlock_(ctx) {
 
 /* ---------- the figure check ---------- */
 
-var FIG_TOKEN_RE_ = /(?:between\s+)?[+\-−~]?\b\d[\d,.]*\s?%?\s?(?:–|—|-|to|and)\s?\d[\d,.]*\s?%|[$€£₹]\s?\d[\d,.]*\s?(?:k|m|mn|bn|million|billion|thousand)?\b\+?|[+\-−~]?\b\d[\d,.]*\s?(?:%|percent\b|per cent\b|x\b|×|(?:million|billion|thousand)\b|[kmb]\+?(?=[\s,.;:)]|$))\+?|\b\d{1,3}(?:,\d{3})+\+?/gi;
+// V.1_76 (deck 47 Proposal 4: "$61.6B" was read as "$61." and removed, leaving "6B" on the slide): a figure's number never
+// ends on its decimal point, and money takes its one-letter unit ($61.6B, $7.4M, $250K)
+var FIG_TOKEN_RE_ = /(?:between\s+)?[+\-−~]?\b\d[\d,]*(?:\.\d+)?\s?%?\s?(?:–|—|-|to|and)\s?\d[\d,]*(?:\.\d+)?\s?%|[$€£₹]\s?\d[\d,]*(?:\.\d+)?\s?(?:mn|bn|million|billion|thousand|[kmb](?![a-z]))?(?!\d|\.\d)\+?|[+\-−~]?\b\d[\d,]*(?:\.\d+)?\s?(?:%|percent\b|per cent\b|x\b|×|(?:million|billion|thousand)\b|[kmb]\+?(?=[\s,.;:)]|$))\+?|\b\d{1,3}(?:,\d{3})+\+?/gi;
 var FIG_SKIP_KEYS_ = { notes: 1, reference: 1, design: 1, icon: 1, icons: 1, tag: 1, lockTag: 1, image: 1, logo: 1, deckLibrary: 1, resolvedIcons: 1,
   fact_tags: 1, number: 1, no: 1, type: 1, material: 1, agendaWide: 1, sectionStyle: 1, cobrand: 1, clientLogo: 1, url: 1, status: 1, kind: 1, _dropped: 1 };
 var FIG_HEAD_KEYS_ = { title: 1, label: 1, highlight: 1, subtitle: 1, name: 1, heading: 1, header: 1, caption: 1 };
@@ -587,10 +589,21 @@ var FRAG_END_RE_ = /\b(by|of|to|from|than|at|with|and|or|the|per|over|under|abou
 var FRAG_IN_RE_ = /\b(to|and|or)\s+per\b|\bbetween\s+(and|to)\b|\b(averages?|averaging|exceed(s|ing)?|totaling|valued at)\s+(to|per|in|of|and|by|for|from|with|on)\s|\b(saves?|saved)\s+(to|per|in|of|and|for|from|on)\s|\b(by|of|to|from|than|with)\s+(in|of|per|and|to)\s|\b[a-z]{3,}:\s+(of|and|to|by|per)\s|\(\s*\)|\s,\s*[,.]/i;
 var FRAG_ART_RE_ = /\b(a|an|the)\s+(of|in|and|per)\s/;            // (lower case only: "zone A and zone B" is fine)
 var FRAG_START_RE_ = /^(in|of|by|to|for|and|with|from|on|at|per|saved|or)\b/;     // (lower case: a text that lost its first word)
+// V.1_76 (deck 47 General 12 "Up to reduction in lost sales", 17 "reduced demand forecast error down to MAPE from a
+// traditional baseline MAPE"): a figure word left without its figure ("up to", "down to", "as much as" + a word) breaks a text
+var FRAG_QUAL_RE_ = /\b(up to|down to|as much as|as little as|as high as|as low as)\s+(?!date\b|speed\b|earth\b|now\b|you\b|the minute\b|(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|fifty|a dozen|dozens|hundreds|thousands|millions|several|half|a third|a quarter|double|triple)\b|\d|[$€£₹~<>+\-−])[A-Za-z]/i;
+var FRAG_QUAL_HEAD_RE_ = /^(up to|down to|as much as|nearly|almost|more than|less than|roughly)\s+(?!(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty|a dozen|dozens|hundreds|thousands|several|half|double|triple)\b|\d|[$€£₹~<>+\-−])(?=[a-z])/i;
 function isFragment_(t) {
   var x = String(t || '').trim();
   if (!x) return false;
-  return FRAG_START_RE_.test(x) || FRAG_IN_RE_.test(x + ' ') || FRAG_ART_RE_.test(x + ' ') || FRAG_END_RE_.test(x);
+  return FRAG_START_RE_.test(x) || FRAG_IN_RE_.test(x + ' ') || FRAG_ART_RE_.test(x + ' ') || FRAG_END_RE_.test(x) || FRAG_QUAL_RE_.test(x);
+}
+// a heading that lost its figure keeps its words: "Up to reduction in lost sales" -> "Reduction in lost sales"
+function repairHeading_(t) {
+  var x = String(t || '').trim();
+  if (!FRAG_QUAL_HEAD_RE_.test(x)) return x;
+  x = x.replace(FRAG_QUAL_HEAD_RE_, '');
+  return x.charAt(0).toUpperCase() + x.slice(1);
 }
 function repairText_(t) {
   var x = String(t || '').trim();
@@ -614,6 +627,12 @@ function fragmentRepair_(slides, ctx) {
     if (!sp || typeof sp !== 'object') return;
     var t = String(sp.type || '').toLowerCase();
     if (['cover', 'closing', 'template', 'agenda'].indexOf(t) !== -1) return;
+    // V.1_76: headings that lost their figure
+    if (typeof sp.title === 'string' && FRAG_QUAL_HEAD_RE_.test(sp.title)) { sp.title = repairHeading_(sp.title); n++; }
+    if (Array.isArray(sp.items)) sp.items.forEach(function (it) {
+      if (!it || typeof it !== 'object') return;
+      ['title', 'label'].forEach(function (k) { if (typeof it[k] === 'string' && FRAG_QUAL_HEAD_RE_.test(it[k]) && !String(it.value || '').trim()) { it[k] = repairHeading_(it[k]); n++; } });
+    });
     ['lead', 'subtitle', 'takeaway', 'statement', 'text', 'banner', 'note'].forEach(function (k) {
       if (typeof sp[k] !== 'string' || !isFragment_(sp[k])) return;
       var r = repairText_(sp[k]); n++;

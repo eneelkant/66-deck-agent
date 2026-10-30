@@ -79,7 +79,7 @@ test("S2/13. a pricing slide says it is pricing and how pricing is settled (Prop
   assert.equal(G.contractKind_(p27, ctx), "pricing");
   G.conformSlides_([p27], ctx);
   assert.match(p27.title, /^Pricing options: /);
-  assert.equal(p27.takeaway, "Pricing is confirmed after the scoping workshop.");
+  assert.match(p27.lead, /Pricing is confirmed after the scoping workshop\.$/);   // V.1_76: in the lead
 });
 
 test("S2. RACI / team / risks / next steps out of shape are written again with the schema; an answer out of shape is not used", () => {

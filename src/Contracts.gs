@@ -108,6 +108,10 @@ function contractGaps_(sp, kind, ctx) {
     if (items.some(function (it) { return !(it && (it.title || it.label) && said(it) >= 6); })) gaps.push('a step without what it involves');
   } else if (kind === 'pricing') {
     if (!PRICING_TITLE_RE_.test(String(sp.title || ''))) gaps.push('a title that says pricing');
+    // V.1_76 (deck 47 Proposal 38: the pricing slide without the line on it): without prices given, the slide says how
+    // pricing is settled - in its lead, which every design shows
+    const noPrices = !(ctx && ctx.brief && Array.isArray(ctx.brief.prices) && ctx.brief.prices.length);
+    if (noPrices && !/pricing is confirmed after the scoping workshop/i.test(String(sp.lead || ''))) gaps.push('the pricing line');
   }
   return gaps;
 }
@@ -153,7 +157,8 @@ var CONTRACT_ASK_ = {
 function conformKpi_(sp, ctx) {
   const targets = typeof briefTargets_ === 'function' ? briefTargets_(ctx) : [];
   if (targets.length < 2) return false;
-  const items = Array.isArray(sp.items) ? sp.items.filter(Boolean) : [];
+  // (V.1_76: targets written as points {title, text} count as the tiles' words)
+  const items = (Array.isArray(sp.items) && sp.items.length ? sp.items : (Array.isArray(sp.points) ? sp.points.filter(function (p) { return p && typeof p === 'object'; }) : [])).filter(Boolean);
   const used = [];
   const tiles = targets.slice(0, 4).map(function (f) {
     let best = -1, bestScore = 0;
@@ -166,11 +171,14 @@ function conformKpi_(sp, ctx) {
     });
     const it = best >= 0 ? items[best] : null;
     if (best >= 0) used.push(best);
-    const label = it ? String(it.label || it.title || '').replace(/^\s*target\s*:\s*/i, '').replace(new RegExp('^' + String(f.value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i'), '') : '';
+    // (V.1_76: "Target 15% better forecast accuracy" -> "Better forecast accuracy")
+    const label = it ? String(it.label || it.title || '').replace(/^\s*targets?\s*:?\s*/i, '').replace(new RegExp('^' + String(f.value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i'), '') : '';
     return { value: f.value, label: (label || f.labelCap).replace(/^./, function (c) { return c.toUpperCase(); }), text: it ? itemText_(it) : '' };
   });
+  // (a statement the slide made stays as its takeaway)
+  if (!String(sp.takeaway || '').trim() && typeof sp.statement === 'string' && sp.statement.trim()) sp.takeaway = sp.statement.trim();
   sp.type = 'stats'; sp.items = tiles; sp.points = [];
-  ['value', 'label', 'text', 'note', 'headline', 'groups', 'banner', 'columns', 'rows'].forEach(function (k) { delete sp[k]; });
+  ['value', 'label', 'text', 'note', 'headline', 'groups', 'banner', 'columns', 'rows', 'statement'].forEach(function (k) { delete sp[k]; });
   delete sp.design; delete sp.lockTag; sp.reference = null;
   return true;
 }
@@ -183,8 +191,15 @@ function conformPricing_(sp, ctx) {
     changed = true;
   }
   const noPrices = !(ctx && ctx.brief && Array.isArray(ctx.brief.prices) && ctx.brief.prices.length);
-  if (noPrices && !/pricing is confirmed after the scoping workshop/i.test(JSON.stringify(Object.assign({}, sp, { notes: '' })))) {
-    if (!String(sp.takeaway || '').trim()) { sp.takeaway = 'Pricing is confirmed after the scoping workshop.'; changed = true; }
+  // (V.1_76: in the lead, which every design shows - a takeaway is not drawn by every design)
+  if (noPrices && !/pricing is confirmed after the scoping workshop/i.test(String(sp.lead || ''))) {
+    const line = 'Pricing is confirmed after the scoping workshop.';
+    const lead = String(sp.lead || '').trim().replace(/[,;:]?\s*with (final )?pricing confirmed after the scoping workshop\.?$/i, '.');
+    if (!lead) sp.lead = line;
+    else if ((lead + ' ' + line).length <= 170) sp.lead = (/[.!?]$/.test(lead) ? lead : lead + '.') + ' ' + line;
+    else { sp.notes = String(sp.notes || '') + '\n' + lead; sp.lead = line; }
+    if (/^pricing is confirmed after the scoping workshop\.?$/i.test(String(sp.takeaway || '').trim())) sp.takeaway = '';
+    changed = true;
   }
   return changed;
 }
@@ -356,6 +371,18 @@ function conformSlides_(slides, ctx) {
       kind = 'kpi';
       const before = kpiSourceText_(sp);
       if (before) sp.notes = String(sp.notes || '') + '\nAlso on this topic: ' + before.slice(0, 1200);
+    }
+    // V.1_76 (deck 47 General 7 "The imperative for algorithmic demand precision": the three targets as cards titled
+    // "Target 15% better forecast accuracy" ..., and no KPI slide in the deck): a slide whose items are the request's
+    // targets is the KPI slide when the deck has none
+    if (kind !== 'kpi' && sp && typeof sp === 'object' && targets.length >= 2 && !state.kpiSlide && (Array.isArray(sp.items) || Array.isArray(sp.points)) &&
+        ['section', 'agenda', 'cover', 'closing', 'template', 'table'].indexOf(t0) === -1) {
+      // (the items, or points written as {title, text})
+      const its = (Array.isArray(sp.items) && sp.items.length ? sp.items : sp.points || []).filter(function (it) { return it && typeof it === 'object'; });
+      const hits = targets.filter(function (f) {
+        return its.some(function (it) { return String((it.value || '') + ' ' + (it.title || '') + ' ' + (it.label || '')).replace(/\s+/g, '').toLowerCase().indexOf(String(f.value).replace(/\s+/g, '').toLowerCase()) !== -1; });
+      }).length;
+      if (hits >= Math.min(3, targets.length) && its.length <= 4) kind = 'kpi';
     }
     if (kind === 'kpi') state.kpiSlide = String(sp.title || '').slice(0, 80) || true;
     if (!kind) return;
