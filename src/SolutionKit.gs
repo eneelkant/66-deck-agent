@@ -656,7 +656,13 @@ function solutionDarkRhythm_(specs, ctx) {
     // V.1_54 (deck 25): a dark divider only keeps the slide right after it light (it used to restart the count, so
     // sections of 3-4 slides never had a dark slide)
     if (t === 'section') { blockNext = tag !== 'P66_SECTION_LIGHT'; return; }
-    if (SOLUTION_DARK_ONLY_[tag]) { since = 0; blockNext = true; used++; return; }
+    // V.1_75 (deck 46 Solution 34 "How the solution is deployed": a dark-only design as the fourth dark slide): a dark-only
+    // design where no dark slide is allowed is drawn with a light design of the library that shows the same content
+    if (SOLUTION_DARK_ONLY_[tag]) {
+      const nextD = specs[i + 1] ? (isDarkDivider(specs[i + 1]) || !!SOLUTION_DARK_ONLY_[(specs[i + 1].reference && specs[i + 1].reference.tag) || specs[i + 1].lockTag || '']) : !!ctx.nextPartStartsDark;
+      if ((used >= DECK_DARK_MAX_ || blockNext || nextD) && solutionLightInstead_(sp)) { delete sp.dark; blockNext = false; since++; return; }
+      since = 0; blockNext = true; used++; return;
+    }
     const next = specs[i + 1];
     const nextDark = next ? (isDarkDivider(next) || SOLUTION_DARK_ONLY_[(next.reference && next.reference.tag) || next.lockTag || '']) : !!ctx.nextPartStartsDark;
     if (SOLUTION_DARK_OK_[tag] && since >= 4 && !blockNext && !nextDark && used < DECK_DARK_MAX_) { sp.dark = true; since = 0; n++; used++; blockNext = true; return; }
@@ -666,6 +672,29 @@ function solutionDarkRhythm_(specs, ctx) {
   });
   p.sinceDark = since; p.darkUsed = used; p.darkBlockNext = blockNext;
   return n;
+}
+
+// a light design of the Solution library for a slide drawn with a dark-only design (false when none can show it)
+function solutionLightInstead_(sp) {
+  if (typeof ENGINE === 'undefined' || !ENGINE.variantsFor || !ENGINE.measure) return false;
+  let base = null; try { base = ENGINE.measure(sp, {}); } catch (e) { base = null; }
+  const need = base && base.content ? base.content * 0.85 : 1;            // the light design shows (nearly) all of it
+  const type = String(sp.type || '').toLowerCase();
+  const types = [type].concat(['bullets', 'cards', 'process'].filter(function (x) { return x !== type; }));
+  for (let q = 0; q < types.length; q++) {
+    const list = (ENGINE.variantsFor(types[q]) || []).filter(function (v) { return v && v.tag && !SOLUTION_DARK_ONLY_[v.tag] && (!ENGINE.inLibrary || ENGINE.inLibrary(v.tag, 'solution')); });
+    for (let k = 0; k < list.length; k++) {
+      const trial = Object.assign({}, sp, { type: types[q], reference: { tag: list[k].tag } });
+      delete trial.lockTag; delete trial.design; delete trial.dark;
+      let m = null; try { m = ENGINE.measure(trial, {}); } catch (e) { m = null; }
+      // (the engine may draw it with another design of the type: what counts is the design it is drawn with)
+      if (m && m.drawnWith && !SOLUTION_DARK_ONLY_[m.drawnWith] && !m.dark && m.content >= need && !(m.overflow || []).length) {
+        sp.type = types[q]; sp.reference = { tag: m.drawnWith }; delete sp.lockTag; delete sp.design;
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /* ---------- 12. V.1_54: what fills a short Solution outline (deck 25) ----------

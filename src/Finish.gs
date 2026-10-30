@@ -8,7 +8,7 @@
    3. a step that only counts the steps ("Four immediate steps to start mobilization.") goes  (deck 45 Proposal 39)
    4. a count in the title or lead says what the slide shows ("all six workstreams" over five rows)  (deck 45 General 34)
    5. product names as Google Cloud writes them ("BigQuery Compute Engine" is not a product)  (deck 45 General 11)
-   6. no absolute promise ("ensure zero data loss")  (deck 45 Solution 19)
+   6. no absolute promise ("ensure zero data loss"; V.1_75: "with zero message loss", "eliminate data loss")  (decks 45, 46)
    7. an item that only repeats another item of the slide goes to the notes  (deck 45 Solution 32)
 ========================= */
 
@@ -33,7 +33,13 @@ var ABSOLUTE_FIXES_ = [
   [/\b(ensures?|guarantees?|delivers?|achieves?|provides?)\s+zero\s+data\s+loss\b/gi, function (m, v) { return (/s$/i.test(v) ? 'protects' : 'protect') + ' against data loss'; }],
   [/\b(ensures?|guarantees?|delivers?|achieves?|provides?)\s+zero\s+downtime\b/gi, function (m, v) { return (/s$/i.test(v) ? 'keeps' : 'keep') + ' downtime to a minimum'; }],
   [/\bguarantee(s)?\s+(100\s?%|full|complete|total)\s+(availability|uptime|accuracy)\b/gi, function (m, s1, q, w) { return 'target' + (s1 || '') + ' high ' + w; }],
-  [/\b(eliminates?|removes?)\s+all\s+(risk|risks|downtime|errors?)\b/gi, function (m, v, w) { return (/s$/i.test(v) ? 'reduces' : 'reduce') + ' ' + w; }]
+  [/\b(eliminates?|removes?)\s+all\s+(risk|risks|downtime|errors?)\b/gi, function (m, v, w) { return (/s$/i.test(v) ? 'reduces' : 'reduce') + ' ' + w; }],
+  // V.1_75 (deck 46 General 9 "with zero message loss", Solution 36 "eliminate data loss")
+  [/\b(with|and|for)\s+zero\s+(data|message|record|transaction)\s+loss\b/gi, function (m, p, w) { return p + ' protection against ' + w.toLowerCase() + ' loss'; }],
+  [/\bzero\s+(data|message|record|transaction)\s+loss\b/g, function (m, w) { return 'protection against ' + w + ' loss'; }],
+  [/\b(eliminat|prevent)(e|es|ing)\s+(data|message|record|transaction)\s+loss\b/gi, function (m, a, e, w) { return 'guard' + (e === 'es' ? 's' : e === 'ing' ? 'ing' : '') + ' against ' + w.toLowerCase() + ' loss'; }],
+  [/\b(eliminat)(e|es|ing)\s+(downtime|outages)\b/gi, function (m, a, e, w) { return 'minimiz' + (e === 'es' ? 'es' : e === 'ing' ? 'ing' : 'e') + ' ' + w.toLowerCase(); }],
+  [/\b(never|cannot)\s+(loses?|lose)\s+(data|messages?|records?)\b/gi, function (m, a, b, w) { return 'is built not to lose ' + w.toLowerCase(); }]
 ];
 
 function finishFrame_(sp) {
@@ -134,6 +140,8 @@ function finishRepeats_(sp) {
 function finishSlides_(slides, ctx) {
   let n = 0;
   (slides || []).forEach(function (sp) {
+    // (V.1_75) a notes line about the figures that names none goes
+    if (sp && typeof sp.notes === 'string') sp.notes = sp.notes.replace(/\s*Figures on this slide:\s*\.?\s*(?=\n|$)/g, '');
     if (finishFrame_(sp)) return;
     const was = JSON.stringify(sp);
     finishTitle_(sp);

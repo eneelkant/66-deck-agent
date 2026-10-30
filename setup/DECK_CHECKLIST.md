@@ -70,6 +70,27 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 | Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
 
+## The last fix round (V.1_75) and the deck-46 fixes: every deck type
+
+| Rule | How it is kept |
+|---|---|
+| A deck whose request gives target figures has its KPI slide; an SLA named in another slide's title does not count as the KPI slide | Auto (outline); Test v75 |
+| The notes say which figures were left out and why (that line is never removed with the figures) | Auto (Engine rule 8); Test v75 |
+| A section divider's title is never taken for the pricing slide; the engagement-models slide is the pricing slide | Auto (`contractKind_`); Test v75 |
+| A risk's mitigation the design cannot show is written into its text ("Mitigation: ..."), not moved to the notes | Auto (render, `fix-in-text`); Test v75 |
+| Support and severity tables are headed "Level / What happens" | Auto (`tableHeaders_`); Test v75 |
+| A reference marker, a tag or an invisible character between two words leaves a space | Auto (`cleanText`); Test v75 |
+| Step 5: only rows of boxes spread; checklists, bullets and table rows keep even spacing; only what stands under a grown row moves | Auto (`placeBody_`); Test v75 |
+| At most 3 dark content slides in every deck type, also when the Solution rhythm and the design choice both add one | Auto (`solutionDarkRhythm_`, chooser); Test v75 |
+| A slide Gemini wrote fills a free outline place before any slide is left out; an empty Solution KPI/timeline slide is written as cards | Auto (`matchOutline_`, fill step); Test v75 |
+| A new slide goes to the section of its subject family (deployment and runbooks to operations, IAM and network to security ...) | Auto (`placeInSection_`); Test v75 |
+| "Differentiators" is the why-66degrees topic; enablement / knowledge transfer / handover at most twice in a deck of 35+ | Auto (outline); Test v75 |
+| Words the notes capitalise are no names when the slides write them in lower case | Auto (`namesFromNotes_`); Test v75 |
+| The figures note names its sources in words; an empty figures line goes | Auto; Test v75 |
+| No absolute promise in any wording ("zero message loss", "eliminate data loss", "eliminate downtime") | Auto (`finishSlides_`); Test v75 |
+| A one-line divider title keeps its rule right under it (General too) | Test v75 |
+| A short slide (body under ~75% of the space) gets fuller texts sized to the room, list items a point or two more; boxes still end under their text | Auto (fit step); Test v75 |
+
 ## Step 5 - the drawing (V.1_74) and the deck-45 fixes: every deck type
 
 | Rule | How it is kept |

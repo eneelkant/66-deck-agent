@@ -412,7 +412,9 @@ function guardFigures_(slides, ctx, sources) {
     });
     // research figures that stay: their source number goes in the notes, so the Sources list names it
     var cites = Object.keys(cited).filter(function (n) { return /^\d+$/.test(n) && String(sp.notes || '').indexOf('[' + n + ']') === -1; });   // (V.1_72: never an empty list)
-    if (cites.length) sp.notes = String(sp.notes || '') + (sp.notes ? ' ' : '') + 'Figures on this slide: ' + cites.map(function (n) { return '[' + n + ']'; }).join(' ') + '.';
+    // (V.1_75, deck 46 Proposal 4: "Figures on this slide:." - the clean-up of reference markers took "[5]" away): the
+    //  sources are named in words, on their own line
+    if (cites.length) sp.notes = String(sp.notes || '') + '\nFigures on this slide: from source' + (cites.length > 1 ? 's ' : ' ') + cites.join(', ') + ' in the Sources list ' + cites.map(function (n) { return '[' + n + ']'; }).join(' ') + '.';   // (the markers name the sources in the list, then go)
     if (toCheck.length && !/Check before sharing: figures without a source/.test(String(sp.notes || ''))) sp.notes = String(sp.notes || '') + '\nCheck before sharing: figures without a source kept so the sentence reads (' + toCheck.slice(0, 4).join(', ') + ').';
     if (removed.length) {
       total += removed.length;

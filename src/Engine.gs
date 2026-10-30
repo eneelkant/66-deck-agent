@@ -475,8 +475,9 @@ var ENGINE = (function () {
     var els = [];
     var no = s.noNumber ? '' : String(s.number || '');
     if (no) text(els, 32.4, 150, 80, 26, no, { weight: 400, max: 18, min: 16, maxLines: 1, color: T.white });
-    var t = text(els, 32.4, 180, 330, 60, s.title, { weight: 400, max: 15, min: 13, maxLines: 2, color: T.white });
-    var lw = Math.min(330, Math.max(110, (t.width || 160) + 6)), ly = 180 + t.height + 6;
+    // V.1_75 (deck 46 General 26: the rule far under a one-line title): the title box is 400 pt wide, as in the Proposal divider
+    var t = text(els, 32.4, 180, 400, 60, s.title, { weight: 400, max: 15, min: 13, maxLines: 2, color: T.white });
+    var lw = Math.min(400, Math.max(110, (t.width || 160) + 6)), ly = 180 + t.height + 6;
     line(els, 33.4, ly, 33.4 + lw, ly, T.white, 0.75);
     if (s.lead) text(els, 32.4, ly + 12, 330, 48, s.lead, { weight: 400, max: TSZ.body, min: TSZ.body - 1, maxLines: 3, color: T.white });
     return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true, noBalance: true };
@@ -3920,8 +3921,12 @@ var ENGINE = (function () {
   function cleanText(v) {
     return String(v)
       .replace(/#[0-9A-Fa-f]{6}/g, '')                                              // color codes
+      .replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, ' ')                                 // V.1_75: invisible characters are spaces (deck 46 General 11 "orchestrationpromotion")
+      .replace(/\s*[\[(]\s*66D_[A-Z0-9_]+(?:\s*[,;\]\[)(]+\s*66D_[A-Z0-9_]+)*\s*[\])](?=[A-Za-z])/g, ' ')   // V.1_75: a tag between two words leaves a space
       .replace(/\s*[\[(]\s*66D_[A-Z0-9_]+(?:\s*[,;\]\[)(]+\s*66D_[A-Z0-9_]+)*\s*[\])]/g, '')   // [66D_FACT_COMPANY_013]
+      .replace(/\s*\[\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\](?:\s*\[\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\])*(?=[A-Za-z])/g, ' ')  // V.1_75: so does a marker
       .replace(/\s*\[\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\](?:\s*\[\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\])*/g, '')  // research markers [1][4]
+      .replace(/\s*66D_[A-Z]+_[A-Z0-9_]+(?=[A-Za-z])/g, ' ')
       .replace(/\s*66D_[A-Z]+_[A-Z0-9_]+/g, '')                                       // bare tags
       .replace(/`([^`\n]+)`/g, '$1').replace(/`/g, '')                                    // V.1_53: markdown code marks (`truck_id`)
       .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1')                   // V.1_48: markdown bold **text** (never shown as asterisks)
@@ -4455,7 +4460,9 @@ var ENGINE = (function () {
       var figRe = /[+\-−~]?\$?\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|pp\b)/g;
       var parts = s.notes.split(/\n/), changed = false;
       parts = parts.map(function (line) {
-        if (/^\s*(sources?|check before sharing|\[\d+\])/i.test(line)) return line;
+        // (V.1_75, deck 46 Proposal 14: "Figures left out ..." was dropped, so nobody saw why the tiles lost 205% and 5,200
+        //  hours): the lines the agent writes about figures, roles and extra content stay as they are
+        if (/^\s*(sources?|check before sharing|\[\d+\]|figures (left out|on this slide)|title figures|roles in detail|also on this topic|the times on this slide)/i.test(line)) return line;
         return (line.match(/[^.!?]+[.!?]*(\s+|$)/g) || [line]).filter(function (sn) {
           var f = sn.match(figRe) || [];
           var foreign = f.filter(function (x) { return shown.indexOf(x.replace(/\s+/g, '').replace(/^[+\-−~]/, '')) === -1; });
@@ -4931,6 +4938,31 @@ var ENGINE = (function () {
       out.notes = s.notes || '';
       // V.1_71 (deck 42 Solution 4, 7, 9, 16: a diagram and, beside it, a second set of cards Gemini also wrote): what the
       // design could not show goes to the speaker notes, so nothing written is lost; the slide is not reported as missing it
+      // V.1_75 (deck 46 General 29 "Delivery risks and mitigation strategies": the design showed each risk, its mitigation
+      // went to the notes): an item's fix the design does not show is joined to its text and the slide drawn again
+      if (out.qa && (out.qa.issues || []).indexOf('lost-content') !== -1 && !s0._fixJoined && Array.isArray(s0.items) &&
+          s0.items.some(function (it) { return it && typeof it === 'object' && String(it.fix || '').trim(); })) {
+        var dt0 = (out.els || []).filter(function (e) { return e.text; }).map(function (e) { return String(e.text); }).join(' ').toLowerCase();
+        var hidden = s0.items.some(function (it) { return it && it.fix && dt0.indexOf(String(it.fix).toLowerCase().trim().slice(0, 24)) === -1; });
+        if (hidden) {
+          var mit = /mitigat|risk|issue|threat/i.test(String(s0.title || ''));
+          var s1 = Object.assign({}, s0, { _fixJoined: true, items: s0.items.map(function (it) {
+            if (!it || typeof it !== 'object' || !String(it.fix || '').trim()) return it;
+            var o2 = Object.assign({}, it), tx = String(o2.text || '').trim(), fx = capFirst_(String(o2.fix).trim());
+            o2.text = (tx ? (/[.!?]$/.test(tx) ? tx : tx + '.') + ' ' : '') + (mit ? 'Mitigation: ' + fx.charAt(0).toLowerCase() + fx.slice(1) : fx) + (/[.!?]$/.test(fx) ? '' : '.');
+            delete o2.fix;
+            return o2;
+          }) });
+          try {
+            var again = render0_({ slides: [s1] }, Object.assign({}, ctx, { sectionNo: lctx.sectionNo }))[0];
+            if (again && again.qa && (again.qa.issues || []).indexOf('lost-content') === -1 && qaScore_(again.qa.issues) <= qaScore_(out.qa.issues)) {
+              again.qa.fixed = (again.qa.fixed || []).concat(['fix-in-text']);
+              slides.push(again);
+              return;
+            }
+          } catch (eFix) {}
+        }
+      }
       if (out.qa && (out.qa.issues || []).indexOf('lost-content') !== -1) {
         var drawnTxt = (out.els || []).filter(function (e) { return e.text; }).map(function (e) { return String(e.text); }).join(' ').toLowerCase();
         var seenIn = function (x) { x = String(x || '').toLowerCase().trim(); return !x || drawnTxt.indexOf(x.slice(0, 24)) !== -1; };
@@ -5305,7 +5337,11 @@ var ENGINE = (function () {
         body.forEach(function (e) {
           if (main.indexOf(e) !== -1 || holders.indexOf(e) !== -1) { e.h += grow; return; }
           var a = topOf(e), z = botOf(e);
-          if (a >= rowBot - 2) { moveY(e, grow); return; }                                   // under the row: moves down
+          // under the row: moves down - only what stands under the row's own columns (V.1_75, deck 46 General 24: the
+          // lower rows of a checklist beside a taller panel moved down and left a gap in the list)
+          var bx0 = e.t === 'line' ? Math.min(e.x1, e.x2) : (e.x || 0), bx1 = e.t === 'line' ? Math.max(e.x1, e.x2) : (e.x || 0) + (e.w || e.size || 0);
+          if (a >= rowBot - 2 && bx1 > x0 + 2 && bx0 < x1 - 2) { moveY(e, grow); return; }
+          if (a >= rowBot - 2) return;
           // a line or a thin bar that runs down the boxes (a column rule, an accent bar) grows with them
           if (e.t === 'line' && Math.abs(e.x1 - e.x2) < 1 && Math.abs(z - rowBot) <= 3 && a < rowBot - 6) { if (e.y2 > e.y1) e.y2 += grow; else e.y1 += grow; return; }
           if ((e.t === 'rect' || e.t === 'roundrect') && (e.w || 0) <= 8 && (e.h || 0) >= 24 && Math.abs(z - rowBot) <= 3) { e.h += grow; return; }
@@ -5333,7 +5369,10 @@ var ENGINE = (function () {
         if (last && p.a <= last.b + 2) { last.b = Math.max(last.b, p.b); last.list.push(p.e); }
         else bands.push({ a: p.a, b: p.b, list: [p.e] });
       });
-      if (bands.length >= 2) {
+      // V.1_75 (deck 46 General 24, Solution 5: a wider gap after the third row of a checklist and the third bullet): only
+      // rows that are boxes (cards, panels) spread; text rows, list items and table rows keep their even spacing
+      var boxed = function (bd) { return bd.list.some(function (e) { return (e.t === 'rect' || e.t === 'roundrect') && (e.h || 0) >= 40 && (e.w || 0) >= 80; }); };
+      if (bands.length >= 2 && bands.length <= 4 && bands.every(boxed)) {
         var per = Math.min(24, (free - 28) / (bands.length - 1));
         if (per > 3) {
           var keep = JSON.stringify(out.els), ties0 = boxTies_(out.els), ov0 = textOverlaps_(out).length;

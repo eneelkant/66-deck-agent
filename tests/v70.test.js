@@ -92,7 +92,7 @@ test("3. figures without a source leave the slide; research figures stay with th
       { title: "38% · Industry benchmark: engineering productivity", text: "Data engineering productivity gain achieved through unified data management." }], notes: "" };
   G.guardFigures_([p6], ctxFor(PRO), { research: RESEARCH });
   same(p6.items.map((i) => i.title), ["Annual quality cost", "5-year TCO reduction", "38% · Industry benchmark: engineering productivity"]);
-  assert.match(p6.notes, /Figures on this slide: \[4\]/);
+  assert.match(p6.notes, /Figures on this slide: from source 4 in the Sources list \[4\]/);
   assert.match(p6.notes, /Figures left out[^\n]*51%/);
 
   // Proposal 12: "Industry benchmark: 5,200 hours saved annually ..." (no source) - the point goes, the list keeps the rest
@@ -118,7 +118,7 @@ test("3. figures without a source leave the slide; research figures stay with th
   assert.ok(!all(g15).includes("5,200"), all(g15));
   assert.equal(g15.callout, undefined, "a callout whose heading is a figure without a source goes whole");
   assert.ok(g15.lead.includes("38%"), "a research figure stays");
-  assert.match(g15.notes, /Figures on this slide: \[4\]/);
+  assert.match(g15.notes, /Figures on this slide: from source 4 in the Sources list \[4\]/);
 
   // approved 66degrees facts stay
   const g27 = { type: "cards", title: "Why 66degrees", items: [{ title: "Recognised partner", text: "4x Google Cloud Partner of the Year." }, { title: "Proven delivery", text: "More than 1,000 transformation projects." }], notes: "" };

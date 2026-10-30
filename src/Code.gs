@@ -420,7 +420,9 @@ function generatePresentationRun_(data, run) {
   ctx.proposalSections = sectionCount;
   const plan = planContent(userPrompt, presentationType, totalSlides - sectionCount, sources, ctx);
   if (proposalRun) proposalStructure_(plan, ctx, sectionCount);
-  ctx.outlineTitles = (plan.slides || []).map(function (o) { return o && o.title; });   // V.1_74: the deck's titles (pricing by title)
+  // V.1_74: the deck's titles (pricing by title); V.1_75 (deck 46 Proposal 37): never a section divider's title ("Support model,
+  // pricing, and next steps" is not the pricing slide)
+  ctx.outlineTitles = (plan.slides || []).filter(function (o) { return o && String(o.type || '').toLowerCase() !== 'section'; }).map(function (o) { return o.title; });
   deckFigureCheck_(plan.slides, ctx, sources);                                   // V.1_70: figures only from the request and sources
   deckShapeCheck_(plan.slides, ctx);                                            // V.1_72: each slide kind in its shape
   progressStage_(ctx, 'write', 'done', plan.slides.length + ' slides planned');
@@ -3083,6 +3085,27 @@ function convertUploadToGoogle_(blob, name, targetMime) {
    Every planned slide is laid out in its chosen design at the standard type sizes (ENGINE.measure).
    Texts that would be cut are rewritten shorter; body boxes under half full get fuller text. Exact character limits.
 ========================= */
+// V.1_75: how much of the space under the title the drawn slide fills (0-1), as it is drawn - boxes fitted to their text,
+// the body under the header (step 5)
+function drawnFill_(sp, ctx) {
+  try {
+    const o = ENGINE.render({ slides: [sp] }, { dateLabel: '', tokens: (ctx && ctx.tokens) || null })[0];
+    const els = (o && o.els) || [];
+    const head = els.filter(function (e) { return e.hdr; });
+    if (!head.length) return 1;
+    const hb = Math.max.apply(null, head.map(function (e) { return e.y + (e.vh || e.h || 0); }));
+    let lo = Infinity, hi = -Infinity;
+    els.forEach(function (e) {
+      if (e.hdr || e.t === 'image') return;
+      const y0 = e.t === 'line' ? Math.min(e.y1, e.y2) : e.t === 'arc' ? e.cy - e.r : e.y;
+      const y1 = e.t === 'line' ? Math.max(e.y1, e.y2) : e.t === 'arc' ? e.cy + e.r : e.y + (e.t === 'text' ? (e.vh || e.h || 0) : (e.h || e.size || 0));
+      if (!isFinite(y0) || !isFinite(y1) || y0 < hb - 2 || y0 > 362) return;
+      lo = Math.min(lo, y0); hi = Math.max(hi, Math.min(y1, 362));
+    });
+    if (hi === -Infinity) return 1;
+    return Math.max(0, Math.min(1, (hi - hb) / Math.max(1, 362 - hb)));
+  } catch (e) { return 1; }
+}
 function fitContentToDesigns_(plan, ctx, started) {
   const res = { fixed: 0, left: 0 };
   for (let round = 0; round < 3; round++) {                      // V.1_58: a third round for texts still too long (deck 31: 16 left)
@@ -3120,10 +3143,34 @@ function fitContentToDesigns_(plan, ctx, started) {
           issues.push({ slide: i, path: lp, current: arr0.map(String).join(' | '), action: 'add_points', add: Math.min(5 - arr0.length, 3), list: arr0.map(String) });
         });
       }
+      // V.1_75 (deck 46: Proposal 25, 26, 33, Solution 9, 13, 14, 29, 37, General 5, 38 - a short body under the title and an
+      // empty lower third): when the body takes less than ~75% of the slide, the item texts are written fuller - about half
+      // as long again, sized to the room (no new figures); the boxes still end just under their text
+      const shortBody = round === 0 && ['cards', 'process', 'diagram', 'comparison', 'stats', 'bullets'].indexOf(t) !== -1 && Array.isArray(sp.items) ? drawnFill_(sp, ctx) : 1;
+      if (round === 0 && shortBody < 0.75) {
+        // items written as short lists get a point or two more (same style)
+        sp.items.forEach(function (it, k) {
+          if (!it || typeof it !== 'object' || String(it.text || '').trim() || !Array.isArray(it.points) || !it.points.length || it.points.length >= 4) return;
+          issues.push({ slide: i, path: ['items', k, 'points'], current: it.points.map(String).join(' | '), action: 'add_points', add: Math.min(2, 4 - it.points.length), list: it.points.map(String) });
+        });
+        const its = sp.items.filter(function (it) { return it && typeof it === 'object' && typeof it.text === 'string' && it.text.trim(); });
+        if (its.length >= 2 && its.length <= 6 && its.length === sp.items.filter(Boolean).length) {
+          const room = Math.min(1.8, 1 + (0.9 - shortBody) * 2.5);              // (the text is only part of each box)
+          sp.items.forEach(function (it, k) {
+            if (!it || typeof it.text !== 'string' || !it.text.trim()) return;
+            const len = it.text.length;
+            if (len >= 300 || issues.some(function (x) { return x.slide === i && x.path.join('.') === ['items', k, 'text'].join('.'); })) return;
+            const minC = Math.round(Math.min(len * room, len + 160)), maxC = Math.round(Math.min(len * (room + 0.3), len + 220, 320));
+            if (minC <= len + 20) return;
+            issues.push({ slide: i, path: ['items', k, 'text'], current: it.text, action: 'expand', bullet: false, min_chars: minC, max_chars: maxC });
+          });
+        }
+      }
       if (round === 0) m.underfill.forEach(function (u) {
         const path = findTextPath_(sp, u.text);
         if (!path) return;
         if (path.length >= 2 && path[path.length - 2] === 'points' && issues.some(function (x) { return x.slide === i && x.action === 'add_points' && x.path.join('.') === path.slice(0, -1).join('.'); })) return;
+        if (issues.some(function (x) { return x.slide === i && x.path.join('.') === path.join('.'); })) return;   // V.1_75: once per text
         let maxC = Math.min(u.maxChars, u.text.length + 320, 420), minC = Math.min(u.minChars, u.text.length + 160);   // V.1_65: boxes are filled, not left two-thirds empty
         // Even boxes: a text grows to at most ~20% past its longest sibling (the other cards / stats / steps)
         const parent = path.length >= 3 ? path.slice(0, -2).reduce(function (o, k) { return o && o[k]; }, sp) : null;
@@ -3369,7 +3416,21 @@ function namesFromNotes_(slides) {
     }
   });
   Object.keys(single).forEach(function (w) { if (single[w] >= 2 && !lowerSeen[w.toLowerCase()]) out[w] = true; });
-  return Object.keys(out).filter(function (n) { return !PRODUCT_NAMES_[n.toLowerCase()]; });
+  // V.1_75 (deck 46 Proposal 37: "Staff Augmentation", "Direct Hire support" kept their capitals because the notes wrote
+  // them that way): a phrase whose every word the deck also writes in lower case is not a name
+  // (the running text of the slides - leads, texts, points - not their headings, which may be what needs the capitals)
+  const deckLower = {}, run = [];
+  const walkT = function (v, k) {
+    if (typeof v === 'string') { if (/^(lead|subtitle|text|description|takeaway|points|fix|statement)$/.test(k)) run.push(v); return; }
+    if (Array.isArray(v)) { v.forEach(function (x) { walkT(x, k); }); return; }
+    if (v && typeof v === 'object') Object.keys(v).forEach(function (kk) { if (kk !== 'notes') walkT(v[kk], kk); });
+  };
+  (slides || []).forEach(function (sp) { walkT(sp, ''); });
+  (run.join(' ').match(/\b[a-z][a-z]+\b/g) || []).forEach(function (w) { deckLower[w] = true; });
+  return Object.keys(out).filter(function (n) {
+    if (PRODUCT_NAMES_[n.toLowerCase()]) return false;
+    return !n.split(/\s+/).every(function (w) { return lowerSeen[w.toLowerCase()] || deckLower[w.toLowerCase()]; });
+  });
 }
 function addRunNames_(names) {
   (names || []).forEach(function (n) { if (n && n.length >= 3) RUN_NAMES_[String(n).toLowerCase()] = String(n); });
@@ -3436,6 +3497,9 @@ function chooseDesignsByContent_(plan, ctx) {
   let prevTag = st.prevTag, prevLook = st.prevLook;
   const history = st.history || loadDesignUsage_();                    // designs and looks used in earlier decks (all users)
   let prevDark = st.prevDark, darkUsed = st.darkUsed;
+  // V.1_75 (deck 46 Solution: four dark content slides - three from the Solution rhythm, one dark-only design from the
+  // chooser): the chooser counts the dark slides the rhythm made in earlier parts too
+  darkUsed = Math.max(darkUsed || 0, (ctx.proposal && typeof ctx.proposal.darkUsed === 'number') ? ctx.proposal.darkUsed : 0);
   const deckSize = ctx.deckSize || plan.slides.length;
   // V.1_70: dark content slides - at most 3 in a deck, never two dark slides in a row (a dark divider counts)
   const darkMax = Math.min(DARK_CONTENT_MAX_, deckSize >= 30 ? Math.round(deckSize / 8) : deckSize >= 8 ? 2 : 1);
@@ -4319,8 +4383,10 @@ function tableHeaders_(title) {
   const t = String(title || '');
   const map = [
     [/\b(risks?|pitfalls?|challenges?|mistakes?|barriers?)\b/i, ['Risk', 'How to manage it']],
+    // V.1_75 (deck 46 General 30: "Platform operating and support model" got "Tool | What it does" over its severity levels)
+    [/\b(support|severity|severities|escalation|incident|sla|service levels?|operating model)\b/i, ['Level', 'What happens']],
     [/\b(roles?|teams?|stakeholders?|responsibilit\w*|owners?)\b/i, ['Role', 'Responsibility']],
-    [/\b(tools?|platforms?|capabilit\w*|services?|products?)\b/i, ['Tool', 'What it does']],
+    [/\b(tools?|capabilit\w*|products?)\b/i, ['Tool', 'What it does']],
     [/\b(metrics?|kpis?|measures?)\b/i, ['Metric', 'What it shows']],
     [/\b(decisions?|choices?|options?)\b/i, ['Decision', 'What to weigh']],
     [/\b(phases?|steps?|stages?|methodology|process)\b/i, ['Stage', 'What happens']],
@@ -4666,6 +4732,13 @@ function matchOutline_(outline, got) {
   if (got.length === n) outline.forEach(function (o, k) {
     if (!byOutline[k] && got[k] && !used[k]) { byOutline[k] = got[k]; used[k] = 1; }
   });
+  // V.1_75 (deck 46 Solution: 37 slides for 40 asked): a slide Gemini wrote that matched no outline entry well enough takes
+  // a free entry, in order (it keeps its own title when it is about something else) - never a slide left out while one
+  // Gemini wrote is unused
+  const freeK = [], freeJ = [];
+  outline.forEach(function (o, k) { if (!byOutline[k]) freeK.push(k); });
+  got.forEach(function (g, j) { if (g && !used[j]) freeJ.push(j); });
+  freeK.forEach(function (k, q) { const j = freeJ[q]; if (j == null) return; byOutline[k] = got[j]; used[j] = 1; });
   outline.forEach(function (o, k) {
     const g = byOutline[k];
     if (!g) { log.push('"' + String(o.title).slice(0, 50) + '": Gemini did not write this slide; it is written again.'); return; }
@@ -4708,6 +4781,8 @@ function fillThinSlides_(plan, ctx, opts) {
       thin.push({ i: i, kind: 'kpitexts', want: items.length }); return;
     }
     if (textsOnly) return;
+    // V.1_75: a Solution slide Gemini did not write (stats or timeline with nothing in it) is written as cards, never left out
+    if (solutionFill && (t === 'stats' || t === 'timeline') && sp.missing && !items.length) { sp.type = 'cards'; thin.push({ i: i, kind: 'items', want: 3 }); return; }
     if (solutionFill && (t === 'stats' || t === 'timeline')) return;
     if (['cards', 'diagram', 'process'].indexOf(t) !== -1 && !sp.teams && !sp.org && !sp.tabs && !sp.layers && !sp.pair && items.length < 3) thin.push({ i: i, kind: 'items', want: 3 - items.length });
     else if (t === 'statement' && pts.length < 2) thin.push({ i: i, kind: 'points', want: 3 - pts.length });
@@ -5395,7 +5470,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_74';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_75';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5802,7 +5877,10 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
     });
     const reqNames = requestedTopics_(userPrompt);
     const isRequested = function (o) { return reqNames.some(function (t) { return slideForTopic_([{ type: o.type, title: o.title, lead: o.brief }], t) !== -1; }); };
-    onceTopicsIn_(userPrompt).forEach(function (f) {
+    // V.1_75: target figures in the request ask for the KPI slide too (deck 46 General: three targets, no KPI slide)
+    const askedOnce = onceTopicsIn_(userPrompt);
+    if (typeof briefTargets_ === 'function' && briefTargets_(ctx).length >= 2 && askedOnce.indexOf('kpi') === -1) askedOnce.push('kpi');
+    askedOnce.forEach(function (f) {
       if (have[f]) return;
       const entry = Object.assign({}, ONCE_TOPIC_ENTRY_[f]);
       if (!entry.title) return;
@@ -6206,15 +6284,29 @@ function backlogFill_(secs, body, seen, keyOf, flat, prompt, holes, backlog) {
    first, whatever the slide was about; Proposal 38 "Integration with existing systems" after the pricing slide): a new
    slide goes to the section it is about - by the section's name (twice) and the titles of its slides - and only a slide
    about none of them fills a freed place; inside its section it stands before the pricing and next-step slides */
+var PLACE_FAMILIES_ = [
+  ['ops', /\b(deploy\w*|runbooks?|operat\w*|monitor\w*|observab\w*|patch\w*|incident\w*|support|maintenance|infrastructure as code|terraform|ci\/cd|pipelines?|day[- ]to[- ]day|day[- ]2|failover drills?)\b/],
+  ['security', /\b(secur\w*|iam|pam|encrypt\w*|firewall\w*|network\w*|vpc|compliance|identity|access control)\b/],
+  ['architecture', /\b(architectur\w*|topology|design|regions?|clusters?|quorum|sizing|configuration|integration)\b/],
+  ['commercial', /\b(pricing|commercial|investment|engagement models?|cost|licens\w*)\b/],
+  ['governance', /\b(risks?|raci|governance|team structure|next steps?|kick-?off)\b/],
+  ['current', /\b(current|today|legacy|root causes?|challenges?|requirements?)\b/]
+];
 function placeInSection_(secs, o, holes) {
   let k = isFinite(o.sec) && o.sec >= 1 && o.sec <= secs.length ? o.sec - 1 : -1;
   if (k === -1) {
     const ts = Object.keys(topicStems_(o.title + ' ' + (o.brief || ''), true));
+    // V.1_75 (deck 46 Solution 32-34: "Infrastructure as Code deployment pipeline", "How the solution is deployed" in
+    // "Delivery governance, risks, and next steps"): words of one family count as the same subject (deploy / runbook /
+    // operations, security / network / IAM, architecture / topology ...)
+    const famOf = function (txt) { const t = String(txt || '').toLowerCase(); return PLACE_FAMILIES_.filter(function (f) { return f[1].test(t); }).map(function (f) { return f[0]; }); };
+    const of = famOf(o.title + ' ' + (o.brief || ''));
     let best = 0;
     secs.forEach(function (sc, j) {
       const ss = topicStems_(sc.title + ' ' + (sc.description || ''), true);
       const ls = topicStems_(sc.list.filter(function (x) { return x && x.type !== 'section'; }).map(function (x) { return x.title; }).join(' '), true);
-      const score = 2 * ts.filter(function (w) { return ss[w]; }).length + ts.filter(function (w) { return ls[w]; }).length;
+      const sf = famOf(sc.title + ' ' + (sc.description || ''));
+      const score = 2 * ts.filter(function (w) { return ss[w]; }).length + ts.filter(function (w) { return ls[w]; }).length + 2 * of.filter(function (f) { return sf.indexOf(f) !== -1; }).length;
       if (score > best) { best = score; k = j; }
     });
     if (best < 2) k = -1;
@@ -6352,17 +6444,23 @@ const ONCE_TOPICS_ = [
   ['pricing', /\bpricing\b|commercial (options|models|structures?)|investment options|engagement (options|models)/i],
   ['risks', /\brisks\b|\bkey risks?\b|^risks?\b|risk (register|management|mitigation)|mitigation (plan|controls|strategies)/i],
   ['support', /support model|support (and|&) operat\w*|enterprise support|day[- ]?(two|2) (support|operations)|\bL1\b.*\bL3\b|managed support|support tiers|follow-the-sun support|incident escalation/i], ['team', /team structure|joint team|delivery team|operating structure|team and governance/i],   // V.1_73: support in any wording (deck 44 General 31 / 38)
-  ['why66', /why 66\s?degrees|why us\b|partnership differentiators|engineering scale and expertise|our (credentials|expertise)|proven (delivery|engineering|expertise)/i],
+  ['why66', /why 66\s?degrees|why us\b|(partnership|core|technical|our|key) differentiators|engineering scale and expertise|our (credentials|expertise)|proven (delivery|engineering|expertise)/i],   // V.1_75: "Core technical differentiators" (deck 46 General 38)
+  // V.1_75 (deck 46 Proposal 24, 33, 36: change management, knowledge transfer, operational handover): enablement at most
+  // once (twice in a deck of 35+, on another angle)
+  ['enablement', /knowledge transfer|enablement|operational handover|handover and|change management|training (plan|program)|adoption (plan|program)|upskilling/i],
   ['next', /next steps?/i], ['sizing', /\bsizing\b|configuration (and|&) (sizing|specifications)/i],
   ['timeline', /\b\d+[- ]week (timeline|plan|roadmap)|implementation timeline|delivery timeline/i],
   // V.1_73 (deck 44: testing three times, monitoring three times, security twice): at most once, twice in a deck of 35+
   ['qa', /\btesting\b|quality assurance|\bqa\b|test (strategy|plan)|validation testing/i], ['monitoring', /\bmonitor(ing)?\b|observability|\balerting\b/i],
   ['security', /\bsecur(e|ing|ity)\b|zero[- ]trust|firewall/i],
   // (last: "Support model and SLA tiers" is the support slide, "Risks to the KPIs" the risk slide)
-  ['kpi', /\bkpis?\b|success (metrics|measures|criteria)|target (metrics|figures|kpis)|\bslas?\b|\bslos?\b|performance targets|measur(e|ing) success|key performance/i]
+  // V.1_75 (deck 46 General: "Multi-region failover for 99.9% pipeline SLA" counted as the KPI slide, so the deck had none):
+  // a slide about SLAs ("Performance SLAs for peak traffic", "SLA targets") is the KPI topic; an SLA named in another
+  // slide's title is not
+  ['kpi', /\bkpis?\b|success (metrics|measures|criteria)|target (metrics|figures|kpis)|performance targets|measur(e|ing) success|key performance|\bperformance (slas?|slos?)\b|\b(slas?|slos?) (targets?|and (slos?|kpis?))\b|^(slas?|slos?)\b/i]
 ];
 // V.1_73: how many slides a topic may have - once; testing, monitoring and security twice in a deck of 35 slides or more
-function onceLimit_(f, n) { return (['qa', 'monitoring', 'security'].indexOf(f) !== -1 && Number(n) >= 35) ? 2 : 1; }
+function onceLimit_(f, n) { return (['qa', 'monitoring', 'security', 'enablement'].indexOf(f) !== -1 && Number(n) >= 35) ? 2 : 1; }
 // the once-only topic of an outline entry: its title first, its brief when the title says nothing (a KPI slide titled
 // "Measuring what matters" with the brief "target KPIs")
 function onceTopicOfEntry_(o) {
@@ -6370,7 +6468,7 @@ function onceTopicOfEntry_(o) {
   const byTitle = onceTopicOf_(o.title);
   if (byTitle) return byTitle;
   const t = String(o.type || '').toLowerCase();
-  if (t === 'stats' && /\b(targets?|kpis?|slas?|measur)/i.test(String(o.title || '') + ' ' + String(o.brief || ''))) return 'kpi';
+  if (t === 'stats' && /\b(targets?|kpis?|measur)/i.test(String(o.title || '') + ' ' + String(o.brief || ''))) return 'kpi';
   return '';
 }
 // every once-only topic a title (or the request) names, in the order of the list
@@ -6393,6 +6491,7 @@ const ONCE_TOPIC_ENTRY_ = {
   risks: { type: 'cards', title: 'Key risks and how we mitigate them', brief: 'Each delivery or technical risk with its mitigation' },
   support: { type: 'cards', title: 'Support model', brief: 'The support levels and what each one covers' },
   team: { type: 'team', title: 'Joint team structure', brief: 'Both teams, their roles and how they work together' },
+  enablement: { type: 'process', title: 'Knowledge transfer and enablement', brief: 'How the client team learns to run the platform, step by step' },
   why66: { type: 'cards', title: 'Why 66degrees', brief: 'Approved 66degrees facts only' },
   next: { type: 'process', title: 'Next steps', brief: 'The first concrete actions, with owners' },
   timeline: { type: 'timeline', title: 'Implementation timeline', brief: 'The phases over the weeks the request gives' },
@@ -6575,7 +6674,7 @@ function prepareLongCtx_(ctx, st) {
   ctx.chooserState = st.chooser;
   ctx.stockUsed = st.stockUsed = st.stockUsed || {};                 // V.1_50: a stock image once per deck, across all parts
   ctx.deckState = st.deckState = st.deckState || {};                 // V.1_74: what the deck already has (its KPI slide), across parts
-  ctx.outlineTitles = ((st.outline && st.outline.slides) || []).map(function (o) { return o && o.title; });   // V.1_74
+  ctx.outlineTitles = ((st.outline && st.outline.slides) || []).filter(function (o) { return o && String(o.type || '').toLowerCase() !== 'section'; }).map(function (o) { return o.title; });   // V.1_74 / V.1_75
   if (ctx.lib) ctx.lib = applyDepartmentFilter_(ctx.lib, st.department);
 }
 
