@@ -70,6 +70,15 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 | The agenda lists the numbered sections only (no Introduction or Thank you rows), in short and long decks | Test v34, v35, v65 |
 | Up to 6 sections: the spiral agenda; 7 or more: the deck's list design; no "slides 3–9" ranges | Auto; Test v42, v66 |
 
+## V.1_77 and the deck-48 fixes: every deck type
+
+| Rule | How it is kept |
+|---|---|
+| A slide is made pale for a stock picture only once the picture is placed (a white title on a band stays readable) | Auto (EngineRenderer); Test v77 |
+| The checker's own notes (fix names) never appear as content | Auto (Solution fallback); Test v77 |
+| Each KPI tile names its own target, never another target's label | Auto (`conformKpi_`); Test v77 |
+| The pricing line is put back at the end when an earlier step removed it | Auto (`finishSlides_`); Test v77 |
+
 ## The clean-up (V.1_76) and the deck-47 fixes: every deck type
 
 | Rule | How it is kept |

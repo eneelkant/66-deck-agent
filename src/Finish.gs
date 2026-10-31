@@ -182,6 +182,9 @@ function finishSlides_(slides, ctx) {
       return y;
     });
     finishRepeats_(sp);
+    // V.1_77 (deck 48 General 35: the fit step shortened the lead and the pricing line went with it): the pricing slide
+    // is put in shape once more at the end, so the line is on it whatever ran before
+    if (ctx && typeof contractKind_ === 'function' && typeof conformPricing_ === 'function' && contractKind_(sp, ctx) === 'pricing') conformPricing_(sp, ctx);
     if (JSON.stringify(sp) !== was) n++;
   });
   if (n && ctx && ctx.log) ctx.log.push('Finish check: ' + n + ' slide(s) tidied (titles, headings, counts, names, claims).');

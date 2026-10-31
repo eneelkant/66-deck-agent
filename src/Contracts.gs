@@ -173,7 +173,12 @@ function conformKpi_(sp, ctx) {
     if (best >= 0) used.push(best);
     // (V.1_76: "Target 15% better forecast accuracy" -> "Better forecast accuracy")
     const label = it ? String(it.label || it.title || '').replace(/^\s*targets?\s*:?\s*/i, '').replace(new RegExp('^' + String(f.value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i'), '') : '';
-    return { value: f.value, label: (label || f.labelCap).replace(/^./, function (c) { return c.toUpperCase(); }), text: it ? itemText_(it) : '' };
+    // V.1_77 (deck 48 General 6: "20% Fewer zero-result searches" beside "30% Fewer zero-result searches"): a tile's label
+    // names its own target - one that shares no word with it (or repeats another target's label) takes the request's words
+    const own = label && sharedWords_(label, f.label) > 0;
+    const other = label && targets.some(function (g) { return g !== f && sharedWords_(label, g.label) > sharedWords_(label, f.label); });
+    const lab = own && !other ? label : f.labelCap;
+    return { value: f.value, label: lab.replace(/^./, function (c) { return c.toUpperCase(); }), text: it ? itemText_(it) : '' };
   });
   // (a statement the slide made stays as its takeaway)
   if (!String(sp.takeaway || '').trim() && typeof sp.statement === 'string' && sp.statement.trim()) sp.takeaway = sp.statement.trim();

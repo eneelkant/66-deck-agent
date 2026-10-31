@@ -4585,8 +4585,10 @@ var ENGINE = (function () {
     // the slide's text as headed sections (or one list): every Solution deck can show that. V.1_55: the text is gathered
     // from every field (groups, columns, regions, layers, rows, left / right...), not only items and points
     var real = function (t) { return /[A-Za-z0-9]{2,}/.test(String(t || '')); };
+    // (V.1_77, deck 48 Solution 4: the checker's own note "notes-figures" drawn as a bullet - its log fields are never content)
     var SKIP = { title: 1, lead: 1, subtitle: 1, notes: 1, reference: 1, type: 1, design: 1, deckLibrary: 1, dark: 1, cobrand: 1, clientLogo: 1, icon: 1, material: 1,
-      fact_tags: 1, lockTag: 1, section: 1, number: 1, sectionStyle: 1, code: 1, value: 1, status: 1, banner: 1, recommend: 1, name: 0 };
+      fact_tags: 1, lockTag: 1, section: 1, number: 1, sectionStyle: 1, code: 1, value: 1, status: 1, banner: 1, recommend: 1, name: 0,
+      shapeFixes: 1, resolvedIcons: 1, missing: 1, leaveOut: 1, _dropped: 1, _fixJoined: 1, notesExtra: 1, drawnWith: 1, qa: 1 };
     var HEAD = ['title', 'label', 'name', 'level', 'need', 'risk', 'issue', 'heading'];
     var groups = [], looseTexts = [];
     var textsIn = function (v, out) {

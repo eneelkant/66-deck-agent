@@ -268,7 +268,9 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
     // or panel on a content slide shows a stock photo (every deck type); without one it stays the design's solid Night Blue
     try { stock = typeof pickStockImage_ === 'function' ? pickStockImage_(region, spec, ctx) : null; } catch (e) { stock = null; }
   }
-  slide.getBackground().setSolidFill(partial && (stock || cut) ? ENGINE.TOKENS.white : out.bg);
+  // V.1_77 (deck 48 Solution 22 and 34: the slide made white for a stock picture that was then not placed - the white title
+  // on the band could not be read): the slide is pale only once the picture is on it; until then it keeps the design's colour
+  slide.getBackground().setSolidFill(out.bg);
   const photo = partial ? (stock || null) : (bgInline || (bgId ? getBlobCached(bgId, ctx) : null));   // V.1_67: no streak picture behind a strip
   if (photo) {
     try {
@@ -279,6 +281,7 @@ function renderEngineSlide(slide, spec, number, ctx, pageW, pageH, dateLabel) {
       bgPic.setLeft(box.x).setTop(box.y).setWidth(box.w).setHeight(box.h);
       // a stock image is cropped to fill the box at its own proportions (never stretched)
       if (stock) { try { bgPic.replace(stock, true); bgPic.setLeft(box.x).setTop(box.y).setWidth(box.w).setHeight(box.h); } catch (err) {} }
+      if (stock || cut) { try { slide.getBackground().setSolidFill(ENGINE.TOKENS.white); } catch (err) {} }   // V.1_77: now the picture is there
       try { bgPic.sendToBack(); } catch (err) {}
       try { bgPic.setDescription(stock ? 'Stock image (replace, crop or delete)' : 'Background photo (replace or delete)'); } catch (err) {}
       // text or the white 66° mark on the photo stays readable on a stock image: a dark veil over the image only

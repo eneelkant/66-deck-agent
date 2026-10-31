@@ -110,7 +110,8 @@ test("strip slide: the stock image fills the strip exactly (cropped, not stretch
   assert.deepEqual([at(log, "setTop"), at(log, "setHeight")], [0, 405], "full height of the strip: no dark bands");
   const rep = log.find((c) => c[0] === "slide.insertImage.replace");
   assert.ok(rep && rep[2] === true, "replaced with crop = true (fills at its own proportions)");
-  const bg = log.find((c) => c[0] === "slide.getBackground.setSolidFill");
+  // V.1_77: the slide turns pale once the picture is placed (its last background colour)
+  const bg = log.filter((c) => c[0] === "slide.getBackground.setSolidFill").pop();
   assert.equal(bg[1], g.ENGINE.TOKENS.white, "pale slide, no black behind the strip");
 });
 
