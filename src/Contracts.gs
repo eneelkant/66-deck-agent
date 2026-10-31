@@ -196,6 +196,30 @@ function conformPricing_(sp, ctx) {
     changed = true;
   }
   const noPrices = !(ctx && ctx.brief && Array.isArray(ctx.brief.prices) && ctx.brief.prices.length);
+  // V.1_78 (deck 49 General 36: a "Monthly charge" column of "Set post-scoping" ... "Confirmed after scoping..." cut short):
+  // without prices given, a table column for amounts goes when it only says pricing comes later; otherwise it is
+  // headed "Commercial basis"
+  // (a price list - {option, detail, price} - whose prices only say pricing comes later becomes a table of the options)
+  if (noPrices && Array.isArray(sp.prices) && sp.prices.length >= 2 &&
+      sp.prices.every(function (p) { return p && typeof p === 'object' && (!String(p.price || p.amount || p.cost || '').trim() || /scop|confirm|tbd|to be|post-|after|agreed|defined|quoted/i.test(String(p.price || p.amount || p.cost || ''))); })) {
+    sp.columns = ['Engagement model', 'What it includes'];
+    sp.rows = sp.prices.map(function (p) { return [String(p.option || p.title || p.name || p.label || ''), String(p.detail || p.text || p.description || '')]; });
+    delete sp.prices; sp.type = 'table'; delete sp.design; sp.reference = null;
+    changed = true;
+  }
+  if (noPrices && Array.isArray(sp.columns) && Array.isArray(sp.rows)) {
+    const rows = sp.rows.filter(Array.isArray);
+    const later = /scop|confirm|tbd|to be (set|agreed|defined|confirmed)|post-|after|agreed|defined in|quoted/i;
+    for (let j = sp.columns.length - 1; j >= 1; j--) {
+      if (!/\b(charge|charges|price|prices|pricing|fee|fees|cost|costs|rate|rates|amount|budget|monthly|annual)\b/i.test(cellText_(sp.columns[j]))) continue;
+      const cells = rows.map(function (r) { return String(r[j] == null ? '' : r[j]); });
+      if (cells.every(function (c) { return !c.trim() || later.test(c); }) && sp.columns.length > 2) {
+        sp.columns.splice(j, 1);
+        sp.rows = sp.rows.map(function (r) { if (Array.isArray(r)) r.splice(j, 1); return r; });
+      } else sp.columns[j] = 'Commercial basis';
+      changed = true;
+    }
+  }
   // (V.1_76: in the lead, which every design shows - a takeaway is not drawn by every design)
   if (noPrices && !/pricing is confirmed after the scoping workshop/i.test(String(sp.lead || ''))) {
     const line = 'Pricing is confirmed after the scoping workshop.';
@@ -244,7 +268,10 @@ function applyContractAnswer_(sp, kind, ans, ctx) {
    kept), and a cell that starts with its role keeps only the role ("Accountable / Responsible" stays); what a cell said
    after its role goes to the speaker notes */
 var ROLE_START_RE_ = /^\s*((?:responsible|accountable|consulted|informed)(?:\s*(?:\/|&|,|and)\s*(?:responsible|accountable|consulted|informed))*)\b/i;
-var RACI_CLAUSE_RE_ = /^\s*(?:and\s+|while\s+|whereas\s+)?([A-Za-z0-9][\w&.'\- ]{0,40}?)\s+(?:is|are|remains?|acts as)\s+(?:the\s+)?(responsible|accountable|consulted|informed)\b(.*)$/i;
+// (V.1_78, deck 49 Solution 35 "66degrees Accountable and Responsible for Shared VPC ...": the verb is optional, and a party
+//  may hold two roles joined with "and", "/" or "&")
+var RACI_ROLE_WORDS_ = '(?:responsible|accountable|consulted|informed)';
+var RACI_CLAUSE_RE_ = new RegExp('^\\s*(?:and\\s+|while\\s+|whereas\\s+)?([A-Za-z0-9][\\w&.\'\\- ]{0,40}?)\\s+(?:(?:is|are|remains?|acts as)\\s+)?(?:the\\s+)?(' + RACI_ROLE_WORDS_ + '(?:\\s*(?:and|\\/|&|,)\\s*' + RACI_ROLE_WORDS_ + ')*)\\b(.*)$', 'i');
 /* V.1_74 (deck 45 General 34: one column "Role assignment and governance responsibility" with "66degrees is Responsible
    for ...; ZoomInfo is Accountable for ..., Consulted on ..." in every row): the parties named in such sentences become
    the columns, each cell the party's role on that workstream (its first role there); what follows goes to the notes */
@@ -264,7 +291,7 @@ function raciFromSentences_(sp) {
         const key = party.toLowerCase();
         if (!parties.some(function (p) { return p.toLowerCase() === key; })) parties.push(party);
         const name = parties.filter(function (p) { return p.toLowerCase() === key; })[0];
-        if (!roles[name]) roles[name] = m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase();
+        if (!roles[name]) roles[name] = m[2].split(/\s*(?:and|\/|&|,)\s*/i).map(function (w) { w = w.toLowerCase(); return w.charAt(0).toUpperCase() + w.slice(1); }).join(' / ');
         extra.push(String(r[0] || '') + ': ' + cl.trim().replace(/[.;]+$/, '') + '.');
       });
     });
@@ -273,16 +300,35 @@ function raciFromSentences_(sp) {
   });
   if (parties.length < 2 || hit < Math.ceil(rows.length * 0.6)) return false;
   const cols = Array.isArray(sp.columns) ? sp.columns.map(cellText_) : [];
+  // (a party with no role named on a workstream shows a dash, never an empty cell)
   sp.columns = [cols[0] && !/role|responsib|assignment|governance/i.test(cols[0]) ? cols[0] : 'Workstream'].concat(parties);
-  sp.rows = table.map(function (t) { return [t.head].concat(parties.map(function (p) { return t.roles[p] || ''; })); });
+  sp.rows = table.map(function (t) { return [t.head].concat(parties.map(function (p) { return t.roles[p] || '–'; })); });
   sp.notes = String(sp.notes || '') + '\nRoles in detail: ' + extra.join(' ').slice(0, 1500);
+  return true;
+}
+function dropEmptyColumns_(sp) {
+  const rows = (sp.rows || []).filter(Array.isArray);
+  if (!rows.length) return false;
+  const w = Math.max.apply(null, rows.map(function (r) { return r.length; }));
+  const keep = [];
+  for (let j = 0; j < w; j++) if (rows.some(function (r) { return String(r[j] == null ? '' : r[j]).trim(); })) keep.push(j);
+  if (keep.length === w || keep.length < 2) return false;
+  sp.rows = sp.rows.map(function (r) { return Array.isArray(r) ? keep.map(function (j) { return r[j] == null ? '' : r[j]; }) : r; });
+  if (Array.isArray(sp.columns) && sp.columns.length === w) {
+    const cols = keep.map(function (j) { return sp.columns[j]; });
+    // the first column keeps a heading that names the workstreams
+    if (keep[0] !== 0 && /^workstream$/i.test(String(sp.columns[0] || ''))) cols[0] = 'Workstream';
+    sp.columns = cols;
+  }
   return true;
 }
 function normalizeRaci_(sp) {
   let changed = false;
   if (!Array.isArray(sp.rows)) return false;
   if (normalizeCells_(sp)) changed = true;
-  const sentences = sp.rows.some(function (r) { return Array.isArray(r) && r.slice(1).some(function (c) { return /\b(is|are)\s+(the\s+)?(responsible|accountable|consulted|informed)\b/i.test(String(c || '')); }); });
+  // V.1_78 (deck 49 Solution 35: an empty first column and an empty last one): columns with nothing in any row go
+  if (dropEmptyColumns_(sp)) changed = true;
+  const sentences = sp.rows.some(function (r) { return Array.isArray(r) && r.slice(1).some(function (c) { return /\b(is|are)\s+(the\s+)?(responsible|accountable|consulted|informed)\b|^\s*[A-Z0-9][\w&.' -]{1,40}?\s+(responsible|accountable|consulted|informed)\b/i.test(String(c || '')) && String(c || '').split(/\s+/).length >= 4; }); });
   if (sentences && raciFromSentences_(sp)) { sp.type = 'table'; delete sp.design; sp.reference = null; return true; }
   const cols = Array.isArray(sp.columns) ? sp.columns.map(cellText_) : [];
   // rows as objects: {label|workstream|aspect, then one key per party (left / right / the column names)}

@@ -38,12 +38,12 @@ test("libraries never mix: a Proposal Deck ignores General designs, a General de
   assert.ok(!cov.els.some((e) => e.w === 236 && e.h === g.ENGINE.H), "not the blue-panel cover variant");
 });
 
-test("strict proposal cover: client logo top-left, 66degrees wordmark when no client", () => {
+test("strict proposal cover: 66degrees wordmark top-left, client logo beside it (V.1_78), wordmark alone when no client", () => {
   const g = load();
   const withClient = render(g, { type: "cover", deckLibrary: "proposal", clientLogo: true, title: "Proposal" });
   const l = logos(withClient)[0];
-  assert.ok(l && l.fit === "contain" && l.align === "left" && l.x < 40 && l.y < 30);
-  assert.ok(!withClient.els.some((e) => e.asset === "logo-dark"));
+  assert.ok(l && l.fit === "contain" && l.align === "left" && l.x > 90 && l.x < 130 && l.y < 30);
+  assert.ok(withClient.els.some((e) => e.asset === "logo-dark"));
   const noClient = render(g, { type: "cover", deckLibrary: "proposal", title: "Proposal" });
   assert.ok(noClient.els.some((e) => e.asset === "logo-dark"));
   assert.equal(logos(noClient).length, 0);

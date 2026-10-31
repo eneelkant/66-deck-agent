@@ -235,6 +235,21 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 | Plus Jakarta Sans only; dark panels stay dark with white text | Test v59, v60 |
 | No overlapping or unreadable text | Auto: the rebrand check (`overlap`, `unreadable`, `outside`) goes to the slide log |
 | The 66° mark takes the old mark's place and never covers the footer text | Test v60 |
+| (V.1_78) A small label above the title leaves the slide; its words go to the speaker notes | Test v78 C6 |
+| (V.1_78) The cover keeps its label and facts as one line; the closing keeps its own title and its Author / Target line | Test v78 C1, C2 |
+| (V.1_78) Every icon becomes a 66° Blue outline icon (never removed); an empty icon tile gets one | Test v78 C8 |
+| (V.1_78) Content moves up under the title like a created slide; panels end above the 66° mark | Test v78 C7, C9 |
+| (V.1_78) Text that would run into the next heading in Plus Jakarta Sans is set smaller (line spacing counted) | Test v78 C5, C10 |
+| (V.1_78) Headings and labels in sentence case ("API request", "100% test execution"); ".NET" keeps its space | Test v78 C3, C4 |
+
+## Quality pass (V.1_78): every Create deck
+
+| Rule | How it is kept |
+|---|---|
+| Product names, English only and full words fixed by dictionaries, before and after the review | Test v78 A1 |
+| A meaning review (Gemini, schema) fixes only texts that keep every figure and name | Test v78 A2 |
+| The final lock: KPI slides show the brief's targets as figures, RACI shows role letters, pricing shows no invented amounts | Test v78 A4-A6 |
+| Credentials: 350+ technical experts and 600+ certifications; no 600+ footprint | Test v78 A8 |
 
 ## When a slide is still wrong
 

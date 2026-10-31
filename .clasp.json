@@ -45,6 +45,7 @@
     "Contracts.gs",
     "Gate.gs",
     "Finish.gs",
+    "Quality.gs",
     "Generator.html",
     "appsscript.json",
     "ModelTest.gs",

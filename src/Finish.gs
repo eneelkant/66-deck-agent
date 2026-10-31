@@ -163,6 +163,40 @@ function finishHeadings_(sp) {
   return changed;
 }
 
+// 9. (V.1_78) engagement models are ordinary words in sentence case ("Staff Augmentation" -> "Staff augmentation")
+var ENGAGEMENT_TERMS_RE_ = /\b(staff augmentation|direct hire|velocity engineering|managed services?|fixed[- ]scope|time and materials|follow[- ]the[- ]sun|capacity[- ]based pods?|outcome[- ]based)\b/gi;
+function engagementCase_(t) {
+  if (typeof t !== 'string') return t;
+  return t.replace(ENGAGEMENT_TERMS_RE_, function (m, w, off) {
+    const low = m.toLowerCase();
+    const atStart = off === 0 || /[.!?:]\s+$|^\s*$/.test(t.slice(0, off));
+    return atStart ? low.charAt(0).toUpperCase() + low.slice(1) : low;
+  });
+}
+// 10. (V.1_78, deck 49 General 37: "600+ strong global footprint of experts" beside "350+ technical experts") the
+//     people 66degrees has are its 350+ technical experts; 600+ is the number of certifications
+var FOOTPRINT_RE_ = /\b(a\s+|our\s+|the\s+)?(?:global\s+(?:delivery\s+)?footprint\s+of\s+)?600\+\s*(?:strong\s+)?(?:global\s+)?(?:(?:delivery\s+)?footprint\s+of\s+)?(?:experts|engineers|consultants|professionals|people|specialists)\b/gi;
+function footprintFix_(t) {
+  if (typeof t !== 'string' || t.indexOf('600+') === -1) return t;
+  const has350 = /350\+/.test(t);
+  // (a team: one subject, so the verb after it still agrees - "Our 600+ strong footprint ... brings" -> "Our team of ... brings")
+  t = t.replace(/\b600\+\s*(?:strong\s+)?(?:global\s+)?(?:delivery\s+)?footprint\b(?!\s+of)/gi, function () { return has350 ? 'team of technical experts' : 'team of 350+ technical experts'; });
+  return t.replace(FOOTPRINT_RE_, function (m, art, off) {
+    const lead = art ? art.trim().toLowerCase() : '';
+    const det = lead === 'a' ? 'a team' : 'our team';
+    let out = det + ' of ' + (has350 ? 'technical experts' : '350+ technical experts');
+    if (off === 0 || /[.!?:]\s*$/.test(t.slice(0, off))) out = out.charAt(0).toUpperCase() + out.slice(1);
+    return out;
+  });
+}
+// 11. (V.1_78, deck 49 General 20: "interpretable attention weights ..." in a table) a cell or text starts with its capital
+function capStart_(t) {
+  if (typeof t !== 'string' || !/^[a-z]{3,}\b/.test(t)) return t;
+  const w = t.split(/\s+/)[0];
+  if (/^(e\.g|i\.e|vs|via|gcloud|gsutil|bq|kubectl|npm|pip|iphone|ipad|ios|macos|eBay)$/i.test(w) || /[A-Z]/.test(w)) return t;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 function finishSlides_(slides, ctx) {
   let n = 0;
   (slides || []).forEach(function (sp) {
@@ -175,8 +209,10 @@ function finishSlides_(slides, ctx) {
     finishCountSteps_(sp);
     finishHeadings_(sp);
     finishCounts_(sp);
+    if (Array.isArray(sp.rows)) sp.rows = sp.rows.map(function (r) { return Array.isArray(r) ? r.map(capStart_) : r; });
+    if (Array.isArray(sp.items)) sp.items.forEach(function (it) { if (it && typeof it === 'object') ['title', 'label', 'text'].forEach(function (k) { if (typeof it[k] === 'string') it[k] = capStart_(it[k]); }); });
     finishTexts_(sp, function (x) {
-      let y = x;
+      let y = footprintFix_(engagementCase_(x));
       PRODUCT_FIXES_.forEach(function (p) { y = y.replace(p[0], p[1]); });
       ABSOLUTE_FIXES_.forEach(function (p) { y = y.replace(p[0], p[1]); });
       return y;

@@ -115,7 +115,8 @@ test("the cover keeps its date and its own words (the reviewer's retyped title a
   const R = run();
   const cover = R.drawn[0];
   assert.equal(cover.date, "September 2026");
-  assert.equal(cover.spec.title, "Gemini Enterprise Onboarding & Adoption Playbook");
+  // V.1_78: the slide's own words, in sentence case like a created deck's title
+  assert.equal(cover.spec.title, "Gemini Enterprise onboarding & adoption playbook");
   assert.equal(cover.spec.subtitle, "For IT / Security Admins, Adoption Leads, and Executive Sponsors");
   assert.equal(R.sb.originalDate_({ texts: [{ text: "No date here" }] }), "");
   assert.match(read("src/Engine.gs"), /if \(ctx\.dateLabel\) text\(els, 29\.5, 368/);

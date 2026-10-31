@@ -484,6 +484,7 @@ function generatePresentationRun_(data, run) {
     deckFigureCheck_(plan.slides, ctx, sources);                                 // V.1_70: again after the fill and fit steps
     deckGate_(plan.slides, ctx, started);                                        // V.1_73: step 4 - no bad slide goes in
     deckFinishCheck_(plan.slides, ctx);                                          // V.1_74: titles, counts, claims, names
+    deckQuality_(plan.slides, ctx, started);                                     // V.1_78: dictionaries, meaning review, final check
     finalizeNotes_(plan, sources, ctx);
     stats = drawSlidesIntoActive_(target, plan.slides, ctx, blankDeck);
     copied = stats.redrawn || plan.slides.length;
@@ -808,6 +809,7 @@ a clear story, one idea per slide, concrete and useful content.
 
 REQUEST: "${userPrompt || 'Build the presentation from the attached source material.'}"
 ${typeof briefPromptBlock_ === 'function' ? briefPromptBlock_(ctx) : ''}
+${typeof kindRulesBlock_ === 'function' ? kindRulesBlock_(ctx, batch) : ''}
 PRESENTATION TYPE: ${presentationType}
 DEPARTMENT: ${ctx.department || 'Other'}
 STRUCTURE: ${guidance} Shape the story around what the request is really asking for, the way a senior consultant would.
@@ -2768,6 +2770,11 @@ function agendaNotes_(sp) {
 }
 // V.1_73: step 4 - a slide the checker still finds a problem on is written again once, then drawn with a safe layout
 // (Gate.gs); never stops a deck
+// V.1_78: the quality layer (Quality.gs) - last of all, so nothing undoes it; never stops a deck
+function deckQuality_(slides, ctx, started) {
+  if (typeof qualitySlides_ !== 'function') return null;
+  try { return qualitySlides_(slides, ctx, started); } catch (e) { if (ctx && ctx.log) ctx.log.push('Quality step skipped: ' + e.message); return null; }
+}
 // V.1_74: the last text checks on the finished slides (Finish.gs); never stops a deck
 function deckFinishCheck_(slides, ctx) {
   if (typeof finishSlides_ !== 'function') return 0;
@@ -3927,9 +3934,12 @@ function verifyStatNumbers_(slides, corpus) {
 }
 
 // Figures with more than one decimal are rounded for slides: "24.69%" -> "25%", "$3.456M" -> "$3.5M"
+// V.1_78 (deck 49 Solution: the target "99.95% availability" became "100%", and the no-100%-SLA rule then removed it -
+// the KPI slide lost its figures): a figure keeps its value. Only a figure with three decimals or more is rounded,
+// to one decimal, never to a whole 100%
 function roundOddPrecision_(obj) {
   const fix = function (str) {
-    return str.replace(/(\d+)\.(\d{2,})(\s?%)/g, function (m, a, b, pct) { return Math.round(parseFloat(a + '.' + b)) + pct; })
+    return str.replace(/(\d+)\.(\d{3,})(\s?%)/g, function (m, a, b, pct) { const v = Math.round(parseFloat(a + '.' + b) * 10) / 10; return v >= 100 && parseFloat(a + '.' + b) < 100 ? m : v + pct; })
               .replace(/(\$\d+)\.(\d{2,})([KMB])/g, function (m, a, b, u) { return '$' + (Math.round(parseFloat(a.slice(1) + '.' + b) * 10) / 10) + u; });
   };
   (function walk(o) {
@@ -5483,7 +5493,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_77';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_78';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -6591,9 +6601,55 @@ function renameTargetSections_(secs, ctx) {
   });
   return n;
 }
+/* V.1_78 (deck 49 Solution: the outline had 39 of 40 slides): an outline shorter than the deck asked for gets the slides it
+   is missing before any is written - topics of the deck's backlog it does not have (never a once-only topic it has), each
+   at the end of the smallest section, before its pricing and next-step slides; the agenda lists them */
+function topUpOutline_(outline, n, ctx, prompt) {
+  const list = (outline && outline.slides) || [];
+  let missing = n - (list.length + 3);
+  if (missing <= 0) return 0;
+  const keyOf = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+  const have = {}, onceHave = {};
+  list.forEach(function (o) { if (!o) return; have[keyOf(o.title)] = 1; const f = typeof onceTopicOfEntry_ === 'function' ? onceTopicOfEntry_(o) : ''; if (f) onceHave[f] = 1; });
+  const solution = typeof isSolutionDeck_ === 'function' && isSolutionDeck_(ctx);
+  let pool = (solution && typeof solutionBacklog_ === 'function' ? solutionBacklog_(ctx.solutionTone || 'technical', prompt).concat(SOLUTION_BACKLOG_.technical || []) : []).concat(OUTLINE_BACKLOG_);
+  pool = pool.filter(function (b, i) {
+    if (!b || !b.title || have[keyOf(b.title)]) return false;
+    const f = typeof onceTopicOfEntry_ === 'function' ? onceTopicOfEntry_(b) : '';
+    if (f && onceHave[f]) return false;
+    return pool.findIndex(function (x) { return x && keyOf(x.title) === keyOf(b.title); }) === i;
+  });
+  // the requested topics' second angle, when the backlog runs out
+  (typeof requestedTopics_ === 'function' ? requestedTopics_(prompt) : []).forEach(function (t) {
+    const title = sentenceCase_(String(t).charAt(0).toUpperCase() + String(t).slice(1) + ' in practice', 1);
+    if (!have[keyOf(title)] && !(typeof onceTopicOf_ === 'function' && onceTopicOf_(t))) pool.push({ type: 'cards', title: title, brief: 'How ' + t + ' works for this client, step by step' });
+  });
+  let added = 0;
+  while (missing > 0 && pool.length) {
+    const entry = Object.assign({}, pool.shift());
+    // the sections: start index of each divider and the number of body slides after it
+    const secs = [];
+    list.forEach(function (o, i) { if (o && o.type === 'section') secs.push({ at: i, n: 0 }); else if (secs.length) secs[secs.length - 1].n++; });
+    let pos = list.length;
+    if (secs.length) {
+      const small = secs.slice().sort(function (a, b) { return a.n - b.n; })[0];
+      const k = secs.indexOf(small), end = k + 1 < secs.length ? secs[k + 1].at : list.length;
+      pos = end;
+      for (let j = small.at + 1; j < end; j++) { const f = typeof onceTopicOfEntry_ === 'function' ? onceTopicOfEntry_(list[j]) : ''; if (f === 'pricing' || f === 'next') { pos = j; break; } }
+      const ag = (outline.agendaItems || [])[k];
+      if (ag && Array.isArray(ag.points)) ag.points.push(entry.title);
+    }
+    list.splice(pos, 0, entry);
+    have[keyOf(entry.title)] = 1;
+    missing--; added++;
+  }
+  if (added && ctx && ctx.log) ctx.log.push('Outline: ' + added + ' slide(s) added so the deck has the ' + n + ' slides asked for.');
+  return added;
+}
 function startLongDeck_(ctx, target, p, started) {
   progressStage_(ctx, 'write', 'active', 'Gemini is planning the outline of ' + p.n + ' slides');
   const outline = planOutline_(p.userPrompt, p.presentationType, p.n, p.sources, ctx);
+  try { topUpOutline_(outline, p.n, ctx, p.userPrompt); } catch (eT) { ctx.log.push('Outline top-up skipped: ' + eT.message); }   // V.1_78
   // V.1_76: an outline shorter than the deck asked for (cover, agenda and closing are the other three slides) is written
   // to the slide log, so a short deck shows where the slides went
   try {
@@ -6768,6 +6824,7 @@ function longDeckStep_(ctx, target, st, t0) {
     deckFigureCheck_(plan.slides, ctx, st.sources);                      // V.1_70: again after the fill and fit steps
     deckGate_(plan.slides, ctx, b0);                                     // V.1_73: step 4 - no bad slide goes in
     deckFinishCheck_(plan.slides, ctx);                                  // V.1_74: titles, counts, claims, names
+    deckQuality_(plan.slides, ctx, b0);                                  // V.1_78: dictionaries, meaning review, final check
     finalizeNotes_(plan, st.sources, ctx);
     ctx.nextPartStartsDark = !!all[st.next + part.length] && all[st.next + part.length].type === 'section';   // V.1_73: Solution dark rule
     drawSlidesIntoActive_(longDrawTarget_(target, st), plan.slides, ctx, false);   // V.1_51: into the working copy

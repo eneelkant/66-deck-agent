@@ -396,13 +396,20 @@ var ENGINE = (function () {
   // 66D_LAYOUT_COVER_001 (template slide 1)
   L.cover = function (s, ctx) {
     var els = [];
-    // Proposal Deck (strict cover): the client's logo top-left; the 66degrees wordmark when no client is named
-    if (s.deckLibrary === 'proposal' && s.clientLogo) els.push({ t: 'image', asset: 'client-logo', x: 25.2, y: 16, w: 150, h: 44, fit: 'contain', align: 'left', valign: 'top' });
-    else image(els, 'logo-dark', 19, 20.1, 68.8, 16.2);
+    // V.1_78 (deck 49 Proposal 1: the client's logo in place of the 66degrees wordmark): the wordmark is always top-left;
+    // in a Proposal Deck the client's logo stands beside it, after a thin rule
+    image(els, 'logo-dark', 19, 20.1, 68.8, 16.2);
+    if (s.deckLibrary === 'proposal' && s.clientLogo) {
+      line(els, 98, 16, 98, 40.5, T.cardLine, 0.75);
+      els.push({ t: 'image', asset: 'client-logo', x: 108, y: 14, w: 120, h: 28, fit: 'contain', align: 'left', valign: 'middle' });
+    }
     image(els, 'cover-pattern', 560, 10, 92, 72);          // dot/dash texture top-right (skipped if the asset is missing)
     // Title SemiBold 28pt, left-middle; subtitle Medium 12pt below — no accent bar (template)
     var t = text(els, 25.2, 104, 500, 116, s.title, { weight: 600, max: 28, min: 22, maxLines: 3, color: T.title || T.ink, valign: 'bottom' });
     text(els, 25.2, 226, 440, 40, s.subtitle || s.lead, { weight: 500, max: 12, min: 10, maxLines: 2, color: T.body });
+    // V.1_78 (rebrand deck 49 slide 1: the cover's label and its three facts were lost): a rebranded cover keeps them as
+    // one line under the subtitle
+    if (s.facts) text(els, 25.2, 270, 480, 30, s.facts, { weight: 400, max: 10, min: 8, maxLines: 2, color: T.body });
     // Footer band, date and 66° badge
     rect(els, 0, 349, W, 56, T.blue);
     image(els, 'band-pattern', 626, 349, 94, 56);
@@ -1130,12 +1137,17 @@ var ENGINE = (function () {
     var els = [];
     // Always "Thank You!" - the deck's headline moves to the subtitle
     image(els, 'logo-dark', 42, 42, 82, 19.4);
-    text(els, 42, 130, 380, 80, 'Thank You!', { weight: 500, max: 56, min: 42, maxLines: 1, color: T.ink, valign: 'bottom' });
+    // V.1_78 (rebrand deck 49 slide 12: "Phase 1 strategy ready for review" became "Thank You!"): a rebranded deck keeps its
+    // own closing title, and its facts ("Author: ...", "Target: ...") as a line under the message
+    var own = s.keepTitle && s.title && !/^thank you!?$/i.test(String(s.title).trim());
+    if (own) text(els, 42, 120, 390, 90, s.title, { weight: 500, max: 32, min: 22, maxLines: 2, color: T.ink, valign: 'bottom' });
+    else text(els, 42, 130, 380, 80, 'Thank You!', { weight: 500, max: 56, min: 42, maxLines: 1, color: T.ink, valign: 'bottom' });
     rect(els, 44, 218, 96, 3, T.blue);
-    var sub = s.subtitle || s.lead || s.title || '';
+    var sub = own ? (s.subtitle || s.lead || '') : (s.subtitle || s.lead || s.title || '');
     if (sub && sub.toLowerCase().indexOf('thank') === -1) {
       text(els, 44, 232, 380, 60, sub, { weight: 400, max: 13, min: 11, maxLines: 3, color: T.ink });
     }
+    if (s.facts) text(els, 44, 298, 390, 36, s.facts, { weight: 400, max: 10, min: 8, maxLines: 2, color: T.body });
     // Stay Connected card
     roundrect(els, 448, 42, 252, 170, T.bgLight, null);
     text(els, 464, 62, 220, 24, 'Stay Connected', { weight: 500, max: 16, min: 14, maxLines: 1, color: T.ink });
@@ -1690,20 +1702,20 @@ var ENGINE = (function () {
       var x = CX + i * (tw + gap);
       rect(els, x, top, tw, tileH, T.white, { color: T.cardLine, width: 0.75 });
       text(els, x + 10, top + 10, tw - 20, 38, it.value, { font: 'mono', weight: 600, max: vSize, min: vSize, maxLines: 1, align: 'center', color: T.blue });
-      // The tile shows its row number, the number and its label; the table explains each number once (by row number)
-      text(els, x + 8, top + 6, 24, 12, pad2(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, color: T.slate });
+      // V.1_78 (deck 49 General 4: the tiles numbered 01-04 and the table rows numbered 01-04 again): the table names each
+      // figure instead of a number, the tiles show the figure and its label only
       text(els, x + 12, top + 50, tw - 24, 30, it.label, { weight: 500, max: lSize, min: lSize, maxLines: 2, align: 'center', color: T.ink });
     });
-    var ty = top + tileH + 14, c0 = 40, c1 = c0, rowsAvail = BOTTOM - ty - 22;
+    var ty = top + tileH + 14, c0 = 64, c1 = c0, rowsAvail = BOTTOM - ty - 22;
     rect(els, CX, ty, c0 - 2, 20, T.blue);
     rect(els, CX + c1, ty, CW - c1, 20, T.blue);
-    text(els, CX + 6, ty + 3.5, c0 - 12, 13, '#', { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, color: T.white });
+    text(els, CX + 6, ty + 3.5, c0 - 12, 13, 'Figure', { weight: 500, max: 10, min: 10, maxLines: 1, color: T.white });
     text(els, CX + c1 + 8, ty + 3.5, CW - c1 - 16, 13, 'Why it matters', { weight: 500, max: 10, min: 10, maxLines: 1, color: T.white });
     var rSize = uniformSize(items.map(function (it) { return it.text; }), CW - c1 - 16, rowsAvail / n - 8, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3 });
     var rowH = Math.min(rowsAvail / n, Math.max(26, linesBlock(items.map(function (it) { return it.text; }), CW - c1 - 16, rSize, 400, 3) + 12, rowsAvail * 0.75 / n));
     items.forEach(function (it, i) {
       var y = ty + 22 + i * rowH;
-      text(els, CX + 6, y, c0 - 12, rowH, pad2(i + 1), { font: 'mono', weight: 500, max: 10, min: 10, maxLines: 1, color: T.blue, valign: 'middle' });
+      text(els, CX + 6, y, c0 - 12, rowH, String(it.value || ''), { weight: 500, max: 10, min: 8, maxLines: 1, color: T.blue, valign: 'middle' });
       text(els, CX + c1 + 8, y, CW - c1 - 16, rowH, it.text, { weight: 400, max: rSize, min: rSize, maxLines: 3, color: T.body, valign: 'middle' });
       line(els, CX, y + rowH, CX + CW, y + rowH, T.cardLine, 0.75);
     });
@@ -2264,9 +2276,11 @@ var ENGINE = (function () {
   function boxesHit(a, b) { return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h; }
   // V.1_57: a centre label that does not fit in two lines is left out (never cut to "Five decisions leadership…")
   function centerFits(str, w) { return !!str && wrap(String(str), w / 1.06, 'sans', 500, 10).length <= 2; }
+  // V.1_78 (deck 49 General 8, 21: two captions of a ring touching): measured 6% narrower, as Slides draws the font wider
   function capH(it, w, maxLines) {
-    return lineHeight('sans', TSZ.heading) * Math.min(2, wrap(String(it.title || ''), w, 'sans', 500, TSZ.heading).length) + 2 +
-      (it.text ? Math.min(maxLines || 3, wrap(String(it.text), w, 'sans', 400, TSZ.body).length) * lineHeight('sans', TSZ.body) : 0);
+    var ww = w / 1.06;
+    return lineHeight('sans', TSZ.heading) * Math.min(2, wrap(String(it.title || ''), ww, 'sans', 500, TSZ.heading).length) + 2 +
+      (it.text ? Math.min(maxLines || 3, wrap(String(it.text), ww, 'sans', 400, TSZ.body).length) * lineHeight('sans', TSZ.body) : 0);
   }
 
   // Slide 92 (DIAGRAM_001): hub and spoke. Centre label with icon, numbered blue circles in a ring, captions outside
@@ -2291,21 +2305,24 @@ var ENGINE = (function () {
       cols[side].push({ it: it, y: y, i: i });
     });
     // Each column: captions in circle order, kept apart (no overlaps) and inside the content area
+    var tooTall = false;
     ['left', 'right'].forEach(function (side) {
       var list = cols[side].sort(function (a, b) { return a.y - b.y; });
       var cw2 = side === 'right' ? CX + CW - (cx + R + 44) : (cx - R - 44) - CX;
       cw2 = Math.min(capW, cw2);
-      var hs = list.map(function (e) { return capH(e.it, cw2, 2); });
+      var hs = list.map(function (e) { return capH(e.it, cw2, 3); });   // (V.1_78: the caption is drawn with 3 lines - it was measured with 2)
       var ys = list.map(function (e, k) { return e.y - hs[k] / 2; });
-      for (var k = 1; k < ys.length; k++) ys[k] = Math.max(ys[k], ys[k - 1] + hs[k - 1] + 8);
+      for (var k = 1; k < ys.length; k++) ys[k] = Math.max(ys[k], ys[k - 1] + hs[k - 1] + 12);
       var over = ys.length ? ys[ys.length - 1] + hs[hs.length - 1] - BOTTOM : 0;
       if (over > 0) ys = ys.map(function (v) { return v - over; });
-      for (k = 0; k < ys.length; k++) ys[k] = Math.max(ys[k], top + (k ? ys[k - 1] - top + hs[k - 1] + 8 : 0));
+      for (k = 0; k < ys.length; k++) ys[k] = Math.max(ys[k], top + (k ? ys[k - 1] - top + hs[k - 1] + 12 : 0));
+      if (ys.length && ys[ys.length - 1] + hs[hs.length - 1] > BOTTOM + 2) return (tooTall = true);
       list.forEach(function (e, k) {
         if (side === 'right') caption(els, cx + R + 44, ys[k], cw2, e.it, 'left', 3);
         else caption(els, cx - R - 44 - cw2, ys[k], cw2, e.it, 'right', 3);
       });
     });
+    if (tooTall) return null;                      // (captions that cannot all fit apart: another design is used)
     return { bg: T.white, els: els, noBalance: true };
   };
 
@@ -2590,15 +2607,22 @@ var ENGINE = (function () {
     // The intro sits on the left: the lead is shown there OR under the title, never twice
     var intro = s.text || s.lead || '';
     var top = header(els, (!s.text && s.lead) ? Object.assign({}, s, { lead: '', subtitle: '' }) : s);
-    var x0 = intro ? 220 : CX, stepW = 92, stepH = Math.min(36, (BOTTOM - top) / n - 6), dx = 44;
-    if (intro) text(els, CX, top + 10, 170, BOTTOM - top - 20, intro, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body });
+    // V.1_78 (deck 49 General 30: the intro at the top left, the steps at the bottom right, the middle empty, captions
+    // touching): each step is as tall as its caption needs, and the intro sits beside the staircase, centred on it
+    var x0 = intro ? 220 : CX, stepW = 92, dx = 44;
+    var capWOf = function (i) { return Math.min(260, CX + CW - (x0 + i * dx + stepW + 12)); };
+    var needH = Math.max.apply(null, steps.map(function (st, i) { return capH(st, capWOf(i), 2); }).concat([36]));
+    var stepH = Math.max(30, Math.min(needH - 4, (BOTTOM - top) / n - 8));
+    if (needH > (BOTTOM - top) / n + 2) return null;
+    var stairTop = BOTTOM - n * (stepH + 8);
+    if (intro) { var ih = Math.min(BOTTOM - stairTop, textH(intro, 170, TSZ.body, 400) + 8); text(els, CX, stairTop + (BOTTOM - stairTop - ih) / 2, 170, ih, intro, { weight: 400, max: TSZ.body, min: TSZ.body, color: T.body }); }
     var fills = [T.slate, T.slate, T.blue, T.blue, T.ink];
     steps.forEach(function (st, i) {
-      var y = BOTTOM - (i + 1) * (stepH + 6), x = x0 + i * dx;
+      var y = BOTTOM - (i + 1) * (stepH + 8), x = x0 + i * dx;
       rect(els, x, y, stepW, stepH, fills[Math.round(i * 4 / Math.max(n - 1, 1))]);
       text(els, x, y + stepH / 2 - 9, stepW - 10, 18, pad2(i + 1), { font: 'mono', weight: 500, max: 14, min: 14, maxLines: 1, align: 'right', color: fills[Math.round(i * 4 / Math.max(n - 1, 1))] === T.slate ? T.ink : T.white, noFill: true });
-      var cxp = x + stepW + 12, capW = Math.min(230, CX + CW - cxp);
-      caption(els, cxp, y + stepH / 2 - 14, capW, st, 'left', 2);
+      var cxp = x + stepW + 12, capW = capWOf(i);
+      caption(els, cxp, y + Math.max(0, (stepH - capH(st, capW, 2)) / 2), capW, st, 'left', 2);
     });
     return { bg: T.white, els: els, noBalance: true };
   };
@@ -2720,8 +2744,10 @@ var ENGINE = (function () {
     var els = [];
     text(els, X0, 24, HEADER_MAX_W || (W - 2 * X0), 28, s.title || '', { weight: 500, max: 20, min: 16, maxLines: 1, color: T.white });
     var top = 60;
-    if (s.lead) { var l = text(els, X0, 56, 420, 30, s.lead, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, color: T.white }); top = 56 + l.height + 18; }
-    var bw = 420, rowH = Math.min(70, (BOTTOM - top) / n);
+    if (s.lead) { var l = text(els, X0, 56, CW - 40, 30, s.lead, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 2, color: T.white }); top = 56 + l.height + 18; }
+    // V.1_78 (deck 49 General 6: rows on two thirds of a dark slide, the right third empty - the streak photo that filled
+    // it belongs to transition slides): the rows take the full width
+    var bw = CW - 34, rowH = Math.min(70, (BOTTOM - top) / n);
     var y0 = top + Math.max(0, (BOTTOM - top - n * rowH) / 2);
     items.forEach(function (it, i) {
       var y = y0 + i * rowH;
@@ -2732,7 +2758,7 @@ var ENGINE = (function () {
       text(els, X0 + 46, y, bw - 24, rowH - 12, body, { weight: 400, max: TSZ.body, min: TSZ.body, maxLines: 3, valign: 'middle', color: T.white,
         runs: it.title ? [{ start: 0, end: it.title.length + 1, color: T.white, weight: 500 }] : null });
     });
-    return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true, noBalance: true };
+    return { bg: T.ink, els: els, dark: true, noBalance: true };
   };
 
   // Slide 59 (BULLETS_006): dark photo band, a white text card on the left, four rule items on the right
@@ -3933,7 +3959,7 @@ var ENGINE = (function () {
       .replace(/(^|[\s(])\*([^*\s][^*]*[^*\s]|[^*\s])\*(?=[\s).,;:!?]|$)/g, '$1$2')       // markdown italic *text*
       .replace(/\*{2,}/g, '')                                                          // stray ** left over
       .replace(/[ \t]*[\r\n]+[ \t]*/g, ' ')                                             // V.1_50: no line breaks inside a text (each line became a paragraph)
-      .replace(/[ \t]{2,}/g, ' ').replace(/\s+([.,;:])/g, '$1').replace(/^\s+|\s+$/g, '');
+      .replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+([.,;:])(?=\s|$)/g, '$1').replace(/^\s+|\s+$/g, '');
   }
   function cleanSpec(v) {
     if (typeof v === 'string') return cleanText(v);
@@ -4453,6 +4479,17 @@ var ENGINE = (function () {
       return o;
     }) });
     if (Array.isArray(s.points)) s = Object.assign({}, s, { points: s.points.map(function (p) { return typeof p === 'string' ? capFirst_(p) : p; }) });
+    // 20. V.1_78 (deck 49 Solution 12: three points written as {title, text}, the design drew the titles only - the
+    //     texts were lost and the slide looked empty): points written as objects read "Title: text."
+    if (Array.isArray(s.points) && s.points.some(function (p) { return p && typeof p === 'object' && (p.title || p.label) && (p.text || p.description); })) {
+      s = Object.assign({}, s, { points: s.points.map(function (p) {
+        if (!p || typeof p !== 'object') return p;
+        var h = String(p.title || p.label || '').trim().replace(/[.:]+$/, ''), b = String(p.text || p.description || '').trim();
+        if (!b) return h;
+        return (h ? h + ': ' : '') + (h ? b.charAt(0).toLowerCase() + b.slice(1) : b);
+      }) });
+      log.push('points-with-text');
+    }
     // 19. V.1_76 (deck 47 Proposal 37 "Support model": three tiers L1-L3 as items and three support sentences as points -
     //     the slide was drawn with the points and the tiers were lost): items that each have a heading and a text are the
     //     slide's content; points beside them go to the takeaway (one) or the speaker notes (more)

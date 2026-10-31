@@ -93,12 +93,43 @@ function rebrandPresentation(presId, ctx, opts) {
   });
   saveRotation_(usage);
 
+  // V.1_59 (V.1_78: read before the redrawn titles are cased): names the deck writes with capitals inside its sentences keep them when headings go to sentence case
+  if (!isCreate && typeof setRunNames_ === 'function') {
+    const body = [];
+    inv.forEach(function (it2, i) {
+      if (!inPart(i)) return;
+      it2.texts.forEach(function (t) {
+        // V.1_60: only sentences count ("Execute Test Queries: Run one..." starts with a label, not a name)
+        t.text.split(/\n+/).forEach(function (line) {
+          const sent = line.replace(/^[^.:]{2,48}:\s+/, '').trim();
+          if (sent.split(/\s+/).length >= 8 && /[a-z]{3,}\s+[a-z]{3,}/.test(sent)) body.push(sent);
+        });
+      });
+    });
+    try {
+      setRunNames_('', []);
+      if (typeof namesFromNotes_ === 'function' && typeof addRunNames_ === 'function') addRunNames_(namesFromNotes_([{ notes: body.join(' ') }]));
+    } catch (e) {}
+  }
   inv.forEach(function (it, i) {
     if (!inPart(i)) return;
     const r = review[i] || (review[i] = {});
     r.remove_images = (r.remove_images || []).filter(function (id) { return it.imageIds.indexOf(id) !== -1; });
     r.delete_shapes = (r.delete_shapes || []).filter(function (id) { return it.textIds.indexOf(id) !== -1; });
-    r.icons = isCreate ? (r.icons || {}) : {};                  // V.1_60: a rebrand keeps the deck's own icons
+    // V.1_78 (brand rule 4, outline icons): a rebrand swaps every icon of the deck for a brand outline icon in 66° Blue
+    // (V.1_60 kept the deck's own icons: red and filled icons stayed); an icon is never removed
+    if (isCreate) r.icons = r.icons || {};
+    else {
+      const given = r.icons || {};
+      r.icons = {};
+      it.icons.forEach(function (ic) {
+        const near = iconLabel_(it, ic.box || ic);
+        const g = given[ic.id];
+        r.icons[ic.id] = Object.assign({}, typeof g === 'string' ? { icon: g } : (g || {}), { near: near, box: ic.box || null });
+        if (!r.icons[ic.id].icon) r.icons[ic.id].icon = near;
+        r.remove_images = r.remove_images.filter(function (id) { return id !== ic.id; });
+      });
+    }
     const spec = specs ? specs[i] : null;
     const kind = spec ? String(spec.type || '').toLowerCase() : (r.redraw_spec ? String(r.redraw_spec.type || '').toLowerCase() : '');
     // Order matters here — safety net must run FIRST and its spec must not be overwritten below.
@@ -129,7 +160,21 @@ function rebrandPresentation(presId, ctx, opts) {
     }
     if (r.redraw && !r.spec) r.redraw = false;
     // Closing slide: title MUST be "Thank You!" — demote whatever came in to subtitle
-    if (r.redraw && r.spec && String(r.spec.type || '').toLowerCase() === 'closing') {
+    // V.1_78: a rebrand keeps its own closing title (restyled to the brand closing); only a created deck says "Thank You!"
+    if (!isCreate && r.redraw && r.spec && String(r.spec.type || '').toLowerCase() === 'closing') {
+      r.spec.keepTitle = true;
+      const said = it.texts.some(function (t) { return /thank/i.test(t.text); });
+      if ((!r.spec.title || /^thank you!?$/i.test(String(r.spec.title).trim())) && !said) {
+        // the reviewer wrote "Thank You!" on a slide that does not say it: the slide's own top text is the title
+        const top = it.texts.filter(function (t) { return t.text.trim().length > 3 && t.text.length <= 90 && !OLD_BRAND_TEXT_RE_.test(t.text); })
+          .sort(function (a, b) { return a.y - b.y; })[0];
+        if (top) {
+          if (r.spec.subtitle && r.spec.subtitle.trim() === top.text.trim()) r.spec.subtitle = '';
+          r.spec.title = top.text.replace(/\s+/g, ' ').trim();
+        }
+      }
+    }
+    if (isCreate && r.redraw && r.spec && String(r.spec.type || '').toLowerCase() === 'closing') {
       const original = r.spec.title || '';
       if (!original || original.toLowerCase().indexOf('thank') === -1) {
         r.spec.subtitle = r.spec.subtitle || r.spec.lead || original;
@@ -153,11 +198,18 @@ function rebrandPresentation(presId, ctx, opts) {
       }
     }
     if (r.redraw && r.spec && !isCreate) keepOriginalWording_(r.spec, it);   // V.1_59: a rebrand never rewrites the content
+    // V.1_78: a rebranded cover keeps its label and facts ("66DEGREES & FRONTDOOR", "52 PL/SQL objects in scope") as a line
+    if (r.redraw && r.spec && !isCreate && /^(cover|closing)$/.test(String(r.spec.type || '').toLowerCase())) {
+      const facts = coverFacts_(r.spec, it, /closing/i.test(String(r.spec.type)));
+      if (facts) r.spec.facts = facts;
+    }
     if (r.redraw && r.spec) {
       stripOldBrandText_(r.spec);                               // "#LetsGetYouThere" and other old taglines never come back
       const kind2 = String(r.spec.type || '').toLowerCase();
-      if (kind2 !== 'closing') {
-        if (r.spec.title) r.spec.title = rebrandCase_(r.spec.title);
+      if (kind2 !== 'closing' || r.spec.keepTitle) {
+        // V.1_78: a rebrand's redrawn titles take the same sentence case as its restyled slides ("Phase 1 strategy ready
+        // for review", not "Phase 1 strategy Ready for review")
+        if (r.spec.title) r.spec.title = isCreate ? rebrandCase_(r.spec.title) : rebrandCase_(rebrandSentence_(r.spec.title));
         if (Array.isArray(r.spec.columns)) r.spec.columns = r.spec.columns.map(function (c) { return typeof c === 'string' ? rebrandCase_(c) : c; });
       }
     }
@@ -168,24 +220,6 @@ function rebrandPresentation(presId, ctx, opts) {
     });
   });
 
-  // V.1_59: names the deck writes with capitals inside its sentences keep them when headings go to sentence case
-  if (!isCreate && typeof setRunNames_ === 'function') {
-    const body = [];
-    inv.forEach(function (it2, i) {
-      if (!inPart(i)) return;
-      it2.texts.forEach(function (t) {
-        // V.1_60: only sentences count ("Execute Test Queries: Run one..." starts with a label, not a name)
-        t.text.split(/\n+/).forEach(function (line) {
-          const sent = line.replace(/^[^.:]{2,48}:\s+/, '').trim();
-          if (sent.split(/\s+/).length >= 8 && /[a-z]{3,}\s+[a-z]{3,}/.test(sent)) body.push(sent);
-        });
-      });
-    });
-    try {
-      setRunNames_('', []);
-      if (typeof namesFromNotes_ === 'function' && typeof addRunNames_ === 'function') addRunNames_(namesFromNotes_([{ notes: body.join(' ') }]));
-    } catch (e) {}
-  }
   // ---- Batch: normalize every non-redrawn slide to the 2026 template ----
   progressStage_(ctx, 'brand', 'active', 'Applying colors, fonts and card styles to all slides');
   const requests = [];
@@ -228,7 +262,13 @@ function rebrandPresentation(presId, ctx, opts) {
       };
       visit(page.pageElements);
     }
+    if (!isCreate) r.emptyTiles = emptyIconTiles_(page, it, S);
     const roles = detectRoles(page, it, pageW, pageH, S, skip);
+    if (!isCreate && roles.eyebrow && !IN_GROUP_[roles.eyebrow.el.objectId]) {
+      skip[roles.eyebrow.el.objectId] = true;
+      requests.push({ deleteObject: { objectId: roles.eyebrow.el.objectId } });
+      r.eyebrowText = roles.eyebrow.text;
+    }
     const ref = refs[i];
     // V.1_60: a rebrand adds no decoration the slide did not have (deck 33: blue bars appeared on every card)
     // V.1_61: and the same card style on every slide (deck 34: grey cards on some slides, white outlined cards on others)
@@ -262,6 +302,15 @@ function rebrandPresentation(presId, ctx, opts) {
       if ((b.w * b.h) / (pageW * pageH) < 0.02) { requests.push({ deleteObject: { objectId: el.objectId } }); skip[el.objectId] = true; }
     });
     positionTitle(requests, roles, S);
+    if (!isCreate) {
+      const dy = liftContent_(requests, page, roles, skip, S, pageW, pageH);
+      if (dy) {
+        r.shiftY = dy;
+        Object.keys(r.icons || {}).forEach(function (id) { const c = r.icons[id]; if (c && c.box) c.box = Object.assign({}, c.box, { y: c.box.y - dy }); });
+        (r.emptyTiles || []).forEach(function (t) { t.box = Object.assign({}, t.box, { y: t.box.y - dy }); });
+        roles.cards.forEach(function (c) { c.b = Object.assign({}, c.b, { y: c.b.y - dy }); });
+      }
+    }
     styleCards(requests, page.objectId, roles, S, i, cardStyle);
     stats.normalized++;
   });
@@ -329,6 +378,13 @@ function rebrandPresentation(presId, ctx, opts) {
       return;
     }
 
+    if (r.eyebrowText) {
+      try {
+        const nt = slide.getNotesPage().getSpeakerNotesShape().getText();
+        const had = nt.asString().trim();
+        nt.setText((had ? had + '\n' : '') + 'Slide label: ' + fixAllCaps(r.eyebrowText));
+      } catch (e) { Logger.log('Notes failed: ' + e.message); }
+    }
     Object.keys(r.icons || {}).forEach(function (imgId) {
       if (r.remove_images.indexOf(imgId) !== -1) return;
       try {
@@ -337,9 +393,13 @@ function rebrandPresentation(presId, ctx, opts) {
       } catch (e) { Logger.log('Icon swap failed: ' + e.message); }
     });
 
+    (r.emptyTiles || []).forEach(function (t) {
+      try { if (placeBrandIcon(slide, null, { icon: t.near, near: t.near, box: t.box }, ctx)) stats.icons++; } catch (e) { Logger.log('Tile icon failed: ' + e.message); }
+    });
     r.remove_images.forEach(function (id) {
-      const b = it.bounds[id];
-      if (!b) return;
+      const b0 = it.bounds[id];
+      if (!b0) return;
+      const b = r.shiftY ? Object.assign({}, b0, { y: b0.y - r.shiftY }) : b0;
       const area = (b.w * b.h) / (pageW * pageH);
       // Only fill the gap with a pattern when no remaining text sits on top of it
       if (area > 0.04 && area < 0.7 && !overlapsText(it, r, b)) insertPattern(slide, b, ctx);
@@ -352,7 +412,7 @@ function rebrandPresentation(presId, ctx, opts) {
     // footer text that still touches it moves right (deck 30 slide 14: the mark covered "CUSTOMER · Phase 5")
     const markAt = !isCreate ? (r.oldMark || deckOldMark_(review)) : null;
     const mk = addFooterMark(slide, occupied, pageW, pageH, S, ctx, markAt);
-    if (!isCreate && mk) clearFooterText_(slide, mk, pageH);
+    if (!isCreate && mk) { clearFooterText_(slide, mk, pageH); clearMarkArea_(slide, mk, pageH, S); }
   };
   deckSlides.forEach(function (slide, i) {
     if (!inPart(i)) return;
@@ -453,6 +513,17 @@ function detectRoles(page, it, pageW, pageH, S, skip) {
       }
     });
     roles.subtitle = sub;
+    // V.1_78 (rebrand deck 49 slide 2: "DOCUMENT INTENT" above the title ended up under the moved title): a small label right
+    // above the title, at its left edge, is an eyebrow; the template has none, so it leaves the slide (its words go to the notes)
+    let brow = null;
+    all.forEach(function (el) {
+      if (el === best.el || !el.shape || !el.shape.text) return;
+      const txt = shapeText(el), b = elementBounds(el), size = firstRunSize(el);
+      if (!txt || txt.length > 60 || /\n/.test(txt) || !size || size >= best.size || size > 12 * S) return;
+      if (b.y + b.h > best.b.y + 6 * S || best.b.y - (b.y + b.h) > 30 * S || Math.abs(b.x - best.b.x) > 30 * S || inCard0(b)) return;
+      if (!brow || b.y > brow.b.y) brow = { el: el, b: b, text: txt };
+    });
+    roles.eyebrow = brow;
   }
 
   // Cards: medium-sized filled or outlined boxes
@@ -686,14 +757,23 @@ function planFills_(elements, roles, S, pageArea, pageBg, isCreate) {
 
 // V.1_59: Plus Jakarta Sans is wider than Calibri / Arial, so a text restyled in it can need more lines than its box has
 // and run into the next text. The share of the size the text keeps so it fits its box again (1 = fits as it is).
-function fitFactor_(el, sizeOf, weightOf) {
+function fitFactor_(el, sizeOf, weightOf, avail) {
   if (!el.shape || !el.shape.text || typeof ENGINE === 'undefined' || !ENGINE.kit) return 1;
   const b = elementBounds(el);
   if (!b.w || !b.h || b.w < 20) return 1;
+  // V.1_78 (deck 49 slide 4: "...Cursor-generated SQL scripts." ran into the heading below): the room is the box or, when
+  // the deck's text already ran past its box, the space down to the next text under it; lines are measured with the
+  // paragraph's own line spacing (160% there) and the box's real width
+  const room = Math.max(b.h, avail || 0);
   const paras = [];
-  let cur = { text: '', size: 0, weight: 400 };
+  let cur = { text: '', size: 0, weight: 400, ls: 0 };
   (el.shape.text.textElements || []).forEach(function (te) {
-    if (te.paragraphMarker) { if (cur.text.trim()) paras.push(cur); cur = { text: '', size: 0, weight: 400 }; return; }
+    if (te.paragraphMarker) {
+      const ps = te.paragraphMarker.style || {};
+      if (cur.text.trim()) paras.push(cur);
+      cur = { text: '', size: 0, weight: 400, ls: ps.lineSpacing || 0 };
+      return;
+    }
     if (te.textRun && te.textRun.content) {
       cur.text += te.textRun.content.replace(/\n$/, '');
       if (!cur.size) { cur.size = sizeOf(te) || 10; cur.weight = weightOf(te); }
@@ -707,14 +787,25 @@ function fitFactor_(el, sizeOf, weightOf) {
   const need = function (f) {
     return paras.reduce(function (h, p) {
       const sz = Math.max(6, Math.floor(p.size * f * 2 + 0.001) / 2);
-      const lines = ENGINE.kit.wrap(p.text.replace(/\u000b/g, '\n'), Math.max(10, (b.w - 0.5) / 0.94), 'sans', Math.min(p.weight, 500), sz).length;
-      return h + lines * ENGINE.kit.lineHeight('sans', sz) * 0.92;
+      return h + rebrandLines_(p.text, b.w, Math.min(p.weight, 500), sz) * rebrandLineH_(sz, p.ls);
     }, 0);
   };
-  if (need(1) <= b.h + 3) return 1;
+  if (need(1) <= room + 3) return 1;
   const s0 = paras[0].size || 10;
-  for (let sz = Math.floor(s0 * 2) / 2 - 0.5; sz >= Math.max(6, s0 * 0.75); sz -= 0.5) if (need(sz / s0) <= b.h + 3) return sz / s0;
+  for (let sz = Math.floor(s0 * 2) / 2 - 0.5; sz >= Math.max(6, s0 * 0.75); sz -= 0.5) if (need(sz / s0) <= room + 3) return sz / s0;
   return Math.max(6, s0 * 0.75) / s0;
+}
+
+// V.1_78: lines of a text in a box of width w. A short label keeps the 6% allowance (V.1_61, deck 34: "Manages
+// communications calendar" sat on fewer lines than the measure said); a paragraph is measured at the box's own width
+// (deck 49 slide 4: the allowance read 5 lines as 4 and the text ran into the heading under it)
+function rebrandLines_(text, w, weight, size) {
+  const t = String(text || '').replace(/\u000b/g, '\n');
+  return ENGINE.kit.wrap(t, Math.max(10, (w - 0.5) / (t.length <= 40 ? 0.94 : 1)), 'sans', weight || 400, size).length;
+}
+// The height of one line: the paragraph's own line spacing when it has one (Slides draws 100% at about 1.18 x the size)
+function rebrandLineH_(size, ls) {
+  return ls && ls > 0 ? size * 1.18 * ls / 100 : ENGINE.kit.lineHeight('sans', size) * 0.92;
 }
 
 function normalizeElements(elements, requests, brand, stats, skip, roles, isCreate, S, pageArea, pageBg, plan) {
@@ -731,11 +822,24 @@ function normalizeElements(elements, requests, brand, stats, skip, roles, isCrea
     const sz = function (te) { const st = (te.textRun && te.textRun.style) || {}; return st.fontSize && st.fontSize.magnitude; };
     const wt = function (te) { const st = (te.textRun && te.textRun.style) || {}; const w = (st.weightedFontFamily || {}).weight; return Math.min(w || (st.bold ? 500 : 400), 500); };
     const kinds = {};
-    flatten(elements, []).forEach(function (el) {
-      if (skip[el.objectId] || !el.shape || !el.shape.text || !shapeText(el)) return;
+    const textEls = flatten(elements, []).filter(function (el) { return !skip[el.objectId] && el.shape && el.shape.text && shapeText(el); });
+    // V.1_78: the space down to the next text under a text (same columns), for texts the deck let run past their box
+    const roomBelow = function (el) {
+      const b = elementBounds(el);
+      let next = Infinity;
+      textEls.forEach(function (o) {
+        if (o === el) return;
+        const ob = elementBounds(o);
+        if (ob.y <= b.y + 4 || Math.min(b.x + b.w, ob.x + ob.w) - Math.max(b.x, ob.x) < 8) return;
+        next = Math.min(next, ob.y);
+      });
+      return next === Infinity ? 0 : next - b.y - 3;
+    };
+    textEls.forEach(function (el) {
       if ((roles.title && roles.title.el === el) || (roles.subtitle && roles.subtitle.el === el)) return;
       const first = (el.shape.text.textElements || []).filter(function (t) { return t.textRun && t.textRun.content.trim(); })[0];
-      const f = fitFactor_(el, sz, wt);
+      const below = roomBelow(el), eb0 = elementBounds(el);
+      const f = fitFactor_(el, sz, wt, below > 0 ? Math.min(below, eb0.h + 400) : 0);
       const key = Math.round((sz(first) || 10) * 2) + '|' + Math.round(elementBounds(el).w / 6);
       fits[el.objectId] = f;
       (kinds[key] = kinds[key] || []).push(el.objectId);
@@ -939,6 +1043,38 @@ function positionTitle(requests, roles, S) {
   });
 }
 
+// V.1_78 (rebrand deck 49 slides 2-4: a wide empty band between the moved title and the content): the content under the
+// title moves up as one block so it starts where a created slide's content starts (just under the title / subtitle).
+// Footer pieces, full-page backgrounds and anything beside the title stay; a slide with a panel that runs from the title
+// area down (a side panel) is left as it is. Returns the distance moved (0 when nothing moved).
+function liftContent_(requests, page, roles, skip, S, pageW, pageH) {
+  if (!roles.title || IN_GROUP_[roles.title.el.objectId]) return 0;
+  const tb = roles.title.b, sub = roles.subtitle;
+  const titleBottom = 16.6 * S + Math.min(60 * S, tb.h);
+  const target = sub ? Math.max(49.6 * S, titleBottom - 4 * S) + Math.min(30 * S, sub.b.h) + 14 * S : Math.max(62 * S, titleBottom + 16 * S);
+  const own = function (el) { return el === roles.title.el || (sub && el === sub.el) || (roles.eyebrow && el === roles.eyebrow.el); };
+  const ownIn = function (el) { return own(el) || (el.elementGroup && flatten(el.elementGroup.children, []).some(own)); };
+  const content = [];
+  let blocked = false;
+  (page.pageElements || []).forEach(function (el) {
+    if (skip[el.objectId] || ownIn(el)) { if (!skip[el.objectId] && !own(el) && el.elementGroup) blocked = true; return; }
+    const b = elementBounds(el);
+    if (!b.w || !b.h || b.w * b.h > pageW * pageH * 0.8) return;               // backgrounds
+    if (b.y > pageH * 0.86) return;                                            // footer
+    if (b.y < tb.y + tb.h - 2) { if (b.y + b.h > target + 10 * S && b.x < pageW * 0.8) blocked = true; return; }   // beside / around the title
+    content.push({ el: el, b: b });
+  });
+  if (blocked || !content.length) return 0;
+  const top = Math.min.apply(null, content.map(function (c) { return c.b.y; }));
+  const dy = top - target;
+  if (dy < 20 * S) return 0;
+  content.forEach(function (c) {
+    requests.push({ updatePageElementTransform: { objectId: c.el.objectId, applyMode: 'RELATIVE',
+      transform: { scaleX: 1, scaleY: 1, shearX: 0, shearY: 0, translateX: 0, translateY: -dy * EMU, unit: 'EMU' } } });
+  });
+  return dy;
+}
+
 // Cards in the style of the slide's template reference:
 //   panel    (66D_UI_CARD_001) flat #F3F2F0 (neutral tone), no border, no bar — the template default
 //   elevated (66D_UI_CARD_003) 66° White card with a thin #DBDDE1 border, on a #F3F2F0 slide
@@ -1080,8 +1216,14 @@ function buildInventory(page, index, pageW, pageH) {
     it.elements.push({ id: el.objectId, x: b.x, y: b.y, w: b.w, h: b.h });
     if (el.image) {
       it.imageIds.push(el.objectId);
-      const small = b.w <= 70 * pageW / 720 && b.h <= 70 * pageW / 720;
-      (small ? it.icons : it.photos).push({ id: el.objectId, x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h) });
+      const u = pageW / 720;
+      const small = b.w <= 70 * u && b.h <= 70 * u;
+      // V.1_78 (rebrand deck 49 slide 7: the red icons of "Out of scope" were removed): a low wide picture (an icon drawn
+      // at the left of a transparent strip) is an icon too; its icon is the square at its left end
+      const strip = !small && b.h >= 8 * u && b.h <= 30 * u && b.w <= 200 * u && b.w / b.h >= 3;
+      const rec = { id: el.objectId, x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h) };
+      if (strip) rec.box = { x: b.x, y: b.y, w: b.h, h: b.h };
+      (small || strip ? it.icons : it.photos).push(rec);
     }
     const txt = shapeText(el);
     if (txt) {
@@ -1148,7 +1290,7 @@ function reviewSlidesWithGemini(presId, slides, inv, ctx, opts) {
   * Every text in a redraw_spec is copied EXACTLY as the slide shows it (same words, numbers and dates): never rewrite, shorten, translate or add text.
   * Never ask to redraw a content slide only because it is dense; redraw only covers, agendas, dividers, charts and closing slides.
   * A title / cover slide (normally the first): redraw:true with {"type":"cover","title","subtitle"}.
-  * Only a real thank-you / contact / closing slide: redraw:true with {"type":"closing","title":"Thank You!","subtitle":<its message>}.`;
+  * Only a real thank-you / contact / closing slide: redraw:true with {"type":"closing","title":<its own title, exactly as written>,"subtitle":<its message>}.`;
 
   parts.unshift({
     text: `You are the brand reviewer for ${ctx.brand.name}. Each slide image is followed by its inventory (element IDs, positions in points).
@@ -1192,7 +1334,9 @@ function placeBrandIcon(slide, el, choice, ctx) {
   if (!choice) return false;
   if (typeof choice === 'string') choice = { icon: choice };
   const name = String(choice.icon || '');
-  const b = { left: el.getLeft(), top: el.getTop(), width: el.getWidth(), height: el.getHeight() };
+  const b = choice.box ? { left: choice.box.x, top: choice.box.y, width: choice.box.w, height: choice.box.h }
+    : { left: el.getLeft(), top: el.getTop(), width: el.getWidth(), height: el.getHeight() };
+  const drop = function () { if (el) el.remove(); };
   const side = Math.max(b.width, b.height);
   const sq = { left: b.left + (b.width - side) / 2, top: b.top + (b.height - side) / 2, size: side };
   const order = CONFIG.iconOrder || ['library', 'drive', 'material'];
@@ -1200,10 +1344,10 @@ function placeBrandIcon(slide, el, choice, ctx) {
   for (let k = 0; k < order.length; k++) {
     const step = order[k];
     if (step === 'library' && ctx.lib) {
-      const tag = libraryIconByName(ctx.lib, name) || pickLibraryIcon(ctx.lib, [name, choice.material].filter(Boolean).join(' '));
+      const tag = libraryIconByName(ctx.lib, name) || pickLibraryIcon(ctx.lib, [name, choice.material, choice.near].filter(Boolean).join(' '));
       if (tag && insertLibraryIcon(slide, tag, sq.left, sq.top, sq.size, false, ctx)) {
         ctx.libraryIconsPlaced = (ctx.libraryIconsPlaced || 0) + 1;
-        el.remove();
+        drop();
         return true;
       }
     } else if (step === 'drive') {
@@ -1217,7 +1361,7 @@ function placeBrandIcon(slide, el, choice, ctx) {
       }
       if (blob) {
         slide.insertImage(blob, sq.left, sq.top, sq.size, sq.size);
-        el.remove();
+        drop();
         return true;
       }
     } else if (step === 'material') {
@@ -1228,11 +1372,46 @@ function placeBrandIcon(slide, el, choice, ctx) {
       ringEl.getFill().setTransparent();
       ringEl.getBorder().setWeight(Math.max(1, sq.size * 0.08));
       ringEl.getBorder().getLineFill().setSolidFill(IPAY.blue);
-      el.remove();
+      drop();
       return true;
     }
   }
   return false;
+}
+
+// V.1_78: the words an icon stands for - the text right of it on its line, else the nearest text under it in its column
+function iconLabel_(it, b) {
+  let best = null, bd = Infinity;
+  ((it && it.texts) || []).forEach(function (t) {
+    const tb = (it.bounds && it.bounds[t.id]) || { x: t.x, y: t.y, w: 0, h: 0 };
+    const right = tb.x >= b.x + b.w - 4 && tb.x - (b.x + b.w) < 60 && Math.abs((tb.y + Math.min(tb.h, 20) / 2) - (b.y + b.h / 2)) < 16;
+    const below = tb.y >= b.y + b.h - 4 && tb.y - (b.y + b.h) < 50 && tb.x > b.x - 30 && tb.x < b.x + b.w + 30;
+    if (!right && !below) return;
+    const d = right ? tb.x - b.x : 100 + tb.y - b.y;
+    if (d < bd) { bd = d; best = t.text; }
+  });
+  return best ? best.split(/\n/)[0].slice(0, 60) : '';
+}
+
+// V.1_78 (rebrand deck 49 slide 2: the "Primary objective" card showed an empty icon tile next to a tile with its icon):
+// small square tiles without text or picture, the same size as a tile that holds an icon, get a brand icon
+function emptyIconTiles_(page, it, S) {
+  const tiles = [];
+  flatten(page.pageElements || [], []).forEach(function (el) {
+    if (!el.shape || shapeText(el) || !fillHex_((el.shape.shapeProperties || {}).shapeBackgroundFill)) return;
+    const b = elementBounds(el);
+    if (b.w < 14 * S || b.w > 46 * S || Math.abs(b.w - b.h) > 4 * S) return;
+    tiles.push(b);
+  });
+  const holds = function (b) { return it.icons.some(function (ic) { const cx = ic.x + ic.w / 2, cy = ic.y + ic.h / 2; return cx > b.x && cx < b.x + b.w && cy > b.y && cy < b.y + b.h; }); };
+  const full = tiles.filter(holds);
+  if (!full.length) return [];
+  return tiles.filter(function (b) {
+    return !holds(b) && full.some(function (f) { return Math.abs(f.w - b.w) < 3 * S && Math.abs(f.h - b.h) < 3 * S; });
+  }).map(function (b) {
+    const pad = b.w * 0.2;
+    return { box: { x: b.x + pad, y: b.y + pad, w: b.w - 2 * pad, h: b.h - 2 * pad }, near: iconLabel_(it, b) };
+  });
 }
 
 function insertPattern(slide, b, ctx) {
@@ -1338,10 +1517,13 @@ function rebrandLine_(line) {
     const words = str.split(/\s+/).filter(Boolean);
     const caps = words.filter(function (w) { return /^[A-Z][a-z]/.test(w); }).length;
     const plain = words.filter(function (w) { return /^[A-Za-z][a-z]/.test(w); }).length;
-    if (plain < 2 || caps < Math.max(2, plain * 0.5) || words.length > 14) return line;   // already sentence case
+    // V.1_78 (rebrand deck 49 slide 8: "API Request", "DML Validation" next to "Payload capture"): a short label whose
+    // words are all capitalised or acronyms ("API Request", "UI & Front-End") is a Title Case label too
+    const allCaps = words.length >= 2 && words.length <= 6 && caps >= 1 && words.every(function (w) { return /^[A-Z]/.test(w) || !/[A-Za-z]/.test(w); });
+    if (!allCaps && (plain < 2 || caps < Math.max(2, plain * 0.5) || words.length > 14)) return pre + afterFigure_(pre, str);   // already sentence case
     out = str.split(/(:\s+)/).map(function (part, k) {
       if (/^:\s+$/.test(part)) return part;
-      const sc = typeof sentenceCase_ === 'function' ? sentenceCase_(part, 2) : rebrandCase_(part);
+      const sc = typeof sentenceCase_ === 'function' ? sentenceCase_(part, allCaps ? 1 : 2) : rebrandCase_(part);
       return k === 0 ? sc : sc.replace(/^./, function (c) { return c.toUpperCase(); });
     }).join('');
     if (typeof keepNames_ === 'function') out = keepNames_(out);
@@ -1350,9 +1532,18 @@ function rebrandLine_(line) {
   // "Adoption lead · Monthly")
   out = keepProducts_(out).replace(/^([^A-Za-z]*)([a-z])/, function (x, a, c) { return a + c.toUpperCase(); })
     .replace(/(:\s+|\s[·|–—]\s+)([a-z])/g, function (x, a, c) { return a + c.toUpperCase(); });
-  return pre + sameSpacing_(str, out);
+  return pre + afterFigure_(pre, sameSpacing_(str, out));
 }
 // The casing of `cased` laid onto `orig` word by word, so spacing and length stay exactly as written
+// V.1_78 ("100% Test execution"): after a figure the first word is an everyday word ("100% test execution"); list
+// numbers ("1. ", "(a) ") and names keep the capital
+function afterFigure_(pre, str) {
+  if (!/\d\s*(%|x|\+|k|m)?\s+$/i.test(pre) || /^\s*(\d+[.)]|\(\w\))\s+$/.test(pre)) return str;
+  return str.replace(/^([A-Z])([a-z]+)\b/, function (w, c, rest) { return !isRunName_(w) && !/^(Google|Gemini|Oracle|Karate|Cursor|Swagger|Looker)$/.test(w) ? c.toLowerCase() + rest : w; });
+}
+function isRunName_(w) {
+  try { return typeof keepNames_ === 'function' && keepNames_(w.toLowerCase()) === w; } catch (e) { return false; }
+}
 function sameSpacing_(orig, cased) {
   const words = cased.split(/\s+/).filter(Boolean);
   const parts = orig.split(/(\s+)/);
@@ -1395,6 +1586,26 @@ function originalDate_(it) {
     if (m) return m[0].trim();
   }
   return '';
+}
+
+// V.1_78: the short texts of a cover that are not its title, subtitle or date (a label above the title, the facts under it),
+// in reading order, as one line "A · B · C"; '' when there are none
+function coverFacts_(spec, it, datesToo) {
+  const norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9%$]+/g, ' ').trim(); };
+  const used = norm([spec.title, spec.subtitle, spec.lead].join(' '));
+  const seen = {};
+  const list = ((it && it.texts) || []).slice().sort(function (a, b) { return Math.abs(a.y - b.y) > 6 ? a.y - b.y : a.x - b.x; })
+    .map(function (t) { return t.text.replace(/\s+/g, ' ').trim(); })
+    .filter(function (t) {
+      const n = norm(t);
+      if (!n || t.length > 70 || n.length < 2 || seen[n]) return false;
+      if (used.indexOf(n) !== -1 || (!datesToo && DATE_RE_.test(t)) || OLD_BRAND_TEXT_RE_.test(t)) return false;
+      if (/^(presenter name|your name|click to|lorem ipsum|confidential|page \d+|\d+)$/i.test(t)) return false;
+      seen[n] = true;
+      return true;
+    })
+    .map(function (t) { return /[a-z]/.test(t) ? t : fixAllCaps(t); });
+  return list.slice(0, 5).join(' · ');
 }
 
 // A slide redrawn in a rebrand shows the slide's own words: a text the reviewer retyped differently is put back to the
@@ -1457,6 +1668,33 @@ function clearFooterText_(slide, mark, pageH) {
   } catch (e) {}
 }
 
+// V.1_78 (rebrand deck 49 slides 5-6: the 66 mark sat on the bottom of the left card): a card or panel that reaches down
+// over the mark ends just above it, when the texts inside it end higher (nothing is cut); texts are never resized here
+function clearMarkArea_(slide, mark, pageH, S) {
+  const top = mark.y - 6 * S, right = mark.x + mark.w + 4 * S;
+  let els = [];
+  try { els = slide.getPageElements(); } catch (e) { return; }
+  const boxes = els.map(function (el) {
+    try {
+      const t = String(el.getPageElementType());
+      let txt = '';
+      if (t === 'SHAPE') txt = el.asShape().getText().asString().trim();
+      return { el: el, t: t, txt: txt, x: el.getLeft(), y: el.getTop(), w: el.getWidth(), h: el.getHeight() };
+    } catch (e) { return null; }
+  }).filter(Boolean);
+  boxes.forEach(function (b) {
+    try {
+      if (b.t !== 'SHAPE' || b.txt || (b.el.getTitle && b.el.getTitle() === '66 Mark')) return;
+      if (b.y > pageH * 0.7 || b.y + b.h <= top || b.x >= right || b.x + b.w <= mark.x) return;
+      if (b.y + b.h > pageH - 2 || top - b.y < 40 * S) return;                     // full-page or footer bands stay
+      const inside = boxes.filter(function (o) { return o !== b && o.txt && o.x >= b.x - 2 && o.x < b.x + b.w && o.y >= b.y - 2 && o.y < b.y + b.h; });
+      const textEnd = inside.reduce(function (m, o) { return Math.max(m, o.y + o.h); }, b.y);
+      if (textEnd > top - 4 * S) return;
+      b.el.setHeight(top - b.y);
+    } catch (e) { Logger.log('Mark clearance failed: ' + e.message); }
+  });
+}
+
 // After a rebrand: texts whose words run into each other, text that cannot be read on what is behind it, and shapes
 // that sit outside the slide. Returns readable findings for the result message (not blocking).
 function rebrandQa_(presId, start, end) {
@@ -1479,16 +1717,18 @@ function rebrandQa_(presId, start, end) {
         if (f && b.w * b.h < pageW * pageH * 0.9) fills.push({ b: b, hex: f });
         const txt = shapeText(el);
         if (txt) {
-          let color = null, size = 10;
+          let color = null, size = 10, ls = 0;
           (el.shape.text.textElements || []).some(function (te) {
+            if (te.paragraphMarker && te.paragraphMarker.style && te.paragraphMarker.style.lineSpacing) ls = te.paragraphMarker.style.lineSpacing;
             const st = te.textRun && te.textRun.style;
             if (!st || !te.textRun.content.trim()) return false;
             color = colorHex_(st.foregroundColor && st.foregroundColor.opaqueColor); size = (st.fontSize && st.fontSize.magnitude) || 10;
             return true;
           });
           const kit = typeof ENGINE !== 'undefined' && ENGINE.kit;
-          const lines = kit ? kit.wrap(txt, Math.max(10, (b.w - 0.5) / 0.94), 'sans', 400, size).length : 1;   // same measure as the fit
-          const h = Math.min(b.h + 400, lines * size * 1.25);
+          // V.1_78: same measure as the fit (box width, the paragraph's line spacing), paragraph by paragraph
+          const lines = kit ? txt.split(/\n+/).reduce(function (n, para) { return n + (para.trim() ? rebrandLines_(para, b.w, 400, size) : 0); }, 0) : 1;
+          const h = Math.min(b.h + 400, kit ? lines * rebrandLineH_(size, ls) : lines * size * 1.25);
           const anchor = (el.shape.shapeProperties || {}).contentAlignment;
           const y = anchor === 'MIDDLE' ? b.y + (b.h - h) / 2 : anchor === 'BOTTOM' ? b.y + b.h - h : b.y;
           // V.1_60: a one-line text only covers its words (two boxes overlapping with room between their words is fine)

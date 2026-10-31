@@ -25,8 +25,8 @@ test("version label is V.1_74 or later; Finish.gs is pushed after Gate.gs", () =
   assert.match(read("src/Code.gs"), /AGENT_VERSION_\s*=\s*'66° Deck Agent V\.1_(7[4-9]|[8-9]\d)'/);
   const order = JSON.parse(read(".clasp.json")).filePushOrder;
   assert.ok(order.indexOf("Finish.gs") > order.indexOf("Gate.gs"));
-  assert.match(read("src/Code.gs"), /deckFinishCheck_\(plan\.slides, ctx\);[^\n]*\n\s*finalizeNotes_\(plan, sources, ctx\);/);
-  assert.match(read("src/Code.gs"), /deckFinishCheck_\(plan\.slides, ctx\);[^\n]*\n\s*finalizeNotes_\(plan, st\.sources, ctx\);/);
+  assert.match(read("src/Code.gs"), /deckFinishCheck_\(plan\.slides, ctx\);[^\n]*\n(\s*deckQuality_\([^\n]*\n)?\s*finalizeNotes_\(plan, sources, ctx\);/);
+  assert.match(read("src/Code.gs"), /deckFinishCheck_\(plan\.slides, ctx\);[^\n]*\n(\s*deckQuality_\([^\n]*\n)?\s*finalizeNotes_\(plan, st\.sources, ctx\);/);
 });
 
 // ---------------- step 5

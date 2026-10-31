@@ -449,8 +449,11 @@
     var bw = Math.abs(c) < 0.3 ? (wide || w) : w;
     var hh = cap_(null, 0, 0, bw, title, body);
     var x, y, align;
-    if (c > 0.3) { x = px; align = 'left'; y = py - hh / 2; }
-    else if (c < -0.3) { x = px - bw; align = 'right'; y = py - hh / 2; }
+    // V.1_78 (deck 49 Proposal 26: "Git version control" touching ring segment 04): a label beside a diagonal segment moves
+    // away from the ring, up for an upper segment and down for a lower one
+    var shift = Math.abs(sn) > 0.35 ? (sn > 0 ? hh * 0.3 : -hh * 0.3) : 0;
+    if (c > 0.3) { x = px + 4; align = 'left'; y = py - hh / 2 + shift; }
+    else if (c < -0.3) { x = px - bw - 4; align = 'right'; y = py - hh / 2 + shift; }
     else { x = px - bw / 2; align = 'center'; y = sn < 0 ? py - hh : py; }
     cap_(els, x, y, bw, title, body, align);
     return { x: x, y: y, w: bw, h: hh };
