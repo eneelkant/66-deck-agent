@@ -146,7 +146,7 @@ test("B1. figures are never cut at a decimal point or after 'U.S.' (Kroger 5 '6B
   const ctx = ctxFor(KROGER);
   const sp = { type: "stats", title: "Kroger operational scale", items: [{ value: "$147.6B", label: "Total annual sales", text: "Kroger sold $147.6B last year." }, { value: "2,700+", label: "Stores", text: "x" }, { value: "35", label: "States", text: "y" }] };
   const code = read("src/Code.gs");
-  assert.match(code, /\(\?:k\|m\|mn\|b\|bn\|million\|billion\)\?\(\?!\[\\w\.\]\)/);
+  assert.match(code, /\(\?:k\|m\|mn\|b\|bn\|t\|tn\|million\|billion\|trillion\)\?\(\?!\[\\w\.\]\)/);   // (V.1_80: and T)
   assert.match(code, /if \(!pricingHere && !PRICE_CTX\.test\(x\)\) return x;/);
   assert.ok(sp && ctx);
 });
@@ -238,7 +238,8 @@ test("B9. no fake curve; tables as rows keep their headings; unverified shares l
   assert.ok(!texts(o).includes("Value") && !texts(o).includes("Time"), JSON.stringify(texts(o)));
   const sp = { type: "table", title: "Slot reservations vs on-demand", columns: ["Factor", "Slot reservations", "On-demand"], rows: [["Cost", "Predictable baseline spend", "Unbounded scan charges"], ["Scaling", "Autoscaling slots", "Shared pool"], ["Isolation", "Dedicated pools", "No isolation"]] };
   G.solutionRescue_(sp);
-  assert.match(JSON.stringify(sp), /Slot reservations: predictable baseline spend · On-demand: unbounded scan charges/);
+  // (V.1_80: a 3+ column table is read by its columns - each option keeps its own points)
+  assert.match(JSON.stringify(sp), /"title":"Slot reservations","points":\["Cost: predictable baseline spend","Scaling: autoscaling slots"/);
   const ctx = { userPrompt: "x", brief: { figures: [] } };
   const s2 = [{ type: "cards", title: "Path to lower inventory", items: [{ title: "a", text: "Planners hit 98.5% service levels while cutting buffers. Overrides fall." }, { title: "b", text: "c" }] }];
   G.flagUnverifiedFigures_(s2, { research: [{ text: "x".repeat(300) }] }, [], ctx);

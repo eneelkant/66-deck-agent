@@ -525,7 +525,15 @@ function solutionRescue_(sp) {
   // V.1_79 (deck 50 Solution 29: "Predictable baseline spend · Unbounded scan charges" - which side was which was lost): each
   // value keeps its column heading ("Slot reservations: predictable baseline spend")
   const heads = Array.isArray(sp.columns) ? sp.columns.map(function (c) { return typeof c === 'string' ? c.trim() : str(c); }) : [];
-  (Array.isArray(sp.columns) && Array.isArray(sp.rows) ? sp.rows : []).forEach(function (r) {
+  // V.1_79b (deck 51 Tailspin 29: a 4-column comparison drawn as "Tier 2 ...: ... · Tier 3 ...: ..." text blocks): a table of
+  // 3+ columns is read by its columns - each option a group, its points "Row label: value" - so each side stays together
+  const tRows = Array.isArray(sp.rows) ? sp.rows.filter(Array.isArray) : [];
+  if (heads.length >= 3 && tRows.length >= 2) {
+    heads.slice(1).forEach(function (h, j) {
+      addGroup(h, tRows.map(function (r) { const v = str(r[j + 1]); if (!v) return ''; const l = str(r[0]); return l ? l + ': ' + (typeof lowerFirst_ === 'function' ? lowerFirst_(v) : v) : v; }).filter(Boolean));
+    });
+  }
+  (Array.isArray(sp.columns) && Array.isArray(sp.rows) && !(heads.length >= 3 && tRows.length >= 2) ? sp.rows : []).forEach(function (r) {
     const cells = Array.isArray(r) ? r : (r && r.cells) || [];
     const c0 = str(cells[0]);
     const rest = cells.slice(1).map(function (v, j) { const t = str(v); if (!t) return ''; const h = heads[j + 1]; return h && heads.length > 2 ? h + ': ' + (typeof lowerFirst_ === 'function' ? lowerFirst_(t) : t) : t; }).filter(Boolean);

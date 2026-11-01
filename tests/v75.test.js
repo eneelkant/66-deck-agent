@@ -32,7 +32,7 @@ test("A1. General: an SLA named in another slide's title is not the KPI slide; t
   assert.equal(G.onceTopicOfEntry_({ title: "Multi-region failover for 99.9% pipeline SLA", type: "diagram" }), "");
   assert.equal(G.onceTopicOfEntry_({ title: "Performance SLAs for peak holiday traffic", type: "cards" }), "kpi");
   assert.equal(G.onceTopicOfEntry_({ title: "Core modernization key performance indicators", type: "stats" }), "kpi");
-  assert.match(read("src/Code.gs"), /briefTargets_\(ctx\)\.length >= 2 && askedOnce\.indexOf\('kpi'\) === -1\) askedOnce\.push\('kpi'\)/);
+  assert.match(read("src/Code.gs"), /briefTargets_\(ctx\)\.length >= 2\)[^\n]*askedOnce\.indexOf\('kpi'\) === -1\) askedOnce\.push\('kpi'\)/);   // (V.1_80: or the request's own targets)
 });
 
 test("A2. Proposal 14: the notes keep the line that says which figures were left out and why", () => {

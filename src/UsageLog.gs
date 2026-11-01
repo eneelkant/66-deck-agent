@@ -35,7 +35,7 @@ function recordSlide_(spec, out, number) {
       design: String((out && out.drawnWith) || ''),
       title: String((spec && (spec.title || spec.statement)) || '').slice(0, 300),
       issues: (qa.issues || []).join(','),
-      fixed: (qa.fixed || []).join(','),
+      fixed: (qa.fixed || []).concat((spec && spec.preFixed) || []).join(','),   // V.1_79b: the final checks' fixes too
       fixed_from: String(qa.from || ''),
       spec_json: json
     });

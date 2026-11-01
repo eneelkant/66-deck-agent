@@ -163,6 +163,9 @@ var ENGINE = (function () {
   function text(els, x, y, w, h, str, spec) {
     str = String(str == null ? '' : str).trim();
     if (!str) return { height: 0, size: spec.max, width: 0 };
+    // V.1_79b (deck 51 Tailspin 38: team pills at 6 pt): no text under 7 pt, in any design
+    // (a text that cannot fit at 7 pt may still go to its design's own minimum: never cut)
+    if (spec.max != null && spec.max < 7) spec = Object.assign({}, spec, { max: 7, min: spec.min != null ? spec.min : spec.max });
     var raw = str;
     // V.1_67: one typeface - figures and step numbers are Plus Jakarta Sans Medium (measured as drawn)
     if (spec.font === 'mono') spec = Object.assign({}, spec, { font: 'sans', weight: 500 });
@@ -4370,7 +4373,10 @@ var ENGINE = (function () {
       var wordy = cats.reduce(function (a, c) { return a + c.split(/\s+/).length; }, 0) / Math.max(1, cats.length) >= 2;
       if (cats.length >= 3 && cats.length <= 6 && !timeLike && wordy && vals.length === cats.length && vals.every(function (v) { return isFinite(Number(v)); })) {
         var unit = String(s.chart.unit || '').trim();
-        s = Object.assign({}, s, { type: 'stats', items: cats.map(function (c, k) { return { value: String(vals[k]) + (unit === '%' ? '%' : unit ? ' ' + unit : ''), label: capFirst_(c), text: '' }; }),
+        // V.1_79b (deck 51 United 6, 27: "9% Tenure reduction", "11% General staff AHT"): research figures say what they are
+        // (the label keeps its words; the tile's text line says where the figure comes from)
+        var benchTxt = /\b(target|kpi|goal)/i.test(String(s.title || '')) ? '' : 'Industry benchmark';
+        s = Object.assign({}, s, { type: 'stats', items: cats.map(function (c, k) { return { value: String(vals[k]) + (unit === '%' ? '%' : unit ? ' ' + unit : ''), label: capFirst_(c), text: /\b(benchmark|industry|study|survey)\b/i.test(c) ? '' : benchTxt }; }),
           takeaway: s.takeaway || (s.insight && (s.insight.text || '')) || '' });
         delete s.chart; delete s.insight; s.design = ''; s.reference = statsRef_(lib, s.items.length); t = 'stats'; log.push('unrelated-bars-as-tiles');
       }
@@ -4488,7 +4494,10 @@ var ENGINE = (function () {
         if (!p || typeof p !== 'object') return p;
         var h = String(p.title || p.label || '').trim().replace(/[.:]+$/, ''), b = String(p.text || p.description || '').trim();
         if (!b) return h;
-        return (h ? h + ': ' : '') + (h ? b.charAt(0).toLowerCase() + b.slice(1) : b);
+        // (V.1_79b, deck 51: "bigQuery", "vertex AI Agent Assist"): a product name keeps its capitals after the colon
+        var low = b.charAt(0).toLowerCase() + b.slice(1);
+        var keepCap = /^[A-Z][A-Za-z]*[A-Z]|^[A-Z]{2}/.test(b) || (typeof productCase_ === 'function' && productCase_(low) !== low);
+        return (h ? h + ': ' : '') + (h && !keepCap ? low : b);
       }) });
       log.push('points-with-text');
     }

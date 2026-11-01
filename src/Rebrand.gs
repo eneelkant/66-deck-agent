@@ -334,9 +334,10 @@ function rebrandPresentation(presId, ctx, opts) {
         r.shiftY = dy;
         // (only what moved: the content under the title)
         const lineY = roles.title ? roles.title.b.y + roles.title.b.h - 2 : 0;
-        Object.keys(r.icons || {}).forEach(function (id) { const c = r.icons[id]; if (c && c.box && c.box.y >= lineY && c.box.y <= pageH * 0.86) c.box = Object.assign({}, c.box, { y: c.box.y - dy }); });
-        (r.emptyTiles || []).forEach(function (t) { if (t.box.y >= lineY) t.box = Object.assign({}, t.box, { y: t.box.y - dy }); });
-        roles.cards.forEach(function (c) { c.b = Object.assign({}, c.b, { y: c.b.y - dy }); });
+        const sq = roles.squeeze || function () { return 0; };
+        Object.keys(r.icons || {}).forEach(function (id) { const c = r.icons[id]; if (c && c.box && c.box.y >= lineY && c.box.y <= pageH * 0.86) c.box = Object.assign({}, c.box, { y: c.box.y - dy - sq(c.box.y) }); });
+        (r.emptyTiles || []).forEach(function (t) { if (t.box.y >= lineY) t.box = Object.assign({}, t.box, { y: t.box.y - dy - sq(t.box.y) }); });
+        roles.cards.forEach(function (c) { c.b = Object.assign({}, c.b, { y: c.b.y - dy - sq(c.b.y) }); });
       }
     }
     styleCards(requests, page.objectId, roles, S, i, cardStyle);
@@ -1098,14 +1099,34 @@ function liftContent_(requests, page, roles, skip, S, pageW, pageH) {
   // of the space under the title, not at its top
   const bottom = Math.max.apply(null, content.map(function (c) { return c.b.y + c.b.h; }));
   const avail = pageH * 0.86 - target, blockH = bottom - top;
-  const newTop = blockH < avail * 0.62 ? target + (avail - blockH) * 0.2 : target;
-  const dy = top - newTop;
-  if (dy < 20 * S) return 0;
+  const newTop = blockH < avail * 0.78 ? target + (avail - blockH) * 0.3 : target;   // (V.1_79b: slides 2 and 7 too)
+  let dy = top - newTop;
+  if (dy < 20 * S) dy = 0;
+  // V.1_79b (rebrand deck 51 slide 9: the last card ran into the 66 mark): content that still reaches the footer area
+  // closes up the gaps between its rows (sizes unchanged), never more than the gaps it has
+  const limit = 370 * S;
+  const over = bottom - dy - limit;
+  let squeeze = function () { return 0; };
+  if (over > 1) {
+    const ys = content.map(function (c) { return c.b; }).sort(function (a, b) { return a.y - b.y; });
+    const gaps = [];
+    let reach = ys[0].y + ys[0].h;
+    ys.slice(1).forEach(function (b) { if (b.y > reach + 1) gaps.push({ at: b.y, size: b.y - reach }); reach = Math.max(reach, b.y + b.h); });
+    const total = gaps.reduce(function (a, g) { return a + g.size; }, 0);
+    if (total > 0) {
+      const k = Math.min(1, over / (total * 0.7));
+      squeeze = function (y) { return gaps.filter(function (g) { return g.at <= y + 0.5; }).reduce(function (a, g) { return a + g.size * 0.7 * k; }, 0); };
+    }
+  }
+  if (!dy && !squeeze(pageH)) return 0;
   content.forEach(function (c) {
+    const up = dy + squeeze(c.b.y);
+    if (up < 0.5) return;
     requests.push({ updatePageElementTransform: { objectId: c.el.objectId, applyMode: 'RELATIVE',
-      transform: { scaleX: 1, scaleY: 1, shearX: 0, shearY: 0, translateX: 0, translateY: -dy * EMU, unit: 'EMU' } } });
+      transform: { scaleX: 1, scaleY: 1, shearX: 0, shearY: 0, translateX: 0, translateY: -up * EMU, unit: 'EMU' } } });
   });
-  return dy;
+  roles.squeeze = squeeze;
+  return dy || 0.001;
 }
 
 // Cards in the style of the slide's template reference:
@@ -1665,7 +1686,8 @@ function coverFacts_(spec, it, datesToo) {
       seen[n] = true;
       return true;
     })
-    .map(function (t) { return /[a-z]/.test(t) ? t : capsLabel_(t); });
+    // (V.1_79b: the facts in sentence case like the rest of the deck - "QA strategy & delivery"; names keep capitals)
+    .map(function (t) { return /[a-z]/.test(t) ? rebrandCase_(rebrandSentence_(t)) : capsLabel_(t); });
   return factsLines_(list.slice(0, 5));
 }
 
@@ -1803,7 +1825,9 @@ function rebrandQa_(presId, start, end) {
           });
           const kit = typeof ENGINE !== 'undefined' && ENGINE.kit;
           // V.1_78: same measure as the fit (box width, the paragraph's line spacing), paragraph by paragraph
-          const lines = kit ? txt.split(/\n+/).reduce(function (n, para) { return n + (para.trim() ? rebrandLines_(para, b.w, 400, size) : 0); }, 0) : 1;
+          // (V.1_79b, rebrand deck 51 slide 4: a false "overlap" - Slides set the paragraph on 4 lines, the measure said 5): the
+          // check reports only clear overlaps, so it measures with Slides' slightly tighter wrapping
+          const lines = kit ? txt.split(/\n+/).reduce(function (n, para) { return n + (para.trim() ? ENGINE.kit.wrap(para, Math.max(10, (b.w - 0.5) / 0.95), 'sans', 400, size).length : 0); }, 0) : 1;
           const h = Math.min(b.h + 400, kit ? lines * rebrandLineH_(size, ls) : lines * size * 1.25);
           const anchor = (el.shape.shapeProperties || {}).contentAlignment;
           const y = anchor === 'MIDDLE' ? b.y + (b.h - h) / 2 : anchor === 'BOTTOM' ? b.y + b.h - h : b.y;

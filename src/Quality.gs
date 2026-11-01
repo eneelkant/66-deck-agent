@@ -192,7 +192,7 @@ var REVIEW_SCHEMA_ = {
   required: ['fixes']
 };
 // a cheap first look: which texts may break a rule (the others are not sent)
-var REVIEW_HINT_RE_ = /\b(guarantee\w*|zero[- ]?(data|message|record|downtime|loss|defects?|risk|impact|errors?|outage)|eliminat\w+|never (fail|lose|go down)|always (on|available)|100\s?%|#\s?1\b|best[- ]in[- ]class|industry[- ]leading|world[- ]class|unmatched|unrivall?ed|leading provider|number one|fail[- ]?proof|bullet[- ]?proof|risk[- ]free|seamless\w*|instant\w*|perfect\w*|no risk|no downtime|completely (secure|safe|eliminat))\b/i;
+var REVIEW_HINT_RE_ = /\b(guarantee\w*|zero[- ]?(data|message|record|downtime|loss|defects?|risk|impact|errors?|outage)|eliminat\w+|never (fail|lose|go down)|always (on|available)|100\s?%|#\s?1\b|best[- ]in[- ]class|industry[- ]leading|world[- ]class|unmatched|unrivall?ed|leading provider|number one|fail[- ]?proof|bullet[- ]?proof|risk[- ]free|seamless\w*|instant\w*|perfect\w*|no risk|no downtime|completely (secure|safe|eliminat)|no data loss|rpo\s*=\s*0|rto\s*=\s*0)\b/i;   // V.1_79b
 function reviewCandidate_(t) {
   const x = String(t || '');
   return REVIEW_HINT_RE_.test(x) || /[^\x00-\x7F–—‘’“”…°×•®™é]/.test(x) ||

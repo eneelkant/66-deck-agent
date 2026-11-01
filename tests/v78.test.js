@@ -109,7 +109,8 @@ test("C1. a rebranded cover keeps its label and facts as one line; dates and the
     { text: "52 PL/SQL Objects in Scope", x: 60, y: 366 }, { text: "Karate API Automation", x: 260, y: 366 }, { text: "September 2026", x: 60, y: 400 }] };
   const facts = G.coverFacts_({ title: "PL/SQL to .NET Microservices Modernization", subtitle: "Phase 1 API Test Plan" }, it);
   // (V.1_79: the client name keeps its capital and the facts break between facts, never inside one)
-  assert.equal(facts, "66degrees & Frontdoor · QA Strategy & Delivery · 52 PL/SQL Objects in Scope\nKarate API Automation");
+  // (V.1_80: in sentence case like the rest of the deck)
+  assert.equal(facts, "66degrees & Frontdoor · QA strategy & delivery · 52 PL/SQL objects in scope\nKarate API automation");
   const o = draw({ type: "cover", title: "PL/SQL to .NET microservices modernization", subtitle: "Phase 1", facts: facts.split("\n") });
   facts.split("\n").forEach((ln) => assert.ok(texts(o).includes(ln), ln));
 });
@@ -174,7 +175,8 @@ test("C6. the eyebrow above a title is found (it leaves the slide, its words go 
 test("C7. the content under a moved title moves up as one block; a slide with a side panel stays", () => {
   const S = 960 / 720;
   const title = box("In Scope", 60, 39, 900, 32.4, 27);
-  const a = box("API Parity Testing", 60, 174.6, 523, 21, 16.5), b = box("Compares data outcomes", 60, 203.1, 406, 81, 12.75);
+  // (V.1_80: short content sits nearer the middle, so the block here is a full slide of content)
+  const a = box("API Parity Testing", 60, 174.6, 523, 21, 16.5), b = box("Compares data outcomes", 60, 203.1, 406, 260, 12.75);
   const roles = G.detectRoles({ pageElements: [title, a, b] }, {}, 960, 540, S, {});
   const reqs = [];
   const dy = G.liftContent_(reqs, { pageElements: [title, a, b] }, roles, {}, S, 960, 540);

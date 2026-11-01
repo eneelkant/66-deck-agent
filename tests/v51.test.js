@@ -217,7 +217,7 @@ test("each part is written from the storyline, with what earlier slides said, a 
     assert.match(t, /THE STORYLINE OF THE WHOLE DECK/);
     assert.match(t, /designs to choose from/);
     assert.match(t, /THE DESIGNS \(write "design"/);
-    assert.ok(t.length < 22000, "prompt size " + t.length);   // V.1_50: about 46,000
+    assert.ok(t.length < 24000, "prompt size " + t.length);   // V.1_50: about 46,000 (V.1_80: + the per-slide rules)
   });
   assert.ok(parts.slice(1).every((t) => /ALREADY SAID ON EARLIER SLIDES/.test(t)), "later parts know what was said");
   assert.ok(parts.slice(1).some((t) => /Designs already used on earlier slides/.test(t)));

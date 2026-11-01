@@ -171,7 +171,7 @@ function briefPromptBlock_(ctx) {
 
 // V.1_76 (deck 47 Proposal 4: "$61.6B" was read as "$61." and removed, leaving "6B" on the slide): a figure's number never
 // ends on its decimal point, and money takes its one-letter unit ($61.6B, $7.4M, $250K)
-var FIG_TOKEN_RE_ = /(?:between\s+)?[+\-−~]?\b\d[\d,]*(?:\.\d+)?\s?%?\s?(?:–|—|-|to|and)\s?\d[\d,]*(?:\.\d+)?\s?%|[$€£₹]\s?\d[\d,]*(?:\.\d+)?\s?(?:mn|bn|million|billion|thousand|[kmb](?![a-z]))?(?!\d|\.\d)\+?|[+\-−~]?\b\d[\d,]*(?:\.\d+)?\s?(?:%|percent\b|per cent\b|x\b|×|(?:million|billion|thousand)\b|[kmb]\+?(?=[\s,.;:)]|$))\+?|\b\d{1,3}(?:,\d{3})+\+?/gi;
+var FIG_TOKEN_RE_ = /(?:between\s+)?[+\-−~]?\b\d[\d,]*(?:\.\d+)?\s?%?\s?(?:–|—|-|to|and)\s?\d[\d,]*(?:\.\d+)?\s?%|[$€£₹]\s?\d[\d,]*(?:\.\d+)?\s?(?:mn|bn|tn|million|billion|trillion|thousand|[kmbt](?![a-z]))?(?!\d|\.\d)\+?|[+\-−~]?\b\d[\d,]*(?:\.\d+)?\s?(?:%|percent\b|per cent\b|x\b|×|(?:million|billion|trillion|thousand)\b|[kmbt]\+?(?=[\s,.;:)]|$))\+?|\b\d{1,3}(?:,\d{3})+\+?/gi;
 var FIG_SKIP_KEYS_ = { notes: 1, reference: 1, design: 1, icon: 1, icons: 1, tag: 1, lockTag: 1, image: 1, logo: 1, deckLibrary: 1, resolvedIcons: 1,
   fact_tags: 1, number: 1, no: 1, type: 1, material: 1, agendaWide: 1, sectionStyle: 1, cobrand: 1, clientLogo: 1, url: 1, status: 1, kind: 1, _dropped: 1 };
 var FIG_HEAD_KEYS_ = { title: 1, label: 1, highlight: 1, subtitle: 1, name: 1, heading: 1, header: 1, caption: 1 };

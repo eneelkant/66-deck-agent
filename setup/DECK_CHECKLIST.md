@@ -245,6 +245,22 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 | (V.1_79) Cover names keep their capitals, facts break between facts; closing Author / Target on their own line | Test v79 C2 |
 | (V.1_79) Short content sits a little above the middle; icons move with it and keep their tiles; the mark keeps clear | Test v79 C3 |
 
+## The last word (V.1_80): checks that run on every slide as it is drawn
+
+| Rule | How it is kept |
+|---|---|
+| The topics are the request's "Include ..." list (never its "Targets:" clause); each gets a slide | Test v80 B1 |
+| The request's targets are read from the request; a pilot length is never a target or a KPI | Test v80 B2, C2 |
+| The outline's KPI slide is locked: it is drawn as the target tiles whatever a later step did | Auto: `kpi-locked`; Test v80 B3 |
+| "$1.7T" is read whole; "Pub/Sub" stays Pub/Sub; KPI values in digits | Test v80 A1-A3 |
+| Once-only topics include a second "why 66degrees" in other words and assumptions; each slide call knows what the other slides of its part cover | Test v80 B4 |
+| Comparisons keep both sides; tables of 3+ columns are read by their columns | Test v80 B5 |
+| Research figures say "Industry benchmark"; "Target:" / "(target)" only on the KPI slide | Auto: `benchmark-labels`, `target-marks`; Test v80 C1, C2 |
+| One Accountable per RACI row; sizing values or "To be confirmed in sizing workshop" | Auto: `raci-roles`, `sizing-tbc`; Test v80 C3 |
+| No "RPO = 0" / "no data loss" promises, no old model names, the client's name with its capital, product names after a colon, American spelling | Auto: `final-text`; Test v80 C4 |
+| No text under 7 pt unless it cannot fit; a design is not reused while another fits | Test v80 D1 |
+| Rebrand: no false overlap, rows close up before the footer, short content nearer the middle, cover facts in sentence case | Test v80 E1, E2 |
+
 ## Gemini's way (V.1_79): how every long deck is written
 
 | Rule | How it is kept |

@@ -1182,6 +1182,7 @@ OUTPUT: ONLY valid JSON: { "deck_title": "", "facts_note": "", "sources_used": [
         delete sp.lockTag; sp.reference = null;
       }
       keepOutlineType_(sp, o);                                                    // V.1_50
+      if (o.kpiLock) sp.kpiLock = true;                                           // V.1_79b: the outline's KPI slide stays one
       return sp;
     });
     if (!proposalDeck && !solutionDeck) limitCardSlides_(plan.slides, n, Math.max(1, Math.round(n / 7)));   // V.1_47: a Proposal Deck varies by its designs
@@ -1911,8 +1912,13 @@ function directStatement_(str) {
     .replace(/\bnot just\s+([^,.;]{1,60}?),\s*but\s+(?:also\s+)?/gi, '');
 }
 // "Maintain/Exceed" -> "Maintain or exceed"; acronym pairs ("AI/ML", "CI/CD") stay
+// (V.1_79b, deck 51 Tailspin 12: "Pub/Sub" became "Pub or sub"): product and technical names with a slash stay as written
+var SLASH_NAMES_RE_ = /^(pub\/sub|input\/output|read\/write|client\/server|and\/or|on\/off|true\/false|yes\/no|either\/or|his\/her|he\/she|s\/4hana)$/i;
 function slashWords_(str) {
-  return String(str || '').replace(/\b([A-Za-z][a-z]{2,})\/([A-Za-z][a-z]{2,})\b/g, function (m, a, b) { return a + ' or ' + b.toLowerCase(); });
+  return String(str || '').replace(/\b([A-Za-z][a-z]{2,})\/([A-Za-z][a-z]{2,})\b/g, function (m, a, b) {
+    if (SLASH_NAMES_RE_.test(m)) return m;                                            // "Pub/Sub" and other names
+    return a + ' or ' + b.toLowerCase();
+  });
 }
 // V.1_40: "(client)" written into a role's text goes; a role title says "(client)" -> the client's name
 function cleanClientMarks_(sp, ctx) {
@@ -2916,6 +2922,8 @@ function safeSlideSpec_(sp) {
 }
 function drawSlidesIntoActive_(target, specs, ctx, blankDeck) {
   if (typeof applyProposalFrame_ === 'function') applyProposalFrame_(specs, ctx);
+  // V.1_79b: the last word on every slide, whichever step wrote it (figures, names, KPI lock, RACI, claims, spelling)
+  if (typeof lastWord_ === 'function') specs.forEach(function (sp) { try { lastWord_(sp, ctx); } catch (eLw) { if (ctx && ctx.log) ctx.log.push('Final check skipped on a slide: ' + eLw.message); } });
   const stats = { slides: specs.length, fonts: 0, colors: 0, icons: 0, removed: 0, redrawn: 0, normalized: 0, failed: 0, libraryIcons: 0, issues: 0 };
   const pageW = target.getPageWidth(), pageH = target.getPageHeight();
   const dateLabel = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, yyyy');
@@ -3644,6 +3652,11 @@ function chooseDesignsByContent_(plan, ctx) {
       const fitsWell = m.content > 0 && !m.overflow.length && (m.fill >= 0.5 || picked);
       return { d: d, m: m, fitsWell: fitsWell, look: lookKey(type, d.tag, m) };
     });
+    // V.1_79b (deck 51: the same circle diagram on United 10 and 20, the same zigzag on Target 26 and 34): a design already
+    // used in this deck is a candidate only when no unused design shows the content well
+    if (cands.some(function (c) { return !used[c.d.tag] && c.fitsWell && c.m.content > 0; })) {
+      for (let q = cands.length - 1; q >= 0; q--) if (used[cands[q].d.tag]) cands.splice(q, 1);
+    }
     let best = null;
     // V.1_73: the dark rule is a rule - a dark design is not a candidate where a dark slide is not allowed (when a light
     // design can show the content at all)
@@ -4226,11 +4239,17 @@ function requestedTopics_(prompt) {
   // V.1_39: an explicit list ("Cover: ...", "Topics: ...", "Include: ...") wins over the first colon of the request
   // ("using Google Cloud: Customer Engagement Suite, ..." is a product list, not the topics)
   const marked = p.match(/(?:^|[.\n]\s*)(?:please\s+)?(?:cover|covering|topics?|include|including|sections?|agenda)\s*:\s*([^\n]+)/i);
+  // V.1_79b (deck 51 Nestlé: pricing, timeline, team and RACI never got a slide - "Include executive summary, approach,
+  // ..." has no colon, so the "Targets:" clause was read as the topic list): a sentence that starts "Include ..." /
+  // "Cover ..." with a list wins over any colon; a "Targets:" / "Goals:" clause is never the topic list
+  const listed = p.match(/(?:^|[.\n]\s*)(?:please\s+)?(?:include|cover|covering|it should (?:cover|include)|the deck should (?:cover|include))\s+(?!:)([^.\n]*,[^.\n]*)/i);
   let tail;
-  if (marked) tail = marked[1];
+  if (listed && (listed[1].match(/,/g) || []).length >= 2) tail = listed[1];
+  else if (marked) tail = marked[1];
   else {
-    const i = p.indexOf(':');
-    tail = i !== -1 ? p.slice(i + 1) : (p.match(/\b(?:cover|covering|include|including|about)\b(.+)$/i) || [])[1] || '';
+    const q = p.replace(/\b(?:targets?|goals?|kpis?|objectives?)\s*:[^.\n]*(?:\.|$)/gi, ' ');
+    const i = q.indexOf(':');
+    tail = i !== -1 ? q.slice(i + 1) : (q.match(/\b(?:cover|covering|include|including|about)\b(.+)$/i) || [])[1] || '';
   }
   tail = tail.replace(/^[\s.,;:]+/, '').split(/\.\s+(?=[A-Z])|\n/)[0];   // the list ends with its sentence
   // V.1_56 (deck 29): "Condition-based maintenance for 1,200 rail switches on Google Cloud: sensor readings, ..." - the
@@ -4647,7 +4666,7 @@ function normalizeShapes_(plan, ctx) {
       // V.1_79 (deck 50 General 1 slide 5: "$147.6B" in total sales became "6B" - the amount was cut at its decimal point
       // and taken for a price): a whole amount ("$147.6B", "$4.9 billion") is matched, and only a price is left out - an
       // amount on the pricing slide, or one next to fee / price / cost / per month; other figures go to the figure check
-      const AMT = /(?:target\s*:\s*)?(?:[$€£₹]\s?\d[\d,]*(?:\.\d+)?\s?(?:k|m|mn|b|bn|million|billion)?(?![\w.])|\b\d[\d,]*(?:\.\d+)?\s?(?:k|m)?\s?(?:usd|eur|gbp|inr|dollars)\b)(?:\s*(?:\/|per)\s*(?:month|mo|year|yr|hour|hr|week|sprint))?/gi;
+      const AMT = /(?:target\s*:\s*)?(?:[$€£₹]\s?\d[\d,]*(?:\.\d+)?\s?(?:k|m|mn|b|bn|t|tn|million|billion|trillion)?(?![\w.])|\b\d[\d,]*(?:\.\d+)?\s?(?:k|m)?\s?(?:usd|eur|gbp|inr|dollars)\b)(?:\s*(?:\/|per)\s*(?:month|mo|year|yr|hour|hr|week|sprint))?/gi;
       const given = function (a) { const d = (String(a).match(/\d[\d,.]*/) || [''])[0].replace(/,/g, '').replace(/\.$/, ''); return d && req.indexOf(d) !== -1; };
       const pricingHere = (typeof isCommercialPricing_ === 'function' ? isCommercialPricing_(sp.title) : /pric|commercial/i.test(String(sp.title || ''))) ||
         ['prices', 'options', 'tiers', 'packages'].some(function (k) { return Array.isArray(sp[k]) && sp[k].length; });
@@ -5542,7 +5561,7 @@ function runDeckGeneration(data) {
    Each run does as much as fits in ~4.5 minutes, saves where it stopped and returns { continue: true }; the panel then
    calls continueDeckGeneration(runId) for the next part, until the deck is finished.
 ========================= */
-const AGENT_VERSION_ = '66° Deck Agent V.1_79';   // shown in every result message (which version made the deck)
+const AGENT_VERSION_ = '66° Deck Agent V.1_80';   // shown in every result message (which version made the deck)
 const MAX_SLIDES_ = 200;            // panel and server limit, Create and Rebrand
 const SINGLE_RUN_MAX_ = 20;         // decks up to this size are made in one run (the full single-run pipeline)
 const LONG_BATCH_ = 8;              // slides written, fitted and drawn together in a long deck
@@ -5951,7 +5970,7 @@ function planOutline_(userPrompt, presentationType, n, sources, ctx) {
     const isRequested = function (o) { return reqNames.some(function (t) { return slideForTopic_([{ type: o.type, title: o.title, lead: o.brief }], t) !== -1; }); };
     // V.1_75: target figures in the request ask for the KPI slide too (deck 46 General: three targets, no KPI slide)
     const askedOnce = onceTopicsIn_(userPrompt);
-    if (typeof briefTargets_ === 'function' && briefTargets_(ctx).length >= 2 && askedOnce.indexOf('kpi') === -1) askedOnce.push('kpi');
+    if (((typeof briefTargets_ === 'function' && briefTargets_(ctx).length >= 2) || (typeof requestTargets_ === 'function' && requestTargets_(userPrompt).length >= 2)) && askedOnce.indexOf('kpi') === -1) askedOnce.push('kpi');   // V.1_79b: targets read from the request too
     askedOnce.forEach(function (f) {
       if (have[f]) return;
       const entry = Object.assign({}, ONCE_TOPIC_ENTRY_[f]);
@@ -6520,10 +6539,12 @@ const ONCE_TOPICS_ = [
   ['pricing', /\bpricing\b|commercial (options|models|structures?)|investment options|engagement (options|models)/i],
   ['risks', /\brisks\b|\bkey risks?\b|^risks?\b|risk (register|management|mitigation)|mitigation (plan|controls|strategies)/i],
   ['support', /support model|support (and|&) operat\w*|enterprise support|day[- ]?(two|2) (support|operations)|\bL1\b.*\bL3\b|managed support|support tiers|follow-the-sun support|incident escalation/i], ['team', /team structure|joint team|delivery team|operating structure|team and governance/i],   // V.1_73: support in any wording (deck 44 General 31 / 38)
-  ['why66', /why 66\s?degrees|why us\b|(partnership|core|technical|our|key) differentiators|engineering scale and expertise|our (credentials|expertise)|proven (delivery|engineering|expertise)|^proven\b.{0,40}\b(expertise|track record)\b|\b(enterprise|our|66degrees) capabilities across\b|\bour track record\b/i],   // V.1_79 (deck 50: a second "why 66degrees" in other words)   // V.1_75: "Core technical differentiators" (deck 46 General 38)
+  ['why66', /why 66\s?degrees|why us\b|(partnership|core|technical|our|key) differentiators|engineering scale and expertise|our (credentials|expertise)|proven (delivery|engineering|expertise)|^proven\b.{0,40}\b(expertise|track record)\b|\b(enterprise|our|66degrees) capabilities across\b|\bour track record\b|google cloud (enterprise )?(ai )?(capabilities|partner\w*)|\bpartner (credentials|strengths)\b|\b(66degrees|partner) (capabilities|strengths|expertise)\b/i],   // V.1_79b (deck 51 Target 38)   // V.1_79 (deck 50: a second "why 66degrees" in other words)   // V.1_75: "Core technical differentiators" (deck 46 General 38)
   // V.1_75 (deck 46 Proposal 24, 33, 36: change management, knowledge transfer, operational handover): enablement at most
   // once (twice in a deck of 35+, on another angle)
   ['enablement', /knowledge transfer|enablement|operational handover|handover and|change management|training (plan|program)|adoption (plan|program)|upskilling/i],
+  // V.1_79b (deck 51 United 21, 22: "Governance boundaries and operational assumptions" and "Assumptions and dependencies")
+  ['assumptions', /\bassumptions\b|\bdependencies\b/i],
   ['next', /next steps?/i], ['sizing', /\bsizing\b|configuration (and|&) (sizing|specifications)/i],
   ['timeline', /\b\d+[- ]week (timeline|plan|roadmap)|implementation timeline|delivery timeline/i],
   // V.1_73 (deck 44: testing three times, monitoring three times, security twice): at most once, twice in a deck of 35+
