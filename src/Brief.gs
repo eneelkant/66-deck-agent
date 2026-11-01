@@ -179,7 +179,7 @@ var FIG_HEAD_KEYS_ = { title: 1, label: 1, highlight: 1, subtitle: 1, name: 1, h
 function figCorpus_(ctx, sources) {
   var b = (ctx && ctx.brief) || {};
   var own = [String((ctx && ctx.userPrompt) || ''), String((sources && sources.text) || ''), JSON.stringify(b.figures || []), JSON.stringify(b.prices || []),
-    JSON.stringify(b.facts || []), JSON.stringify((ctx && ctx.approvedFacts) || [])].join(' ');
+    JSON.stringify(b.facts || []), JSON.stringify((ctx && ctx.approvedFacts) || []), ((ctx && ctx.sourceQuotes) || []).join(' ')].join(' ');   // V.1_79: quotes found in the research
   var research = (sources && sources.research) || [];
   var norm = function (t) { return String(t).replace(/(\d),(\d{3})/g, '$1$2').replace(/(\d),(\d{3})/g, '$1$2'); };
   return { own: norm(own), research: research.map(function (r) { return { n: r.n, text: norm(JSON.stringify(r)) }; }) };
@@ -234,7 +234,7 @@ function figStrip_(s, bad, kind) {
   var str = String(s);
   if (!bad.length) return str;
   if (kind === 'text') {
-    var sentences = str.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+    var sentences = splitSentences_(str, true);
     if (sentences.length > 1) {
       var keep = sentences.filter(function (x) { return !bad.some(function (b) { return x.indexOf(b) !== -1; }); });
       if (keep.length) return keep.join(' ');
@@ -261,7 +261,8 @@ function guardFigures_(slides, ctx, sources) {
     var t = String(sp.type || '').toLowerCase();
     if (['template', 'case_study', 'closing'].indexOf(t) !== -1) return;
     var removed = [], cited = {}, toCheck = [];
-    var pricingSlide = /\b(pric\w*|commercial|investment|engagement models?|cost options|fees?)\b/i.test(String(sp.title || ''));
+    var pricingSlide = /\b(pric\w*|commercial|investment|engagement models?|cost options|fees?)\b/i.test(String(sp.title || '')) &&
+      !(typeof TECH_PRICING_RE_ !== 'undefined' && TECH_PRICING_RE_.test(String(sp.title || '')));   // V.1_79: a product's pricing is not the commercial slide
     var PRICE_LINE = /pricing is confirmed after the scoping workshop/i;
     var check = function (s) {
       var bad = [];
@@ -284,7 +285,7 @@ function guardFigures_(slides, ctx, sources) {
       s = s.replace(/([.!?])\s+(Amber|Green|Red|Grey|Gray)\.?\s*$/, '$1');        // (Solution 4: a status word left at the end)
       // V.1_71 (deck 42 Proposal 11): the pricing line belongs on the pricing slide only
       if (!pricingSlide && PRICE_LINE.test(s)) {
-        var left = (s.match(/[^.!?]+[.!?]*(\s+|$)/g) || [s]).filter(function (sn) { return !PRICE_LINE.test(sn); }).join('').trim();
+        var left = splitSentences_(s).filter(function (sn) { return !PRICE_LINE.test(sn); }).join('').trim();
         s = left;
         if (!s) return s;
       }
@@ -540,7 +541,7 @@ function approvedCredentialClaims_(slides, ctx) {
     if (typeof x !== 'string') return x;
     if (nSpec) x = x.replace(/\b(\d+)\+?(\s+(?:Google Cloud\s+)?specializations?)\b/gi, function (all, num, rest) { if (Number(num) === nSpec) return all; n++; return nSpec + rest; });
     if (!rankOk && RANK_CLAIM_RE_.test(x)) {
-      var left = (x.match(/[^.!?]+[.!?]*(\s+|$)/g) || [x]).filter(function (sn) { return !RANK_CLAIM_RE_.test(sn); }).join('').trim();
+      var left = splitSentences_(x).filter(function (sn) { return !RANK_CLAIM_RE_.test(sn); }).join('').trim();
       if (left !== x.trim()) { n++; x = left; }
     }
     return x;
@@ -608,7 +609,7 @@ function repairHeading_(t) {
 function repairText_(t) {
   var x = String(t || '').trim();
   if (!isFragment_(x)) return { text: x, ok: true };
-  var sentences = x.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+  var sentences = splitSentences_(x, true);
   if (sentences.length > 1) {
     var keep = sentences.filter(function (sn) { return !isFragment_(sn); });
     if (keep.length) return { text: keep.join(' '), ok: true };
@@ -690,7 +691,7 @@ function targetFiguresInText_(slides, ctx) {
   };
   var fix = function (x) {
     if (typeof x !== 'string' || !conflict(x)) return x;
-    var parts = x.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+    var parts = splitSentences_(x, true);
     var keep = parts.filter(function (p) { return !conflict(p); });
     n++;
     return keep.length ? keep.join(' ') : null;
@@ -718,7 +719,7 @@ function credentialCounts_(slides, ctx) {
     x.replace(CRED_COUNT_RE_, function (all, num) { if (approved.indexOf(String(num).replace(/,/g, '')) === -1) bad = true; return all; });
     if (!bad) return x;
     n++;
-    var parts = x.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+    var parts = splitSentences_(x, true);
     var keep = parts.filter(function (p) { var b = false; p.replace(CRED_COUNT_RE_, function (all, num) { if (approved.indexOf(String(num).replace(/,/g, '')) === -1) b = true; return all; }); return !b; });
     if (keep.length) return keep.join(' ');
     // one sentence: only the count's phrase goes ("6 Specializations and 84 Partner Expertise designations" -> "6 Specializations")

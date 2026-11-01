@@ -344,6 +344,8 @@
     if (items.some(function (it) { return !linesOf(it).length || linesOf(it).length > 5; })) return null;
     // V.1_53: value over time needs its three stage labels, and a process (training, a pipeline) is never a value curve
     if (items.some(function (it) { return !it.label; }) || /\b(train\w*|pipeline|process|steps?|workflow|how .+ works)\b/i.test(String(s.title || ''))) return null;
+    // V.1_79 (deck 50 Solution 15: a curve with "Value" and "Time" over three pipeline stages): the labels are stages in time
+    if (items.some(function (it) { return !/\b(day|days|week|weeks|month|months|quarter|year|phase|stage|now|today|early|ongoing|launch|go-live|pilot|scale|mature|q[1-4]|h[12]|\d)/i.test(String(it.label)); })) return null;
     var els = [];
     var top = K.header(els, s) + 2;
     var gap = 14, cw = (CW - 2 * gap) / 3, iw = cw - 8;

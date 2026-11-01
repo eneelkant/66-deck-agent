@@ -46,6 +46,7 @@
     "Gate.gs",
     "Finish.gs",
     "Quality.gs",
+    "SlideWriter.gs",
     "Generator.html",
     "appsscript.json",
     "ModelTest.gs",

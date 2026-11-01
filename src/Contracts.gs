@@ -134,7 +134,7 @@ var CONTRACT_SCHEMA_ = {
             type: 'ARRAY',
             items: {
               type: 'OBJECT',
-              properties: { title: { type: 'STRING' }, text: { type: 'STRING' }, fix: { type: 'STRING' }, owner: { type: 'STRING' } },
+              properties: { title: { type: 'STRING' }, text: { type: 'STRING' }, mitigation_strategy: { type: 'STRING' }, owner: { type: 'STRING' } },
               required: ['title', 'text']
             }
           }
@@ -149,7 +149,7 @@ var CONTRACT_SCHEMA_ = {
 var CONTRACT_ASK_ = {
   raci: 'a RACI table: "columns" = ["Workstream", then one column per party, e.g. "66degrees", "<client> IT", "<client> business"]; "rows" = 4-6 workstreams, each [workstream name, then one role per party: Responsible, Accountable, Consulted or Informed - nothing else in those cells]. No items.',
   team: 'a team slide: "items" = 3-4 roles or teams (both organisations), each {"title": the role or team (2-5 words), "text": what it does and decides (14-24 words)}.',
-  risks: 'a risks slide: "items" = 3-4 risks, each {"title": the risk (2-6 words), "text": its impact (8-16 words), "fix": the mitigation (10-20 words)}.',
+  risks: 'a risks slide: "items" = 3-4 risks, each {"title": the risk (2-6 words), "text": its impact (8-16 words), "mitigation_strategy": the mitigation (10-20 words)}.',
   next: 'a next-steps slide: "items" = 3-4 concrete first actions in order, each {"title": the action (2-6 words), "text": what it involves (10-20 words), "owner": who leads it (2-4 words)}.'
 };
 
@@ -247,7 +247,7 @@ function applyContractAnswer_(sp, kind, ans, ctx) {
   } else {
     trial.items = (ans.items || []).filter(function (it) { return it && it.title; }).map(function (it) {
       const o = { title: String(it.title), text: String(it.text || '') };
-      if (kind === 'risks' && it.fix) o.fix = String(it.fix);
+      if (kind === 'risks' && (it.fix || it.mitigation_strategy)) o.fix = String(it.fix || it.mitigation_strategy).replace(/^\s*(fix|mitigation)\s*:\s*/i, '');   // V.1_79
       if (kind === 'next' && it.owner) o.tag = String(it.owner);
       return o;
     });
@@ -354,7 +354,7 @@ function normalizeRaci_(sp) {
       const m = !free && c.match(ROLE_START_RE_);
       if (!m || m[0].trim() === c.trim().replace(/\.$/, '')) return c;
       const role = m[1].replace(/\s*(\/|&|,|and)\s*/gi, ' / ').replace(/\b\w/g, function (x) { return x.toUpperCase(); }).replace(/\b(Responsible|Accountable|Consulted|Informed)\b/g, function (x) { return x; });
-      const roleOut = role.charAt(0) + role.slice(1).replace(/ \/ (\w)/g, function (a, w) { return ' / ' + w.toLowerCase(); });
+      const roleOut = role;   // V.1_79 (deck 50: "Responsible / accountable" next to "Accountable / Responsible"): every role with its capital
       const rest = c.slice(m[0].length).replace(/^[\s,:;.\-–]+/, '').trim();
       if (rest) extra.push(String(r[0] || '') + ' (' + String(cols[j] || '') + '): ' + rest);
       changed = true;
@@ -454,7 +454,7 @@ function conformSlides_(slides, ctx) {
       'Write each one again in exactly the shape in "write", keeping its subject, its title (shortened only if needed) and what it already says.',
       typeof briefPromptBlock_ === 'function' ? briefPromptBlock_(ctx) : '',
       'No new figures, clients, awards or claims about 66degrees. Sentence case, plain text, no markdown.',
-      'Return ONLY JSON: {"slides":[{"id":0,"title":"","lead":"","items":[{"title":"","text":"","fix":"","owner":""}],"columns":[""],"rows":[[""]]}]}',
+      'Return ONLY JSON: {"slides":[{"id":0,"title":"","lead":"","items":[{"title":"","text":"","mitigation_strategy":"","owner":""}],"columns":[""],"rows":[[""]]}]}',
       JSON.stringify(list)
     ].filter(Boolean).join('\n');
     let out = null;

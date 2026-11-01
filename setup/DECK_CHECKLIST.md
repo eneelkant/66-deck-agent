@@ -241,6 +241,23 @@ Everything the checker finds or corrects is in the slide log (`issues`, `fixed`)
 | (V.1_78) Content moves up under the title like a created slide; panels end above the 66° mark | Test v78 C7, C9 |
 | (V.1_78) Text that would run into the next heading in Plus Jakarta Sans is set smaller (line spacing counted) | Test v78 C5, C10 |
 | (V.1_78) Headings and labels in sentence case ("API request", "100% test execution"); ".NET" keeps its space | Test v78 C3, C4 |
+| (V.1_79) Every word kept (never the 160-character copy); content slides keep their design | Test v79 C1 |
+| (V.1_79) Cover names keep their capitals, facts break between facts; closing Author / Target on their own line | Test v79 C2 |
+| (V.1_79) Short content sits a little above the middle; icons move with it and keep their tiles; the mark keeps clear | Test v79 C3 |
+
+## Gemini's way (V.1_79): how every long deck is written
+
+| Rule | How it is kept |
+|---|---|
+| The outline has exactly one KPI slide when the request gives targets or asks for KPIs | Auto: `ensureKpiOutline_`; Test v79 A5 |
+| Every slide is written by its own Gemini call (the calls of a part run in parallel); a failed call is made again on its own | Test v79 A1, A3 |
+| KPI and RACI slides have their own response schema: every field required, every cell filled; a table with empty cells is asked again | Test v79 A1, A2 |
+| Each call gets only its own slide's rules; risks use `mitigation_strategy` (never "Fix:") | Test v79 A1, A4 |
+| Every statistic carries a `source_quote` checked against the research | Test v79 A1, A4 |
+| Figures as digits, targets exactly as the request wrote them, no invented people | Test v79 B2 |
+| Sequence labels (Phase A, B, C / Wave 1, 2, 3) are written by the code | Test v79 A6 |
+| Figures are never cut at a decimal point or after "U.S."; only prices are taken off as prices | Test v79 B1 |
+| One dark-slide rule for every design; dividers show their line; a slide sits in the section of its topic | Test v79 B6-B8 |
 
 ## Quality pass (V.1_78): every Create deck
 

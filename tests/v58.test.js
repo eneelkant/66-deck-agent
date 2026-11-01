@@ -288,7 +288,7 @@ test("KPIs: a study window is not a KPI, a target is not also a benchmark, a KPI
     items: [{ value: "15%", label: "Target: handling time" }, { value: "5 min", label: "Target: loan preparation" }, { value: "95%+", label: "Target: accuracy" }], _dropped: [{ value: "20%", label: "Target: first-contact resolution" }] };
   const n = sb.notesWithoutDropped_(c);
   assert.doesNotMatch(n, /20%/); assert.match(n, /All three pilot/);
-  assert.match(read("src/Code.gs"), /String\(userPrompt \|\| ''\)\]\.join\(' '\);/, "the request's own figures count as sourced");
+  assert.match(read("src/Code.gs"), /String\(userPrompt \|\| ''\)(, \(ctx\.sourceQuotes \|\| \[\]\)\.join\(' '\))?\]\.join\(' '\);/, "the request's own figures count as sourced");   // (V.1_79: quotes found in the research count too)
 });
 
 test("notes follow the slide: agenda notes list the agenda; the proposed-times note names only times still on the slide", () => {

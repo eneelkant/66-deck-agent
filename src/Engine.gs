@@ -409,7 +409,8 @@ var ENGINE = (function () {
     text(els, 25.2, 226, 440, 40, s.subtitle || s.lead, { weight: 500, max: 12, min: 10, maxLines: 2, color: T.body });
     // V.1_78 (rebrand deck 49 slide 1: the cover's label and its three facts were lost): a rebranded cover keeps them as
     // one line under the subtitle
-    if (s.facts) text(els, 25.2, 270, 480, 30, s.facts, { weight: 400, max: 10, min: 8, maxLines: 2, color: T.body });
+    // (V.1_79: facts on two lines break between two facts, never inside one: each line is drawn on its own)
+    (Array.isArray(s.facts) ? s.facts : String(s.facts || '').split(/\n/)).filter(Boolean).slice(0, 2).forEach(function (ln, k) { text(els, 25.2, 270 + k * 15, 480, 15, String(ln), { weight: 400, max: 10, min: 8, maxLines: 1, color: T.body }); });
     // Footer band, date and 66° badge
     rect(els, 0, 349, W, 56, T.blue);
     image(els, 'band-pattern', 626, 349, 94, 56);
@@ -1147,7 +1148,7 @@ var ENGINE = (function () {
     if (sub && sub.toLowerCase().indexOf('thank') === -1) {
       text(els, 44, 232, 380, 60, sub, { weight: 400, max: 13, min: 11, maxLines: 3, color: T.ink });
     }
-    if (s.facts) text(els, 44, 298, 390, 36, s.facts, { weight: 400, max: 10, min: 8, maxLines: 2, color: T.body });
+    (Array.isArray(s.facts) ? s.facts : String(s.facts || '').split(/\n/)).filter(Boolean).slice(0, 2).forEach(function (ln, k) { text(els, 44, 298 + k * 15, 390, 15, String(ln), { weight: 400, max: 10, min: 8, maxLines: 1, color: T.body }); });
     // Stay Connected card
     roundrect(els, 448, 42, 252, 170, T.bgLight, null);
     text(els, 464, 62, 220, 24, 'Stay Connected', { weight: 500, max: 16, min: 14, maxLines: 1, color: T.ink });
@@ -4076,6 +4077,7 @@ var ENGINE = (function () {
     t = String(t == null ? '' : t);
     var m = /^(\s*)([a-z][a-z-]*)/.exec(t);
     if (!m || LOWER_OK_.test(m[2])) return t;
+    if (/^[A-Z]/.test(t.slice(m[1].length + m[2].length))) return t;   // V.1_79 (deck 50: "gRPC" became "GRPC", "mTLS" "MTLS")
     return m[1] + m[2].charAt(0).toUpperCase() + t.slice(m[1].length + 1);
   }
   var FIG_IN_TEXT_ = /(?:^|[\s(])((?:[+\-−~<>]\s?)?\$?\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|pp\b|[kKmMbB]\b|\+)|\$\d[\d,]*(?:\.\d+)?)/;
@@ -4094,7 +4096,7 @@ var ENGINE = (function () {
     if (!spec || typeof spec !== 'object' || !META_RE_.test(JSON.stringify(Object.keys(spec).reduce(function (o, k) { if (!META_SKIP_[k]) o[k] = spec[k]; return o; }, {})))) return spec;
     var cleanStr = function (x) {
       if (!META_RE_.test(x)) return x;
-      return (x.match(/[^.!?]+[.!?]*(\s+|$)/g) || [x]).filter(function (sn) { return !META_RE_.test(sn); }).join('').trim();
+      return splitSentences_(x).filter(function (sn) { return !META_RE_.test(sn); }).join('').trim();
     };
     var walk = function (v) {
       if (typeof v === 'string') return cleanStr(v);
@@ -4511,7 +4513,7 @@ var ENGINE = (function () {
         // (V.1_75, deck 46 Proposal 14: "Figures left out ..." was dropped, so nobody saw why the tiles lost 205% and 5,200
         //  hours): the lines the agent writes about figures, roles and extra content stay as they are
         if (/^\s*(sources?|check before sharing|\[\d+\]|figures (left out|on this slide)|title figures|roles in detail|also on this topic|the times on this slide)/i.test(line)) return line;
-        return (line.match(/[^.!?]+[.!?]*(\s+|$)/g) || [line]).filter(function (sn) {
+        return splitSentences_(line).filter(function (sn) {
           var f = sn.match(figRe) || [];
           var foreign = f.filter(function (x) { return shown.indexOf(x.replace(/\s+/g, '').replace(/^[+\-−~]/, '')) === -1; });
           if (foreign.length && foreign.length === f.length) { changed = true; return false; }

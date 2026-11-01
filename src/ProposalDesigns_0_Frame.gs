@@ -135,6 +135,9 @@
     var t = K.text(els, 32.4, 180, 400, 60, s.title, { weight: 400, max: 15, min: 13, maxLines: 2, color: T.white });
     var lw = Math.min(400, Math.max(110, (t.width || 160) + 6));
     K.line(els, 33.4, 180 + t.height + 6, 33.4 + lw, 180 + t.height + 6, T.white, 0.75);
+    // V.1_79 (deck 50: the Proposal and Solution dividers showed no line under the title; the General ones do)
+    var lead = K.str ? K.str(s.lead || s.subtitle || '') : String(s.lead || s.subtitle || '');
+    if (lead) K.text(els, 32.4, 180 + t.height + 16, 400, 30, lead, { weight: 400, max: 10, min: 9, maxLines: 2, color: T.white });
     return { bg: T.ink, bgImage: 'section-bg', els: els, dark: true, noBalance: true };
   });
 

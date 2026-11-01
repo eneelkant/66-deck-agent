@@ -48,7 +48,7 @@ function recordRebrandChecks_(qa, start, end, redrawn) {
     (qa || []).forEach(function (m) {
       const k = /^slide (\d+):/.exec(String(m));
       if (!k) return;
-      const kind = /cannot be read/.test(m) ? 'unreadable' : /runs into/.test(m) ? 'overlap' : /outside the slide/.test(m) ? 'outside' : 'other';
+      const kind = /cannot be read/.test(m) ? 'unreadable' : /runs into/.test(m) ? 'overlap' : /outside the slide/.test(m) ? 'outside' : /icon sits on/.test(m) ? 'icon-on-text' : 'other';   // V.1_79
       (by[k[1]] = by[k[1]] || { kinds: {}, text: [] }).kinds[kind] = 1;
       by[k[1]].text.push(String(m).slice(0, 200));
     });

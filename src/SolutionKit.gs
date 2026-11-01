@@ -522,10 +522,14 @@ function solutionRescue_(sp) {
   (Array.isArray(sp.columns) ? sp.columns : []).forEach(function (c) {
     if (c && typeof c === 'object' && !Array.isArray(c)) addGroup(c.title || c.label || c.name, [].concat(c.items || c.points || []));
   });
+  // V.1_79 (deck 50 Solution 29: "Predictable baseline spend · Unbounded scan charges" - which side was which was lost): each
+  // value keeps its column heading ("Slot reservations: predictable baseline spend")
+  const heads = Array.isArray(sp.columns) ? sp.columns.map(function (c) { return typeof c === 'string' ? c.trim() : str(c); }) : [];
   (Array.isArray(sp.columns) && Array.isArray(sp.rows) ? sp.rows : []).forEach(function (r) {
     const cells = Array.isArray(r) ? r : (r && r.cells) || [];
-    const c = cells.map(str).filter(Boolean);
-    if (c.length) addGroup(c[0], c.slice(1).length ? [c.slice(1).join(' · ')] : []);
+    const c0 = str(cells[0]);
+    const rest = cells.slice(1).map(function (v, j) { const t = str(v); if (!t) return ''; const h = heads[j + 1]; return h && heads.length > 2 ? h + ': ' + (typeof lowerFirst_ === 'function' ? lowerFirst_(t) : t) : t; }).filter(Boolean);
+    if (c0 || rest.length) addGroup(c0 || rest.shift(), rest.length ? [rest.join(' · ')] : []);
   });
   const loose = [].concat(sp.points || []).map(str).filter(Boolean);
   ['statement', 'text', 'takeaway'].forEach(function (k) { if (typeof sp[k] === 'string' && sp[k].trim()) loose.push(sp[k].trim()); });
@@ -660,7 +664,9 @@ function solutionDarkRhythm_(specs, ctx) {
     // design where no dark slide is allowed is drawn with a light design of the library that shows the same content
     if (SOLUTION_DARK_ONLY_[tag]) {
       const nextD = specs[i + 1] ? (isDarkDivider(specs[i + 1]) || !!SOLUTION_DARK_ONLY_[(specs[i + 1].reference && specs[i + 1].reference.tag) || specs[i + 1].lockTag || '']) : !!ctx.nextPartStartsDark;
-      if ((used >= DECK_DARK_MAX_ || blockNext || nextD) && solutionLightInstead_(sp)) { delete sp.dark; blockNext = false; since++; return; }
+      // V.1_79 (deck 50 Solution 31: the fourth dark slide, right after a dark divider - no light design showed all of it):
+      // the rule wins - the light design that shows most of it, else the slide's items in a light card design
+      if ((used >= DECK_DARK_MAX_ || blockNext || nextD) && (solutionLightInstead_(sp) || solutionLightInstead_(sp, 0.5) || solutionForceLight_(sp))) { delete sp.dark; blockNext = false; since++; return; }
       since = 0; blockNext = true; used++; return;
     }
     const next = specs[i + 1];
@@ -675,10 +681,10 @@ function solutionDarkRhythm_(specs, ctx) {
 }
 
 // a light design of the Solution library for a slide drawn with a dark-only design (false when none can show it)
-function solutionLightInstead_(sp) {
+function solutionLightInstead_(sp, share) {
   if (typeof ENGINE === 'undefined' || !ENGINE.variantsFor || !ENGINE.measure) return false;
   let base = null; try { base = ENGINE.measure(sp, {}); } catch (e) { base = null; }
-  const need = base && base.content ? base.content * 0.85 : 1;            // the light design shows (nearly) all of it
+  const need = base && base.content ? base.content * (share || 0.85) : 1;   // the light design shows (nearly) all of it
   const type = String(sp.type || '').toLowerCase();
   const types = [type].concat(['bullets', 'cards', 'process'].filter(function (x) { return x !== type; }));
   for (let q = 0; q < types.length; q++) {
@@ -695,6 +701,23 @@ function solutionLightInstead_(sp) {
     }
   }
   return false;
+}
+
+// V.1_79: the last resort for a dark-only design where no dark slide is allowed - its steps or stages as light cards
+// (the design's other texts go to the notes)
+function solutionForceLight_(sp) {
+  const items = [];
+  ['items', 'steps', 'stages', 'nodes', 'points', 'layers'].forEach(function (k) {
+    if (items.length || !Array.isArray(sp[k])) return;
+    sp[k].forEach(function (it) {
+      if (typeof it === 'string' && it.trim()) items.push({ title: it.trim().split(/[:.]/)[0].slice(0, 60), text: it.trim() });
+      else if (it && typeof it === 'object' && (it.title || it.label || it.text)) items.push({ title: String(it.title || it.label || '').trim() || String(it.text).split(/[:.]/)[0].slice(0, 60), text: String(it.text || it.description || (Array.isArray(it.points) ? it.points.join('. ') : '') || '').trim(), icon: it.icon });
+    });
+  });
+  if (items.length < 2) return false;
+  sp.type = 'cards'; sp.items = items.slice(0, 6);
+  delete sp.lockTag; delete sp.design; delete sp.dark; sp.reference = null;
+  return true;
 }
 
 /* ---------- 12. V.1_54: what fills a short Solution outline (deck 25) ----------

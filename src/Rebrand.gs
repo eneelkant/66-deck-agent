@@ -123,9 +123,19 @@ function rebrandPresentation(presId, ctx, opts) {
       const given = r.icons || {};
       r.icons = {};
       it.icons.forEach(function (ic) {
+        // V.1_79 (rebrand deck 50 slide 2: the tile behind an icon was replaced by an icon too): a picture with another icon
+        // on it is the icon's tile; it stays as it is
+        const bb = it.bounds[ic.id] || ic;
+        const holdsIcon = it.icons.some(function (o) {
+          if (o === ic) return false;
+          const ob = it.bounds[o.id] || o, cx = ob.x + ob.w / 2, cy = ob.y + ob.h / 2;
+          return ob.w * ob.h < bb.w * bb.h * 0.8 && cx > bb.x && cx < bb.x + bb.w && cy > bb.y && cy < bb.y + bb.h;
+        });
+        if (holdsIcon) { r.remove_images = r.remove_images.filter(function (id) { return id !== ic.id; }); return; }
         const near = iconLabel_(it, ic.box || ic);
         const g = given[ic.id];
-        r.icons[ic.id] = Object.assign({}, typeof g === 'string' ? { icon: g } : (g || {}), { near: near, box: ic.box || null });
+        // (V.1_79: placed from the inventory, so it moves with the content when the content moves up)
+        r.icons[ic.id] = Object.assign({}, typeof g === 'string' ? { icon: g } : (g || {}), { near: near, box: ic.box || { x: bb.x, y: bb.y, w: bb.w, h: bb.h } });
         if (!r.icons[ic.id].icon) r.icons[ic.id].icon = near;
         r.remove_images = r.remove_images.filter(function (id) { return id !== ic.id; });
       });
@@ -159,6 +169,13 @@ function rebrandPresentation(presId, ctx, opts) {
       r.spec = { type: 'closing', title: 'Thank You!', subtitle: guess.subtitle || guess.lead || (guess.cta ? String(guess.cta) : '') || guess.title || '' };
     }
     if (r.redraw && !r.spec) r.redraw = false;
+    // V.1_79 (rebrand deck 50 slide 4 "In scope": a content slide redrawn as numbered cards, its texts cut): a rebrand keeps
+    // the design of every content slide - only covers, agendas, dividers, charts and closing slides are drawn again
+    // (a title + table slide is redrawn from its source table below)
+    if (!isCreate && r.redraw && r.spec && ALWAYS_ENGINE.indexOf(String(r.spec.type || '').toLowerCase()) === -1) {
+      ctx.log.push('Slide ' + (i + 1) + ': kept in its own design (a rebrand does not redraw content slides).');
+      r.redraw = false; r.spec = null;
+    }
     // Closing slide: title MUST be "Thank You!" — demote whatever came in to subtitle
     // V.1_78: a rebrand keeps its own closing title (restyled to the brand closing); only a created deck says "Thank You!"
     if (!isCreate && r.redraw && r.spec && String(r.spec.type || '').toLowerCase() === 'closing') {
@@ -200,8 +217,17 @@ function rebrandPresentation(presId, ctx, opts) {
     if (r.redraw && r.spec && !isCreate) keepOriginalWording_(r.spec, it);   // V.1_59: a rebrand never rewrites the content
     // V.1_78: a rebranded cover keeps its label and facts ("66DEGREES & FRONTDOOR", "52 PL/SQL objects in scope") as a line
     if (r.redraw && r.spec && !isCreate && /^(cover|closing)$/.test(String(r.spec.type || '').toLowerCase())) {
-      const facts = coverFacts_(r.spec, it, /closing/i.test(String(r.spec.type)));
-      if (facts) r.spec.facts = facts;
+      // V.1_79 (rebrand deck 50 slide 12: "Author: … | Target: …" run into the closing message): those lines are facts
+      if (/closing/i.test(String(r.spec.type)) && typeof r.spec.subtitle === 'string') {
+        const paras = r.spec.subtitle.split(/\n+|\s(?=(?:Author|Target|Prepared by|Presented by|Date|Contact)\s*:)/);
+        const meta = paras.filter(function (p) { return /^\s*(author|target|prepared by|presented by|date|contact)\s*:/i.test(p); });
+        if (meta.length) {
+          r.spec.subtitle = paras.filter(function (p) { return meta.indexOf(p) === -1; }).join(' ').replace(/\s{2,}/g, ' ').trim();
+          r.spec.facts = meta.map(function (p) { return p.trim().replace(/\s*\|\s*$/, ''); }).join(' · ').replace(/\s*\|\s*/g, ' · ');
+        }
+      }
+      const facts = r.spec.facts || coverFacts_(r.spec, it, /closing/i.test(String(r.spec.type)));
+      if (facts) r.spec.facts = String(facts).split('\n');   // (one line per entry: the clean-up joins lines inside a text)
     }
     if (r.redraw && r.spec) {
       stripOldBrandText_(r.spec);                               // "#LetsGetYouThere" and other old taglines never come back
@@ -306,8 +332,10 @@ function rebrandPresentation(presId, ctx, opts) {
       const dy = liftContent_(requests, page, roles, skip, S, pageW, pageH);
       if (dy) {
         r.shiftY = dy;
-        Object.keys(r.icons || {}).forEach(function (id) { const c = r.icons[id]; if (c && c.box) c.box = Object.assign({}, c.box, { y: c.box.y - dy }); });
-        (r.emptyTiles || []).forEach(function (t) { t.box = Object.assign({}, t.box, { y: t.box.y - dy }); });
+        // (only what moved: the content under the title)
+        const lineY = roles.title ? roles.title.b.y + roles.title.b.h - 2 : 0;
+        Object.keys(r.icons || {}).forEach(function (id) { const c = r.icons[id]; if (c && c.box && c.box.y >= lineY && c.box.y <= pageH * 0.86) c.box = Object.assign({}, c.box, { y: c.box.y - dy }); });
+        (r.emptyTiles || []).forEach(function (t) { if (t.box.y >= lineY) t.box = Object.assign({}, t.box, { y: t.box.y - dy }); });
         roles.cards.forEach(function (c) { c.b = Object.assign({}, c.b, { y: c.b.y - dy }); });
       }
     }
@@ -1066,7 +1094,12 @@ function liftContent_(requests, page, roles, skip, S, pageW, pageH) {
   });
   if (blocked || !content.length) return 0;
   const top = Math.min.apply(null, content.map(function (c) { return c.b.y; }));
-  const dy = top - target;
+  // V.1_79 (rebrand deck 50 slides 2, 7, 10, 11: the bottom half left empty): short content sits a little above the middle
+  // of the space under the title, not at its top
+  const bottom = Math.max.apply(null, content.map(function (c) { return c.b.y + c.b.h; }));
+  const avail = pageH * 0.86 - target, blockH = bottom - top;
+  const newTop = blockH < avail * 0.62 ? target + (avail - blockH) * 0.2 : target;
+  const dy = top - newTop;
   if (dy < 20 * S) return 0;
   content.forEach(function (c) {
     requests.push({ updatePageElementTransform: { objectId: c.el.objectId, applyMode: 'RELATIVE',
@@ -1227,7 +1260,7 @@ function buildInventory(page, index, pageW, pageH) {
     }
     const txt = shapeText(el);
     if (txt) {
-      it.texts.push({ id: el.objectId, text: txt.slice(0, 160), x: Math.round(b.x), y: Math.round(b.y) });
+      it.texts.push({ id: el.objectId, text: txt.slice(0, 160), full: txt, x: Math.round(b.x), y: Math.round(b.y) });   // V.1_79: the whole text kept
       it.textIds.push(el.objectId);
     }
   });
@@ -1588,6 +1621,34 @@ function originalDate_(it) {
   return '';
 }
 
+// V.1_79 (rebrand deck 50 cover: "66DEGREES & FRONTDOOR" became "66degrees & frontdoor"): a short label in capitals is a
+// pair of names - each word keeps its capital (acronyms and 66degrees as they are written)
+function capsLabel_(t) {
+  const words = String(t).trim().split(/\s+/);
+  if (words.length > 4) return fixAllCaps(t);
+  let out = words.map(function (w) {
+    const bare = w.replace(/[^A-Za-z]/g, '');
+    if (!bare || ACRONYMS.indexOf(bare.toUpperCase()) !== -1 || bare.length <= 2) return w;
+    return w.charAt(0) + w.slice(1).toLowerCase();
+  }).join(' ');
+  KEEP_CASE.forEach(function (term) { out = out.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), term); });
+  return out.replace(/^(\d+)Degrees/i, '$1degrees');
+}
+// V.1_79 (rebrand deck 50 cover: a "·" left at the end of the first line): the facts as up to two lines, each line ending
+// on a fact (a line break between facts, never inside one)
+function factsLines_(list) {
+  if (!list.length) return '';
+  const kit = typeof ENGINE !== 'undefined' && ENGINE.kit;
+  const fits = function (txt) { return !kit || kit.wrap(txt, 470, 'sans', 400, 10).length <= 1; };
+  const lines = [[]];
+  list.forEach(function (f) {
+    const cur = lines[lines.length - 1];
+    if (!cur.length || fits(cur.concat([f]).join(' · '))) cur.push(f);
+    else if (lines.length < 2) lines.push([f]);
+    else cur.push(f);
+  });
+  return lines.map(function (l) { return l.join(' · '); }).join('\n');
+}
 // V.1_78: the short texts of a cover that are not its title, subtitle or date (a label above the title, the facts under it),
 // in reading order, as one line "A · B · C"; '' when there are none
 function coverFacts_(spec, it, datesToo) {
@@ -1604,14 +1665,14 @@ function coverFacts_(spec, it, datesToo) {
       seen[n] = true;
       return true;
     })
-    .map(function (t) { return /[a-z]/.test(t) ? t : fixAllCaps(t); });
-  return list.slice(0, 5).join(' · ');
+    .map(function (t) { return /[a-z]/.test(t) ? t : capsLabel_(t); });
+  return factsLines_(list.slice(0, 5));
 }
 
 // A slide redrawn in a rebrand shows the slide's own words: a text the reviewer retyped differently is put back to the
 // slide's closest text (same words); dates and numbers are never changed
 function keepOriginalWording_(spec, it) {
-  const originals = ((it && it.texts) || []).map(function (t) { return t.text.replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+  const originals = ((it && it.texts) || []).map(function (t) { return String(t.full || t.text).replace(/\s+/g, ' ').trim(); }).filter(Boolean);   // V.1_79: never the 160-character copy
   if (!originals.length) return;
   const norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9%$]+/g, ' ').trim(); };
   const all = norm(originals.join(' '));
@@ -1691,8 +1752,23 @@ function clearMarkArea_(slide, mark, pageH, S) {
       const textEnd = inside.reduce(function (m, o) { return Math.max(m, o.y + o.h); }, b.y);
       if (textEnd > top - 4 * S) return;
       b.el.setHeight(top - b.y);
+      b.h = top - b.y;
     } catch (e) { Logger.log('Mark clearance failed: ' + e.message); }
   });
+  // V.1_79 (rebrand deck 50 slide 9: the mark touched the left edge of the last row): what still reaches the mark by a
+  // few points pushes the mark left (never off its margin)
+  try {
+    const me = boxes.filter(function (b) { return b.el.getTitle && b.el.getTitle() === '66 Mark'; })[0];
+    if (!me) return;
+    const hit = boxes.filter(function (b) {
+      if (b === me || b.y + b.h <= me.y || b.y >= me.y + me.h || b.w * b.h > 0.8 * 720 * S * pageH) return false;
+      return b.x < me.x + me.w + 2 * S && b.x + b.w > me.x;
+    });
+    if (!hit.length) return;
+    const left = Math.min.apply(null, hit.map(function (b) { return b.x; }));
+    const want = left - me.w - 3 * S;
+    if (left > me.x && want >= 4 * S && me.x - want <= 14 * S) me.el.setLeft(want);
+  } catch (e) { Logger.log('Mark nudge failed: ' + e.message); }
 }
 
 // After a rebrand: texts whose words run into each other, text that cannot be read on what is behind it, and shapes
@@ -1752,6 +1828,20 @@ function rebrandQa_(presId, start, end) {
       for (let k = t.fills.length - 1; k >= 0; k--) { const o = t.fills[k].b; if (cx >= o.x && cx <= o.x + o.w && cy >= o.y && cy <= o.y + o.h) { under = t.fills[k].hex; break; } }
       const l1 = luminance(t.color), l2 = luminance(under), ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
       if (ratio < 2.2) out.push('slide ' + (i + 1) + ': "' + t.text.slice(0, 30) + '" cannot be read on its background');
+    });
+    // V.1_79 (rebrand deck 50 slide 2: new icons on top of the card text): an icon (a small picture or a drawn icon group)
+    // on a text's words
+    const u = pageW / 720;
+    flatten(page.pageElements || [], []).concat((page.pageElements || []).filter(function (e) { return e.elementGroup; })).forEach(function (el) {
+      const b = elementBounds(el);
+      const isIcon = (el.image || (el.elementGroup && !flatten(el.elementGroup.children, []).some(function (c) { return shapeText(c); }))) &&
+        b.w > 4 && b.h > 4 && b.w <= 40 * u && b.h <= 40 * u && !IN_GROUP_[el.objectId];
+      if (!isIcon || b.y > pageH * 0.88) return;
+      texts.some(function (t) {
+        const ox = Math.min(t.ink.x + t.ink.w, b.x + b.w) - Math.max(t.ink.x, b.x), oy = Math.min(t.ink.y + t.ink.h, b.y + b.h) - Math.max(t.ink.y, b.y);
+        if (ox > 3 && oy > 3) { out.push('slide ' + (i + 1) + ': an icon sits on "' + t.text.slice(0, 24) + '"'); return true; }
+        return false;
+      });
     });
     for (let a = 0; a < texts.length; a++) for (let c = a + 1; c < texts.length; c++) {
       const p = texts[a].ink, q = texts[c].ink;

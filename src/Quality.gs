@@ -30,7 +30,7 @@ var KIND_RULES_ = {
   pricing: 'PRICING SLIDE: name each engagement model with what it includes and when it fits. Without prices in the request, no column or text for amounts or charges; the lead ends with "Pricing is confirmed after the scoping workshop."',
   kpi: 'KPI SLIDE: one tile per target figure of the request, in its order, each with its exact figure as "value" (never rounded) and how it is reached or measured as "text".',
   raci: 'RACI SLIDE: a table - first column the workstream, then one column per party (66degrees, the client\'s teams); each cell is a role only: Responsible, Accountable, Consulted or Informed (or two joined with "/").',
-  risks: 'RISKS SLIDE: each risk as a title, its impact as "text" and the mitigation as "fix" (what the team does about it).',
+  risks: 'RISKS SLIDE: each risk as a title, its impact as "text" and the mitigation as "mitigation_strategy" (what the team does about it; never the words "Fix:" or "Mitigation:" in any text).',
   team: 'TEAM SLIDE: the roles or teams of both organisations, each with what it does and decides.',
   next: 'NEXT STEPS SLIDE: 3-4 concrete first actions in order, each with what it involves and who leads it.',
   support: 'SUPPORT SLIDE: the support levels or severities, each with what is covered and how it is handled; response times only as the request gives them.'
@@ -60,7 +60,8 @@ var PRODUCT_DICT_ = ['BigQuery', 'BigLake', 'Bigtable', 'Dataflow', 'Dataproc', 
   'Cloud Interconnect', 'Cloud Functions', 'Cloud Load Balancing', 'Artifact Registry', 'Secret Manager', 'Pub/Sub', 'Vertex AI',
   'Vertex AI Search', 'Vertex AI Feature Store', 'Vertex AI Pipelines', 'Gemini', 'Gemini Enterprise', 'Google Kubernetes Engine',
   'Database Migration Service', 'Security Command Center', 'VPC Service Controls', 'Analytics Hub', 'Config Sync', 'Binary Authorization',
-  'PagerDuty', 'ServiceNow', 'GitHub', 'GitLab', 'Jira', 'SQL Server', 'Oracle', 'Databricks', 'Salesforce'];
+  'PagerDuty', 'ServiceNow', 'GitHub', 'GitLab', 'Jira', 'SQL Server', 'Oracle', 'Databricks', 'Salesforce',
+  'Avro', 'KEDA', 'FNOL', 'gRPC', 'mTLS', 'HL7', 'FHIR', 'OAuth', 'Vertex AI Search', 'Looker Studio'];   // V.1_79 (deck 50: "avro", "Keda", "fnol", "GRPC", "MTLS")
 var PRODUCT_RE_ = null;
 function productCase_(t) {
   if (typeof t !== 'string' || !t) return t;
@@ -72,7 +73,8 @@ function productCase_(t) {
     const right = PRODUCT_DICT_.filter(function (n) { return n.toLowerCase() === name.toLowerCase(); })[0] || name;
     // a name of two words or more is put right only when it starts with its capital ("Cloud monitoring" -> "Cloud
     // Monitoring"); in lower case it may be ordinary words ("cloud storage costs")
-    if (/\s/.test(right) && !/^[A-Z]/.test(name)) return m;
+    // (V.1_79, deck 50 General 2 slide 11: "vertex AI Search" - the rest of the name in its capitals: the name)
+    if (/\s/.test(right) && !/^[A-Z]/.test(name) && name.slice(name.indexOf(' ')) !== right.slice(right.indexOf(' '))) return m;
     // (code, paths and addresses stay as written: "/api/redis", "redis://", "kubernetes.io")
     const after = str.charAt(off + m.length);
     if (after === '.' && /[a-z]/.test(str.charAt(off + m.length + 1))) return m;
@@ -256,6 +258,7 @@ function qualitySlides_(slides, ctx, started) {
   const r = { dict: 0, lock: 0, review: null };
   try { r.dict = dictionaryPass_(slides); } catch (e) {}
   try { r.review = meaningReview_(slides, ctx, started); } catch (e) { if (ctx && ctx.log) ctx.log.push('Meaning review skipped: ' + e.message); }
+  try { r.v79 = typeof v79Pass_ === 'function' ? v79Pass_(slides, ctx, ctx && ctx.qualitySources) : 0; } catch (e) { if (ctx && ctx.log) ctx.log.push('V.1_79 checks skipped: ' + e.message); }
   try { r.dict += dictionaryPass_(slides); } catch (e) {}
   try { r.lock = finalLock_(slides, ctx); } catch (e) {}
   return r;

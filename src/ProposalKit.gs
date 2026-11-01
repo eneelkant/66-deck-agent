@@ -461,7 +461,7 @@ function proposalFrame_(sp) { return ['cover', 'agenda', 'closing'].indexOf(prop
 function proposalShort_(t, max) {
   let x = String(t || '').split(/:| — | – | - /)[0].replace(/\s+/g, ' ').trim();
   if (x.length > (max || 48)) x = x.slice(0, max || 48).replace(/\s+\S*$/, '');
-  return x;
+  return typeof trimDangling_ === 'function' ? trimDangling_(x) : x;   // V.1_79: never ends on "and", "of", "on" 
 }
 function proposalSectionName_(t) {
   const x = proposalShort_(t, 40);
@@ -509,7 +509,7 @@ function proposalGroups_(body, k) {
 function proposalAgenda_(agenda, rows, p) {
   proposalStyles_(p);
   agenda.agendaWide = p.agendaWide;                    // kept on the slide so a later re-sync keeps the same design
-  rows = rows.map(function (r) { return { title: proposalShort_(r.title, 60), points: (r.points || []).map(function (x) { return proposalShort_(x, 56); }).filter(Boolean) }; })
+  rows = rows.map(function (r) { return { title: proposalShort_(r.title, 80), points: (r.points || []).map(function (x) { return proposalShort_(x, 56); }).filter(Boolean) }; })   // V.1_79: never cut mid-phrase
     .filter(function (r) { return r.title; });
   agenda.title = 'Agenda';                             // V.1_42b: always "Agenda" (never Gemini's long agenda title)
   if (rows.length <= 6) {                              // V.1_66: the spiral for up to 6 sections, in every deck type

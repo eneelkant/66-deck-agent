@@ -108,9 +108,10 @@ test("C1. a rebranded cover keeps its label and facts as one line; dates and the
     { text: "66DEGREES & FRONTDOOR", x: 60, y: 160 }, { text: "•", x: 230, y: 158 }, { text: "QA Strategy & Delivery", x: 240, y: 160 },
     { text: "52 PL/SQL Objects in Scope", x: 60, y: 366 }, { text: "Karate API Automation", x: 260, y: 366 }, { text: "September 2026", x: 60, y: 400 }] };
   const facts = G.coverFacts_({ title: "PL/SQL to .NET Microservices Modernization", subtitle: "Phase 1 API Test Plan" }, it);
-  assert.equal(facts, "66degrees & frontdoor · QA Strategy & Delivery · 52 PL/SQL Objects in Scope · Karate API Automation");
-  const o = draw({ type: "cover", title: "PL/SQL to .NET microservices modernization", subtitle: "Phase 1", facts: facts });
-  assert.ok(texts(o).includes(facts));
+  // (V.1_79: the client name keeps its capital and the facts break between facts, never inside one)
+  assert.equal(facts, "66degrees & Frontdoor · QA Strategy & Delivery · 52 PL/SQL Objects in Scope\nKarate API Automation");
+  const o = draw({ type: "cover", title: "PL/SQL to .NET microservices modernization", subtitle: "Phase 1", facts: facts.split("\n") });
+  facts.split("\n").forEach((ln) => assert.ok(texts(o).includes(ln), ln));
 });
 
 test("C2. a rebranded closing keeps its own title and its Author / Target line; a created deck still says Thank You!", () => {
@@ -177,7 +178,7 @@ test("C7. the content under a moved title moves up as one block; a slide with a 
   const roles = G.detectRoles({ pageElements: [title, a, b] }, {}, 960, 540, S, {});
   const reqs = [];
   const dy = G.liftContent_(reqs, { pageElements: [title, a, b] }, roles, {}, S, 960, 540);
-  assert.ok(dy > 60 * S, "moved " + dy);
+  assert.ok(dy > 20 * S, "moved " + dy);   // (V.1_79: short content sits a little above the middle, not at the top)
   assert.equal(reqs.length, 2);
   reqs.forEach((q) => assert.equal(q.updatePageElementTransform.applyMode, "RELATIVE"));
   const side = box("Side panel", 700, 20, 200, 400, 12);
